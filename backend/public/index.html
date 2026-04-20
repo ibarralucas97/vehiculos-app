@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>MyGarage</title>
+    <title>Rodado Control</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -16,7 +16,7 @@
     <main class="app-shell">
       <section class="hero-card">
         <div class="hero-copy">
-          <p class="eyebrow">MyGarage</p>
+          <p class="eyebrow">Rodado Control</p>
           <h1>Controla el mantenimiento de tus vehiculos de forma simple y ordenada</h1>
           <p class="lead">
             Inicia sesion para entrar a tu cuenta y revisar historial, gastos y nuevos servicios desde cualquier dispositivo.
@@ -41,9 +41,29 @@
             </label>
             <label>
               Contrasena
-              <input type="password" name="password" placeholder="????????" autocomplete="current-password" required />
+              <span class="password-field">
+                <input
+                  id="login-password"
+                  type="password"
+                  name="password"
+                  placeholder="Tu contrasena"
+                  autocomplete="current-password"
+                  required
+                />
+                <button
+                  id="toggle-password"
+                  class="field-toggle"
+                  type="button"
+                  aria-label="Mostrar contrasena"
+                  aria-pressed="false"
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 5C6.5 5 2.1 8.4 1 12c1.1 3.6 5.5 7 11 7s9.9-3.4 11-7c-1.1-3.6-5.5-7-11-7Zm0 11.2A4.2 4.2 0 1 1 12 7.8a4.2 4.2 0 0 1 0 8.4Zm0-6.7a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5Z" />
+                  </svg>
+                </button>
+              </span>
             </label>
-            <button type="submit">Ingresar</button>
+            <button id="login-submit" type="submit">Ingresar</button>
           </form>
 
           <div id="session-box" class="session-box hidden">
@@ -93,7 +113,7 @@
                   <input type="number" name="cost" min="0" required />
                 </label>
               </div>
-              <button type="submit">Guardar mantenimiento</button>
+              <button id="maintenance-submit" type="submit">Guardar mantenimiento</button>
             </form>
             <p id="form-message" class="message"></p>
           </section>
@@ -121,23 +141,27 @@
                   <input type="date" name="to" />
                 </label>
               </div>
-              <button type="submit" class="secondary">Aplicar filtros</button>
+              <button id="filters-submit" type="submit" class="secondary">Aplicar filtros</button>
             </form>
-            <button id="reload-button" class="ghost" type="button">Recargar historial</button>
+            <button id="reload-button" class="ghost" type="button">Ultimos registros</button>
           </section>
         </section>
 
         <section class="panel history-panel">
           <div class="section-head">
             <div>
-              <h2>Historial</h2>
-              <p class="section-copy">Tus cambios recientes, ordenados y faciles de leer.</p>
+              <h2 id="history-title">Ultimos registros</h2>
+              <p id="history-copy" class="section-copy">Se muestran los ultimos 3 movimientos. Usa filtros para ver mas.</p>
             </div>
-            <span id="status-pill" class="pill">Cargando...</span>
+            <span id="status-pill" class="pill">Listo</span>
           </div>
           <div id="maintenance-list" class="cards"></div>
         </section>
       </section>
+
+      <footer class="app-footer">
+        <p>Copyright Rodado Control. Desarrollado por Lucas Ibarra.</p>
+      </footer>
     </main>
 
     <script src="/app.js"></script>

@@ -42,7 +42,7 @@ select {
 .app-shell {
   width: min(1120px, calc(100% - 28px));
   margin: 0 auto;
-  padding: 24px 0 40px;
+  padding: 24px 0 24px;
 }
 
 .hero-card,
@@ -163,6 +163,44 @@ select:focus {
   box-shadow: 0 0 0 4px rgba(80, 109, 132, 0.12);
 }
 
+.password-field {
+  position: relative;
+  display: block;
+}
+
+.password-field input {
+  padding-right: 56px;
+}
+
+.field-toggle {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  width: 40px;
+  height: 40px;
+  min-height: 40px;
+  padding: 0;
+  transform: translateY(-50%);
+  border: 1px solid #d3d0c8;
+  background: #fff;
+  color: var(--primary-deep);
+  box-shadow: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.field-toggle:hover {
+  transform: translateY(-50%);
+  opacity: 1;
+}
+
+.field-toggle svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
 button {
   min-height: 52px;
   padding: 13px 16px;
@@ -181,7 +219,7 @@ button:active {
   transform: translateY(0);
 }
 
-button:not(.secondary):not(.ghost) {
+button:not(.secondary):not(.ghost):not(.field-toggle) {
   background: var(--primary);
   color: #fff;
   box-shadow: 0 12px 24px rgba(80, 109, 132, 0.18);
@@ -197,6 +235,11 @@ button.ghost {
   background: transparent;
   color: var(--primary-deep);
   border: 1px solid #c4c9d1;
+}
+
+button.is-loading {
+  opacity: 0.85;
+  pointer-events: none;
 }
 
 .hidden {
@@ -329,6 +372,17 @@ button.ghost {
   background: #f8f6f1;
 }
 
+.app-footer {
+  padding: 18px 6px 4px;
+  text-align: center;
+}
+
+.app-footer p {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
 @media (max-width: 960px) {
   .hero-card,
   .dashboard-grid {
@@ -343,7 +397,7 @@ button.ghost {
 @media (max-width: 640px) {
   .app-shell {
     width: min(100% - 16px, 1120px);
-    padding: 12px 0 28px;
+    padding: 12px 0 20px;
   }
 
   .hero-card,

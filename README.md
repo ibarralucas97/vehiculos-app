@@ -1,4 +1,4 @@
-# APP MyGarage
+# Rodado Control
 
 Backend y app web para registrar mantenimientos de vehiculos con Node, Express y PostgreSQL.
 
@@ -85,3 +85,4 @@ Cuando quieras pasar de free a pago:
 4. Redeploy.
 
 La aplicacion ya esta preparada para ese camino.
+EOF

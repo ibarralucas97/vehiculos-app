@@ -7,13 +7,20 @@ const sessionBox = document.getElementById("session-box");
 const sessionEmail = document.getElementById("session-email");
 const sessionCopy = document.getElementById("session-copy");
 const logoutButton = document.getElementById("logout-button");
+const loginSubmitButton = document.getElementById("login-submit");
+const passwordInput = document.getElementById("login-password");
+const togglePasswordButton = document.getElementById("toggle-password");
 
 const maintenanceList = document.getElementById("maintenance-list");
 const statusPill = document.getElementById("status-pill");
+const historyTitle = document.getElementById("history-title");
+const historyCopy = document.getElementById("history-copy");
 const maintenanceForm = document.getElementById("maintenance-form");
 const filtersForm = document.getElementById("filters-form");
 const formMessage = document.getElementById("form-message");
 const reloadButton = document.getElementById("reload-button");
+const filtersSubmitButton = document.getElementById("filters-submit");
+const maintenanceSubmitButton = document.getElementById("maintenance-submit");
 const vehicleSelect = document.getElementById("vehiculo_id");
 const placeSelect = document.getElementById("lugar_id");
 
@@ -37,6 +44,16 @@ function saveSession(user) {
 
 function clearSession() {
   localStorage.removeItem(SESSION_KEY);
+}
+
+function setButtonLoading(button, isLoading, loadingText) {
+  if (!button.dataset.defaultText) {
+    button.dataset.defaultText = button.textContent;
+  }
+
+  button.textContent = isLoading ? loadingText : button.dataset.defaultText;
+  button.classList.toggle("is-loading", isLoading);
+  button.disabled = isLoading;
 }
 
 function updateSessionUI() {
@@ -86,7 +103,7 @@ function optionMarkup(items, labelKey) {
 
 function renderMaintenance(items) {
   if (items.length === 0) {
-    maintenanceList.innerHTML = '<div class="empty">Todavia no hay mantenimientos para mostrar.</div>';
+    maintenanceList.innerHTML = '<div class="empty">No hay resultados para mostrar.</div>';
     return;
   }
 
@@ -114,6 +131,8 @@ function renderMaintenance(items) {
 }
 
 async function loadSelects() {
+  setStatus("Cargando catalogos...");
+
   const [vehicles, places] = await Promise.all([
     fetchJson("/vehicles"),
     fetchJson("/places"),
@@ -123,12 +142,41 @@ async function loadSelects() {
   placeSelect.innerHTML = optionMarkup(places, "nombre");
 }
 
-async function loadMaintenance() {
-  const params = new URLSearchParams(new FormData(filtersForm));
+function hasActiveFilters() {
+  const formData = new FormData(filtersForm);
+  return Array.from(formData.values()).some((value) => String(value).trim() !== "");
+}
+
+async function loadMaintenance(options = {}) {
+  const { latestOnly = false } = options;
+  const params = new URLSearchParams();
+  const formData = new FormData(filtersForm);
+
+  for (const [key, value] of formData.entries()) {
+    const normalized = String(value).trim();
+    if (normalized) {
+      params.set(key, normalized);
+    }
+  }
+
+  const usingFilters = !latestOnly && params.toString().length > 0;
+
+  if (latestOnly) {
+    params.set("limit", "3");
+    historyTitle.textContent = "Ultimos registros";
+    historyCopy.textContent = "Se muestran los ultimos 3 movimientos. Usa filtros para ver mas.";
+  } else if (usingFilters) {
+    historyTitle.textContent = "Historial filtrado";
+    historyCopy.textContent = "Resultados segun los filtros aplicados.";
+  } else {
+    params.set("limit", "3");
+    historyTitle.textContent = "Ultimos registros";
+    historyCopy.textContent = "Se muestran los ultimos 3 movimientos. Usa filtros para ver mas.";
+  }
+
+  setStatus("Cargando...");
   const query = params.toString();
   const url = query ? `/maintenance?${query}` : "/maintenance";
-
-  setStatus("Actualizando...");
   const items = await fetchJson(url);
   renderMaintenance(items);
   setStatus(`${items.length} registros`);
@@ -136,8 +184,18 @@ async function loadMaintenance() {
 
 async function loadDashboardData() {
   await loadSelects();
-  await loadMaintenance();
+  await loadMaintenance({ latestOnly: true });
 }
+
+togglePasswordButton.addEventListener("click", () => {
+  const showingPassword = passwordInput.type === "text";
+  passwordInput.type = showingPassword ? "password" : "text";
+  togglePasswordButton.setAttribute("aria-pressed", String(!showingPassword));
+  togglePasswordButton.setAttribute(
+    "aria-label",
+    showingPassword ? "Mostrar contrasena" : "Ocultar contrasena"
+  );
+});
 
 loginForm.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -150,6 +208,9 @@ loginForm.addEventListener("submit", async (event) => {
     loginMessage.textContent = "Completa email y contrasena para ingresar.";
     return;
   }
+
+  setButtonLoading(loginSubmitButton, true, "Ingresando...");
+  loginMessage.textContent = "Validando acceso...";
 
   try {
     const response = await fetchJson("/auth/login", {
@@ -170,6 +231,8 @@ loginForm.addEventListener("submit", async (event) => {
     loginMessage.textContent = error.message;
     setStatus(error.message);
     maintenanceList.innerHTML = `<div class="empty">${error.message}</div>`;
+  } finally {
+    setButtonLoading(loginSubmitButton, false, "Ingresando...");
   }
 });
 
@@ -177,14 +240,20 @@ logoutButton.addEventListener("click", () => {
   clearSession();
   updateSessionUI();
   loginForm.reset();
+  passwordInput.type = "password";
+  togglePasswordButton.setAttribute("aria-pressed", "false");
+  togglePasswordButton.setAttribute("aria-label", "Mostrar contrasena");
   loginMessage.textContent = "Sesion cerrada.";
   setStatus("Bloqueado");
   maintenanceList.innerHTML = '<div class="empty">Inicia sesion para ver el historial.</div>';
+  historyTitle.textContent = "Ultimos registros";
+  historyCopy.textContent = "Se muestran los ultimos 3 movimientos. Usa filtros para ver mas.";
 });
 
 maintenanceForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  formMessage.textContent = "Guardando...";
+  formMessage.textContent = "Guardando mantenimiento...";
+  setButtonLoading(maintenanceSubmitButton, true, "Guardando...");
 
   const formData = new FormData(maintenanceForm);
   const payload = Object.fromEntries(formData.entries());
@@ -205,25 +274,40 @@ maintenanceForm.addEventListener("submit", async (event) => {
     maintenanceForm.reset();
     formMessage.textContent = "Mantenimiento guardado correctamente.";
     await loadSelects();
-    await loadMaintenance();
+    await loadMaintenance({ latestOnly: true });
   } catch (error) {
     formMessage.textContent = error.message;
+  } finally {
+    setButtonLoading(maintenanceSubmitButton, false, "Guardando...");
   }
 });
 
 filtersForm.addEventListener("submit", async (event) => {
   event.preventDefault();
+  setButtonLoading(filtersSubmitButton, true, "Buscando...");
 
   try {
-    await loadMaintenance();
+    if (!hasActiveFilters()) {
+      await loadMaintenance({ latestOnly: true });
+    } else {
+      await loadMaintenance({ latestOnly: false });
+    }
   } catch (error) {
     setStatus(error.message);
+  } finally {
+    setButtonLoading(filtersSubmitButton, false, "Buscando...");
   }
 });
 
 reloadButton.addEventListener("click", async () => {
   filtersForm.reset();
-  await loadMaintenance();
+  setButtonLoading(reloadButton, true, "Cargando...");
+
+  try {
+    await loadMaintenance({ latestOnly: true });
+  } finally {
+    setButtonLoading(reloadButton, false, "Cargando...");
+  }
 });
 
 (async function init() {

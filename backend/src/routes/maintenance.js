@@ -56,7 +56,10 @@ router.get("/", async (req, res) => {
       conditions.push(`(LOWER(v.nombre) LIKE LOWER($${values.length}) OR LOWER(v.patente) LIKE LOWER($${values.length}) OR LOWER(l.nombre) LIKE LOWER($${values.length}) OR LOWER(m.accion) LIKE LOWER($${values.length}))`);
     }
 
+    const rawLimit = Number(req.query.limit);
+    const limit = Number.isInteger(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 100) : null;
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    const limitClause = limit ? `LIMIT ${limit}` : "";
 
     const result = await pool.query(
       `SELECT
@@ -76,7 +79,8 @@ router.get("/", async (req, res) => {
       JOIN vehiculos v ON m.vehiculo_id = v.id
       JOIN lugares l ON m.lugar_id = l.id
       ${whereClause}
-      ORDER BY m.fecha DESC, m.id DESC`,
+      ORDER BY m.fecha DESC, m.id DESC
+      ${limitClause}`,
       values
     );
 
@@ -88,3 +92,4 @@ router.get("/", async (req, res) => {
 });
 
 module.exports = router;
+
