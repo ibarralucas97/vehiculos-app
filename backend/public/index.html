@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MyGarage</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="hero-card">
+        <div class="hero-copy">
+          <p class="eyebrow">MyGarage</p>
+          <h1>Controla el mantenimiento de tus vehiculos de forma simple y ordenada</h1>
+          <p class="lead">
+            Inicia sesion para entrar a tu cuenta y revisar historial, gastos y nuevos servicios desde cualquier dispositivo.
+          </p>
+        </div>
+
+        <aside class="login-card">
+          <div class="login-card-head">
+            <div>
+              <p class="login-kicker">Acceso</p>
+              <h2>Ingresa a tu cuenta</h2>
+            </div>
+            <button id="logout-button" class="ghost hidden" type="button">Cerrar sesion</button>
+          </div>
+
+          <p id="session-copy" class="section-copy">Tu panel se desbloquea despues de iniciar sesion.</p>
+
+          <form id="login-form" class="form-stack">
+            <label>
+              Email
+              <input type="email" name="email" placeholder="tu@email.com" autocomplete="email" required />
+            </label>
+            <label>
+              Contrasena
+              <input type="password" name="password" placeholder="????????" autocomplete="current-password" required />
+            </label>
+            <button type="submit">Ingresar</button>
+          </form>
+
+          <div id="session-box" class="session-box hidden">
+            <span class="session-badge">Sesion activa</span>
+            <strong id="session-email"></strong>
+            <p class="section-copy">Ya puedes acceder a mantenimientos, filtros e historial.</p>
+          </div>
+
+          <p id="login-message" class="message"></p>
+        </aside>
+      </section>
+
+      <section id="dashboard" class="dashboard hidden">
+        <section class="dashboard-grid">
+          <section class="panel form-panel">
+            <div class="section-head section-head-stack">
+              <div>
+                <h2>Cargar mantenimiento</h2>
+                <p class="section-copy">Registra un servicio nuevo en pocos campos.</p>
+              </div>
+            </div>
+
+            <form id="maintenance-form" class="form-stack">
+              <label>
+                Fecha
+                <input type="date" name="fecha" required />
+              </label>
+              <label>
+                Vehiculo
+                <select name="vehiculo_id" id="vehiculo_id" required></select>
+              </label>
+              <label>
+                Lugar
+                <select name="lugar_id" id="lugar_id" required></select>
+              </label>
+              <label>
+                Accion
+                <input type="text" name="accion" placeholder="Cambio de aceite" required />
+              </label>
+              <div class="split-fields">
+                <label>
+                  Kilometros
+                  <input type="number" name="km" min="0" required />
+                </label>
+                <label>
+                  Costo
+                  <input type="number" name="cost" min="0" required />
+                </label>
+              </div>
+              <button type="submit">Guardar mantenimiento</button>
+            </form>
+            <p id="form-message" class="message"></p>
+          </section>
+
+          <section class="panel side-panel">
+            <div class="section-head section-head-stack">
+              <div>
+                <h2>Filtros</h2>
+                <p class="section-copy">Encuentra rapido por fecha o palabra clave.</p>
+              </div>
+            </div>
+
+            <form id="filters-form" class="form-stack compact">
+              <label>
+                Buscar
+                <input type="text" name="search" placeholder="vehiculo, patente, taller, accion" />
+              </label>
+              <div class="split-fields">
+                <label>
+                  Desde
+                  <input type="date" name="from" />
+                </label>
+                <label>
+                  Hasta
+                  <input type="date" name="to" />
+                </label>
+              </div>
+              <button type="submit" class="secondary">Aplicar filtros</button>
+            </form>
+            <button id="reload-button" class="ghost" type="button">Recargar historial</button>
+          </section>
+        </section>
+
+        <section class="panel history-panel">
+          <div class="section-head">
+            <div>
+              <h2>Historial</h2>
+              <p class="section-copy">Tus cambios recientes, ordenados y faciles de leer.</p>
+            </div>
+            <span id="status-pill" class="pill">Cargando...</span>
+          </div>
+          <div id="maintenance-list" class="cards"></div>
+        </section>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

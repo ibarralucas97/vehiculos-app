@@ -1,12 +1,19 @@
 {
   "name": "backend",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Backend API for MyGarage / vehiculos-app",
+  "main": "src/index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "db:setup": "node scripts/apply-db.js",
+    "check": "node --check src/index.js && node --check src/routes/auth.js && node --check src/routes/maintenance.js && node --check src/routes/vehicles.js && node --check src/routes/places.js && node --check src/utils/password.js && node --check src/utils/validation.js && node --check scripts/apply-db.js && node --check public/app.js"
   },
-  "keywords": [],
+  "keywords": [
+    "express",
+    "postgres",
+    "vehicles"
+  ],
   "author": "",
   "license": "ISC",
   "dependencies": {
