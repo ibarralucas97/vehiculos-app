@@ -3,10 +3,20 @@ const router = express.Router();
 const pool = require("../db/connection");
 const { validateVehiclePayload } = require("../utils/validation");
 
-router.get("/", async (_req, res) => {
+// =====================
+// GET /vehicles
+// =====================
+router.get("/", async (req, res) => {
   try {
+    const userId = Number(req.query.user_id);
+
+    if (!userId) {
+      return res.status(400).json({ error: "user_id requerido" });
+    }
+
     const result = await pool.query(
-      "SELECT id, nombre, modelo, patente FROM vehiculos ORDER BY id ASC"
+      "SELECT id, nombre, modelo, patente FROM vehiculos WHERE user_id = $1 ORDER BY id ASC",
+      [userId]
     );
 
     res.json(result.rows);
@@ -16,6 +26,10 @@ router.get("/", async (_req, res) => {
   }
 });
 
+
+// =====================
+// POST /vehicles
+// =====================
 router.post("/", async (req, res) => {
   try {
     const { errors, data } = validateVehiclePayload(req.body);
@@ -24,11 +38,17 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ errors });
     }
 
+    const userId = Number(req.body.user_id);
+
+    if (!userId) {
+      return res.status(400).json({ error: "user_id requerido" });
+    }
+
     const result = await pool.query(
-      `INSERT INTO vehiculos (nombre, modelo, patente)
-      VALUES ($1, $2, $3)
-      RETURNING *`,
-      [data.nombre, data.modelo, data.patente]
+      `INSERT INTO vehiculos (nombre, modelo, patente, user_id)
+       VALUES ($1, $2, $3, $4)
+       RETURNING *`,
+      [data.nombre, data.modelo, data.patente, userId]
     );
 
     res.status(201).json(result.rows[0]);

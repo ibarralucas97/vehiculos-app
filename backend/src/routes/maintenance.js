@@ -3,6 +3,9 @@ const router = express.Router();
 const pool = require("../db/connection");
 const { validateMaintenancePayload } = require("../utils/validation");
 
+// =====================
+// POST /maintenance
+// =====================
 router.post("/", async (req, res) => {
   try {
     const { errors, data } = validateMaintenancePayload(req.body);
@@ -11,12 +14,26 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ errors });
     }
 
+    const userId = Number(req.body.user_id);
+
+    if (!userId) {
+      return res.status(400).json({ error: "user_id requerido" });
+    }
+
     const result = await pool.query(
       `INSERT INTO mantenimiento
-      (fecha, vehiculo_id, lugar_id, accion, km, cost)
-      VALUES ($1, $2, $3, $4, $5, $6)
+      (fecha, vehiculo_id, lugar_id, accion, km, cost, user_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
       RETURNING *`,
-      [data.fecha, data.vehiculo_id, data.lugar_id, data.accion, data.km, data.cost]
+      [
+        data.fecha,
+        data.vehiculo_id,
+        data.lugar_id,
+        data.accion,
+        data.km,
+        data.cost,
+        userId
+      ]
     );
 
     res.status(201).json(result.rows[0]);
@@ -26,10 +43,24 @@ router.post("/", async (req, res) => {
   }
 });
 
+
+// =====================
+// GET /maintenance
+// =====================
 router.get("/", async (req, res) => {
   try {
     const conditions = [];
     const values = [];
+
+    const userId = Number(req.query.user_id);
+
+    if (!userId) {
+      return res.status(400).json({ error: "user_id requerido" });
+    }
+
+    // 🔥 SIEMPRE filtrar por usuario
+    values.push(userId);
+    conditions.push(`m.user_id = $${values.length}`);
 
     if (req.query.vehiculo_id) {
       values.push(Number(req.query.vehiculo_id));
@@ -53,12 +84,25 @@ router.get("/", async (req, res) => {
 
     if (req.query.search) {
       values.push(`%${req.query.search.trim()}%`);
-      conditions.push(`(LOWER(v.nombre) LIKE LOWER($${values.length}) OR LOWER(v.patente) LIKE LOWER($${values.length}) OR LOWER(l.nombre) LIKE LOWER($${values.length}) OR LOWER(m.accion) LIKE LOWER($${values.length}))`);
+      conditions.push(`
+        (
+          LOWER(v.nombre) LIKE LOWER($${values.length}) OR 
+          LOWER(v.patente) LIKE LOWER($${values.length}) OR 
+          LOWER(l.nombre) LIKE LOWER($${values.length}) OR 
+          LOWER(m.accion) LIKE LOWER($${values.length})
+        )
+      `);
     }
 
     const rawLimit = Number(req.query.limit);
-    const limit = Number.isInteger(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 100) : null;
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    const limit =
+      Number.isInteger(rawLimit) && rawLimit > 0
+        ? Math.min(rawLimit, 100)
+        : null;
+
+    const whereClause =
+      conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
     const limitClause = limit ? `LIMIT ${limit}` : "";
 
     const result = await pool.query(
@@ -92,4 +136,3 @@ router.get("/", async (req, res) => {
 });
 
 module.exports = router;
-

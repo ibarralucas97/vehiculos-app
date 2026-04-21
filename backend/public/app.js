@@ -133,10 +133,12 @@ function renderMaintenance(items) {
 async function loadSelects() {
   setStatus("Cargando catalogos...");
 
-  const [vehicles, places] = await Promise.all([
-    fetchJson("/vehicles"),
-    fetchJson("/places"),
-  ]);
+ const session = getSession();
+
+const [vehicles, places] = await Promise.all([
+  fetchJson(`/vehicles?user_id=${session.id}`),
+  fetchJson(`/places?user_id=${session.id}`),
+]);
 
   vehicleSelect.innerHTML = optionMarkup(vehicles, "nombre");
   placeSelect.innerHTML = optionMarkup(places, "nombre");
@@ -175,6 +177,8 @@ async function loadMaintenance(options = {}) {
   }
 
   setStatus("Cargando...");
+  const session = getSession();
+params.set("user_id", session.id);
   const query = params.toString();
   const url = query ? `/maintenance?${query}` : "/maintenance";
   const items = await fetchJson(url);
@@ -263,13 +267,18 @@ maintenanceForm.addEventListener("submit", async (event) => {
   payload.cost = Number(payload.cost);
 
   try {
-    await fetchJson("/maintenance", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
+    const session = getSession();
+
+await fetchJson("/maintenance", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    ...payload,
+    user_id: session.id
+  }),
+});
 
     maintenanceForm.reset();
     formMessage.textContent = "Mantenimiento guardado correctamente.";
