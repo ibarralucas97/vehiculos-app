@@ -145,6 +145,107 @@ button {
   border-radius: var(--radius-md);
 }
 
+.menu-btn {
+  min-height: auto;
+  padding: 6px 10px;
+  position: fixed;
+  top: 20px;
+  right: 20px;   /* 👈 clave */
+  left: auto;    /* 👈 evita conflictos */
+
+  width: auto;          /* 🔥 CLAVE */
+  padding: 6px 10px;    /* 🔥 CLAVE */
+
+  font-size: 18px;
+
+  background: #5b7287;
+  color: white;
+
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  z-index: 1000;
+}
+
+.menu-btn:hover {
+  opacity: 0.9;
+}
+
+.menu-panel {
+  position: fixed;
+  top: 60px;
+  right: 20px;
+  left: auto;
+
+  background: white;
+  border-radius: 12px;
+  padding: 10px;
+
+  box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+
+  z-index: 1000;
+
+  /* animación */
+  transform: translateY(-10px);
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.2s ease;
+}
+
+.menu-panel:not(.hidden) {
+  transform: translateY(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+
+
+.menu-panel button {
+  min-height: auto;
+  background: #5b7287;
+  color: white;
+  border: none;
+
+  padding: 10px 14px;
+  border-radius: 8px;
+
+  font-size: 14px;
+  font-weight: 500;
+
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.menu-panel button:hover {
+  background: #4a5f73;
+  transform: translateY(-1px);
+}
+
+
+
+.menu-panel:not(.hidden) {
+  transform: translateY(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.menu-panel::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  right: 15px;
+
+  width: 12px;
+  height: 12px;
+
+  background: white;
+  transform: rotate(45deg);
+}
+
 input,
 select {
   min-height: 52px;
@@ -435,4 +536,123 @@ button.is-loading {
   .pill {
     width: fit-content;
   }
+}
+
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+
+  background: rgba(0,0,0,0.4);
+
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  z-index: 2000;
+}
+
+.modal-content {
+  position: relative; /* 👈 esto */
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 400px;
+}
+
+.modal-content {
+  position: relative;
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 400px;
+}
+
+.modal-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+
+  width: 32px;
+  height: 32px;
+  min-height: auto;
+  padding: 0;
+
+  border-radius: 50%;
+  background: transparent;
+  color: #506d84;
+
+  font-size: 18px;
+  font-weight: bold;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.modal-close:hover {
+  background: rgba(0,0,0,0.05);
+}
+
+
+.item-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+
+  padding: 10px;
+  border-bottom: 1px solid #eee;
+}
+
+.item-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.item-info strong {
+  font-size: 14px;
+}
+
+.item-info span {
+  font-size: 12px;
+  color: #666;
+}
+
+.item-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.item-actions button {
+  background: none;
+  border: none;
+  cursor: pointer;
+
+  font-size: 16px;
+  padding: 6px;
+
+  border-radius: 6px;
+  min-height: auto; /* 🔥 evita botones gigantes */
+}
+
+.item-actions button:hover {
+  background: rgba(0,0,0,0.05);
+}
+
+.item-actions button {
+  width: 36px;
+  height: 36px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  font-size: 16px;
 }

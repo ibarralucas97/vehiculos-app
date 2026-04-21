@@ -1,3 +1,7 @@
+let currentPlaces = [];
+let currentVehicles = [];
+let editingVehicleId = null;
+let editingPlaceId = null;
 const SESSION_KEY = "mygarage_session";
 
 const dashboard = document.getElementById("dashboard");
@@ -16,6 +20,8 @@ const statusPill = document.getElementById("status-pill");
 const historyTitle = document.getElementById("history-title");
 const historyCopy = document.getElementById("history-copy");
 const maintenanceForm = document.getElementById("maintenance-form");
+const vehicleForm = document.getElementById("vehicle-form");
+const placeForm = document.getElementById("place-form");
 const filtersForm = document.getElementById("filters-form");
 const formMessage = document.getElementById("form-message");
 const reloadButton = document.getElementById("reload-button");
@@ -149,6 +155,77 @@ function hasActiveFilters() {
   return Array.from(formData.values()).some((value) => String(value).trim() !== "");
 }
 
+
+async function loadPlacesList() {
+  const session = getSession();
+
+  const places = await fetchJson(`/places?user_id=${session.id}`);
+
+  // 🔥 guardamos en memoria
+  currentPlaces = places;
+
+  const container = document.getElementById("places-list");
+
+  container.innerHTML = places.map(p => `
+    <div class="item-row">
+      
+      <div class="item-info">
+        <strong>${p.nombre}</strong>
+        <span>${p.ubicacion || ""}</span>
+      </div>
+
+      <div class="item-actions">
+        <button onclick="viewPlace(${p.id})" title="Ver">👁</button>
+        <button onclick="editPlace(${p.id})" title="Editar">✏️</button>
+        <button onclick="deletePlace(${p.id})" title="Eliminar">🗑</button>
+      </div>
+
+    </div>
+  `).join("");
+}
+
+async function loadVehiclesList() {
+  const session = getSession();
+
+  const vehicles = await fetchJson(`/vehicles?user_id=${session.id}`);
+
+  currentVehicles = vehicles;
+
+  const container = document.getElementById("vehicles-list-modal");
+
+  container.innerHTML = vehicles.map(v => `
+    <div class="item-row">
+      
+      <div class="item-info">
+        <strong>${v.nombre}</strong>
+        <span>${v.patente || ""}</span>
+      </div>
+
+      <div class="item-actions">
+        <button onclick="viewVehicle(${v.id})" title="Ver">👁</button>
+        <button onclick="editVehicle(${v.id})" title="Editar">✏️</button>
+        <button onclick="deleteVehicle(${v.id})" title="Eliminar">🗑</button>
+      </div>
+
+    </div>
+  `).join("");
+}
+
+function editVehicle(id) {
+  const vehicle = currentVehicles.find(v => v.id === id);
+  if (!vehicle) return;
+
+  document.querySelector("#vehicle-form [name=nombre]").value = vehicle.nombre;
+  document.querySelector("#vehicle-form [name=modelo]").value = vehicle.modelo;
+  document.querySelector("#vehicle-form [name=patente]").value = vehicle.patente;
+
+  editingVehicleId = id;
+
+  document.querySelector("#vehicle-form button").textContent = "Guardar";
+}
+
+
+
 async function loadMaintenance(options = {}) {
   const { latestOnly = false } = options;
   const params = new URLSearchParams();
@@ -187,8 +264,10 @@ params.set("user_id", session.id);
 }
 
 async function loadDashboardData() {
-  await loadSelects();
-  await loadMaintenance({ latestOnly: true });
+await loadSelects();
+await loadVehiclesList();
+await loadPlacesList();
+await loadMaintenance({ latestOnly: true });
 }
 
 togglePasswordButton.addEventListener("click", () => {
@@ -254,6 +333,77 @@ logoutButton.addEventListener("click", () => {
   historyCopy.textContent = "Se muestran los ultimos 3 movimientos. Usa filtros para ver mas.";
 });
 
+vehicleForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+
+  const session = getSession();
+  const data = Object.fromEntries(new FormData(vehicleForm).entries());
+
+  if (editingVehicleId) {
+    if (!confirm("¿Desea guardar los cambios?")) return;
+
+    await fetchJson(`/vehicles/${editingVehicleId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...data,
+        user_id: session.id,
+      }),
+    });
+
+    editingVehicleId = null;
+    vehicleForm.querySelector("button").textContent = "Crear";
+  } else {
+    await fetchJson(`/vehicles`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...data,
+        user_id: session.id,
+      }),
+    });
+  }
+
+  vehicleForm.reset();
+  await loadVehiclesList();
+});
+
+
+placeForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+
+  const session = getSession();
+  const data = Object.fromEntries(new FormData(placeForm).entries());
+
+  if (editingPlaceId) {
+    if (!confirm("¿Desea guardar los cambios?")) return;
+
+ await fetchJson(`/places/${editingPlaceId}`, {
+  method: "PUT",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    ...data,
+    user_id: session.id,
+  }),
+});
+
+    editingPlaceId = null;
+    placeForm.querySelector("button").textContent = "Crear";
+  } else {
+    await fetchJson(`/places`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...data,
+        user_id: session.id,
+      }),
+    });
+  }
+
+  placeForm.reset();
+  await loadPlacesList();
+});
+
 maintenanceForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   formMessage.textContent = "Guardando mantenimiento...";
@@ -279,6 +429,7 @@ await fetchJson("/maintenance", {
     user_id: session.id
   }),
 });
+
 
     maintenanceForm.reset();
     formMessage.textContent = "Mantenimiento guardado correctamente.";
@@ -308,6 +459,19 @@ filtersForm.addEventListener("submit", async (event) => {
   }
 });
 
+
+async function deleteVehicle(id) {
+  const session = getSession();
+
+  if (!confirm("¿Seguro que querés eliminar este vehículo?")) return;
+
+  await fetchJson(`/vehicles/${id}?user_id=${session.id}`, {
+    method: "DELETE",
+  });
+
+  await loadVehiclesList();
+}
+
 reloadButton.addEventListener("click", async () => {
   filtersForm.reset();
   setButtonLoading(reloadButton, true, "Cargando...");
@@ -318,6 +482,87 @@ reloadButton.addEventListener("click", async () => {
     setButtonLoading(reloadButton, false, "Cargando...");
   }
 });
+
+function toggleSection(id) {
+  const el = document.getElementById(id);
+  el.classList.toggle("hidden");
+}
+
+const menuToggle = document.getElementById("menu-toggle");
+const menuPanel = document.getElementById("menu-panel");
+
+menuToggle.addEventListener("click", () => {
+  menuPanel.classList.toggle("hidden");
+});
+
+function openSection(sectionId) {
+  document.getElementById("vehicles-panel").classList.add("hidden");
+  document.getElementById("places-panel").classList.add("hidden");
+
+  document.getElementById(sectionId).classList.remove("hidden");
+
+  document.getElementById("menu-panel").classList.add("hidden");
+}
+
+
+function openModal(id) {
+  document.getElementById(id).classList.remove("hidden");
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.add("hidden");
+}
+
+
+function viewPlace(id) {
+  const place = currentPlaces.find(p => p.id === id);
+
+  if (!place) return;
+
+  alert(`
+Nombre: ${place.nombre}
+Ubicación: ${place.ubicacion}
+Contacto: ${place.contacto_nombre}
+Teléfono: ${place.contacto_numero}
+  `);
+}
+
+function editPlace(id) {
+  const place = currentPlaces.find(p => p.id === id);
+  if (!place) return;
+
+  document.querySelector("#place-form [name=nombre]").value = place.nombre;
+  document.querySelector("#place-form [name=ubicacion]").value = place.ubicacion;
+  document.querySelector("#place-form [name=contacto_nombre]").value = place.contacto_nombre;
+  document.querySelector("#place-form [name=contacto_numero]").value = place.contacto_numero;
+
+  editingPlaceId = id;
+
+  document.querySelector("#place-form button").textContent = "Guardar";
+}
+
+async function deletePlace(id) {
+  const session = getSession();
+
+  if (!confirm("¿Seguro que querés eliminar este lugar?")) return;
+
+  await fetchJson(`/places/${id}?user_id=${session.id}`, {
+    method: "DELETE",
+  });
+
+  await loadPlacesList();
+}
+
+document.addEventListener("click", (e) => {
+  const modals = document.querySelectorAll(".modal");
+
+  modals.forEach((modal) => {
+    if (!modal.classList.contains("hidden") && e.target === modal) {
+      modal.classList.add("hidden");
+    }
+  });
+});
+
 
 (async function init() {
   const isLoggedIn = updateSessionUI();

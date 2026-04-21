@@ -76,47 +76,60 @@
         </aside>
       </section>
 
-      <section id="dashboard" class="dashboard hidden">
-        <section class="dashboard-grid">
-          <section class="panel form-panel">
-            <div class="section-head section-head-stack">
-              <div>
-                <h2>Cargar mantenimiento</h2>
-                <p class="section-copy">Registra un servicio nuevo en pocos campos.</p>
-              </div>
-            </div>
 
-            <form id="maintenance-form" class="form-stack">
-              <label>
-                Fecha
-                <input type="date" name="fecha" required />
-              </label>
-              <label>
-                Vehiculo
-                <select name="vehiculo_id" id="vehiculo_id" required></select>
-              </label>
-              <label>
-                Lugar
-                <select name="lugar_id" id="lugar_id" required></select>
-              </label>
-              <label>
-                Accion
-                <input type="text" name="accion" placeholder="Cambio de aceite" required />
-              </label>
-              <div class="split-fields">
-                <label>
-                  Kilometros
-                  <input type="number" name="km" min="0" required />
-                </label>
-                <label>
-                  Costo
-                  <input type="number" name="cost" min="0" required />
-                </label>
-              </div>
-              <button id="maintenance-submit" type="submit">Guardar mantenimiento</button>
-            </form>
-            <p id="form-message" class="message"></p>
-          </section>
+
+      <section id="dashboard" class="dashboard hidden">
+
+<button id="menu-toggle" class="menu-btn">☰</button>
+
+<div id="menu-panel" class="menu-panel hidden">
+  <button onclick="openModal('vehicles-modal')">Vehículos</button>
+  <button onclick="openModal('places-modal')">Lugares</button>
+</div>
+
+        <section class="dashboard-grid">
+
+  <!-- MANTENIMIENTO -->
+  <section class="panel form-panel">
+    <div class="section-head section-head-stack">
+      <div>
+        <h2>Cargar mantenimiento</h2>
+        <p class="section-copy">Registra un servicio nuevo en pocos campos.</p>
+      </div>
+    </div>
+
+    <form id="maintenance-form" class="form-stack">
+      <label>
+        Fecha
+        <input type="date" name="fecha" required />
+      </label>
+      <label>
+        Vehiculo
+        <select name="vehiculo_id" id="vehiculo_id" required></select>
+      </label>
+      <label>
+        Lugar
+        <select name="lugar_id" id="lugar_id" required></select>
+      </label>
+      <label>
+        Accion
+        <input type="text" name="accion" required />
+      </label>
+      <div class="split-fields">
+        <label>
+          Kilometros
+          <input type="number" name="km" required />
+        </label>
+        <label>
+          Costo
+          <input type="number" name="cost" required />
+        </label>
+      </div>
+      <button type="submit">Guardar mantenimiento</button>
+    </form>
+  </section>
+
+  </section>
 
           <section class="panel side-panel">
             <div class="section-head section-head-stack">
@@ -145,9 +158,8 @@
             </form>
             <button id="reload-button" class="ghost" type="button">Ultimos registros</button>
           </section>
-        </section>
 
-        <section class="panel history-panel">
+                  <section class="panel history-panel">
           <div class="section-head">
             <div>
               <h2 id="history-title">Ultimos registros</h2>
@@ -159,11 +171,58 @@
         </section>
       </section>
 
+        </section>
+
+        
+
+
+
       <footer class="app-footer">
         <p>Copyright Rodado Control. Desarrollado por Lucas Ibarra.</p>
       </footer>
     </main>
 
-    <script src="/app.js"></script>
+    <script src="/app.js" defer></script>
+
+
+    <div id="vehicles-modal" class="modal hidden">
+  <div class="modal-content">
+
+    <button class="modal-close" onclick="closeModal('vehicles-modal')">✕</button>
+
+    <h2>Vehículos</h2>
+
+    <form id="vehicle-form">
+      <input name="nombre" placeholder="Nombre" required />
+      <input name="modelo" placeholder="Modelo" required />
+      <input name="patente" placeholder="Patente" required />
+      <button type="submit">Crear</button>
+    </form>
+
+    <div id="vehicles-list-modal"></div>
+
+  </div>
+</div>
+
+<div id="places-modal" class="modal hidden">
+  <div class="modal-content">
+
+    <button class="modal-close" onclick="closeModal('places-modal')">✕</button>
+
+    <h2>Lugares</h2>
+
+    <form id="place-form">
+      <input name="nombre" placeholder="Nombre" required />
+      <input name="ubicacion" placeholder="Ubicación" />
+      <input name="contacto_nombre" placeholder="Contacto" />
+      <input name="contacto_numero" placeholder="Teléfono" />
+      <button type="submit">Crear</button>
+    </form>
+
+    <div id="places-list"></div>
+
+  </div>
+</div>
+
   </body>
 </html>
