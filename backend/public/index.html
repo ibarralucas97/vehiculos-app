@@ -16,8 +16,10 @@
     <main class="app-shell">
       <section class="hero-card">
         <div class="hero-copy">
-          <p class="eyebrow">Rodado Control</p>
-          <h1>Controla el mantenimiento de tus vehiculos de forma simple y ordenada</h1>
+          <h1 class="app-title">Rodado Control</h1>
+          <h2 class="hero-title">
+  Controla el mantenimiento de tus vehiculos de forma simple y ordenada
+</h2>
           <p class="lead">
             Inicia sesion para entrar a tu cuenta y revisar historial, gastos y nuevos servicios desde cualquier dispositivo.
           </p>
@@ -118,14 +120,15 @@
       <div class="split-fields">
         <label>
           Kilometros
-          <input type="number" name="km" required />
+          <input type="number" name="km" inputmode="numeric" pattern="[0-9]*" />
         </label>
         <label>
           Costo
-          <input type="number" name="cost" required />
+          <input type="number" name="cost" inputmode="numeric" pattern="[0-9]*" />
         </label>
       </div>
-      <button type="submit">Guardar mantenimiento</button>
+      <button id="maintenance-submit" type="submit">Guardar mantenimiento</button>
+      <p id="form-message" class="message"></p>
     </form>
   </section>
 
@@ -221,6 +224,12 @@
 
     <div id="places-list"></div>
 
+  </div>
+</div>
+
+<div id="app-loading" class="hidden">
+  <div class="app-loading-box">
+    <span id="app-loading-text">Procesando...</span>
   </div>
 </div>
 

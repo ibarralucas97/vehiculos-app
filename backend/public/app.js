@@ -52,14 +52,17 @@ function clearSession() {
   localStorage.removeItem(SESSION_KEY);
 }
 
-function setButtonLoading(button, isLoading, loadingText) {
-  if (!button.dataset.defaultText) {
-    button.dataset.defaultText = button.textContent;
-  }
+function setButtonLoading(button, isLoading) {
+  if (!button) return; // 👈 salva todo
 
-  button.textContent = isLoading ? loadingText : button.dataset.defaultText;
-  button.classList.toggle("is-loading", isLoading);
-  button.disabled = isLoading;
+  if (isLoading) {
+    button.dataset.originalText = button.textContent;
+    button.textContent = "Guardando...";
+    button.disabled = true;
+  } else {
+    button.textContent = button.dataset.originalText;
+    button.disabled = false;
+  }
 }
 
 function updateSessionUI() {
@@ -224,6 +227,17 @@ function editVehicle(id) {
   document.querySelector("#vehicle-form button").textContent = "Guardar";
 }
 
+function viewVehicle(id) {
+  const v = currentVehicles.find(v => v.id === id);
+  if (!v) return;
+
+  alert(`
+Nombre: ${v.nombre}
+Modelo: ${v.modelo}
+Patente: ${v.patente}
+  `);
+}
+
 
 
 async function loadMaintenance(options = {}) {
@@ -339,33 +353,41 @@ vehicleForm.addEventListener("submit", async (e) => {
   const session = getSession();
   const data = Object.fromEntries(new FormData(vehicleForm).entries());
 
-  if (editingVehicleId) {
-    if (!confirm("¿Desea guardar los cambios?")) return;
+  try {
+    showAppLoading("Guardando vehículo...");
 
-    await fetchJson(`/vehicles/${editingVehicleId}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...data,
-        user_id: session.id,
-      }),
-    });
+    if (editingVehicleId) {
+      await fetchJson(`/vehicles/${editingVehicleId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...data,
+          user_id: session.id,
+        }),
+      });
 
-    editingVehicleId = null;
-    vehicleForm.querySelector("button").textContent = "Crear";
-  } else {
-    await fetchJson(`/vehicles`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...data,
-        user_id: session.id,
-      }),
-    });
+      editingVehicleId = null;
+      vehicleForm.querySelector("button").textContent = "Crear";
+    } else {
+      await fetchJson(`/vehicles`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...data,
+          user_id: session.id,
+        }),
+      });
+    }
+
+    vehicleForm.reset();
+    await refreshAllData();
+closeModal("vehicles-modal");
+
+  } catch (err) {
+    console.error(err);
+  } finally {
+    hideAppLoading();
   }
-
-  vehicleForm.reset();
-  await loadVehiclesList();
 });
 
 
@@ -375,36 +397,45 @@ placeForm.addEventListener("submit", async (e) => {
   const session = getSession();
   const data = Object.fromEntries(new FormData(placeForm).entries());
 
-  if (editingPlaceId) {
-    if (!confirm("¿Desea guardar los cambios?")) return;
+  try {
+    showAppLoading("Guardando lugar...");
 
- await fetchJson(`/places/${editingPlaceId}`, {
-  method: "PUT",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    ...data,
-    user_id: session.id,
-  }),
-});
+    if (editingPlaceId) {
+      await fetchJson(`/places/${editingPlaceId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...data,
+          user_id: session.id,
+        }),
+      });
 
-    editingPlaceId = null;
-    placeForm.querySelector("button").textContent = "Crear";
-  } else {
-    await fetchJson(`/places`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...data,
-        user_id: session.id,
-      }),
-    });
+      editingPlaceId = null;
+      placeForm.querySelector("button").textContent = "Crear";
+    } else {
+      await fetchJson(`/places`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...data,
+          user_id: session.id,
+        }),
+      });
+    }
+
+    placeForm.reset();
+    await refreshAllData();
+closeModal("places-modal");
+
+  } catch (err) {
+    console.error(err);
+  } finally {
+    hideAppLoading();
   }
-
-  placeForm.reset();
-  await loadPlacesList();
 });
 
 maintenanceForm.addEventListener("submit", async (event) => {
+  console.log("SUBMIT mantenimiento"); // 
   event.preventDefault();
   formMessage.textContent = "Guardando mantenimiento...";
   setButtonLoading(maintenanceSubmitButton, true, "Guardando...");
@@ -465,11 +496,20 @@ async function deleteVehicle(id) {
 
   if (!confirm("¿Seguro que querés eliminar este vehículo?")) return;
 
-  await fetchJson(`/vehicles/${id}?user_id=${session.id}`, {
-    method: "DELETE",
-  });
+  try {
+    showAppLoading("Eliminando vehículo...");
 
-  await loadVehiclesList();
+    await fetchJson(`/vehicles/${id}?user_id=${session.id}`, {
+      method: "DELETE",
+    });
+
+    await refreshAllData();
+
+  } catch (err) {
+    console.error(err);
+  } finally {
+    hideAppLoading();
+  }
 }
 
 reloadButton.addEventListener("click", async () => {
@@ -546,11 +586,39 @@ async function deletePlace(id) {
 
   if (!confirm("¿Seguro que querés eliminar este lugar?")) return;
 
-  await fetchJson(`/places/${id}?user_id=${session.id}`, {
-    method: "DELETE",
-  });
+  try {
+    showAppLoading("Eliminando lugar...");
 
-  await loadPlacesList();
+    await fetchJson(`/places/${id}?user_id=${session.id}`, {
+      method: "DELETE",
+    });
+
+    await refreshAllData();
+
+  } catch (err) {
+    console.error(err);
+  } finally {
+    hideAppLoading();
+  }
+}
+
+const appLoading = document.getElementById("app-loading");
+const appLoadingText = document.getElementById("app-loading-text");
+
+function showAppLoading(text = "Procesando...") {
+  appLoadingText.textContent = text;
+  appLoading.classList.remove("hidden");
+}
+
+function hideAppLoading() {
+  appLoading.classList.add("hidden");
+}
+
+
+async function refreshAllData() {
+  await loadSelects();          // 👈 dropdowns
+  await loadVehiclesList();     // 👈 modal
+  await loadPlacesList();       // 👈 modal
 }
 
 document.addEventListener("click", (e) => {
