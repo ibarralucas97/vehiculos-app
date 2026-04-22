@@ -1,88 +1,62 @@
-# Rodado Control
+# 🚗 Rodado Control
 
-Backend y app web para registrar mantenimientos de vehiculos con Node, Express y PostgreSQL.
+Aplicación web para la gestión de mantenimiento de vehículos, con soporte multiusuario, interfaz moderna y backend robusto.
 
-## Stack actual
+Permite registrar servicios, controlar gastos, gestionar vehículos y talleres, y mantener un historial completo de mantenimiento.
 
-- Backend: Node + Express
-- Base de datos: PostgreSQL
-- Entorno local: Docker + WSL
-- Deploy objetivo: Render free + Neon free
+---
 
-## Variables de entorno
+## 🧠 Características principales
 
-Archivo base: `backend/.env.example`
+* 🔐 Autenticación de usuarios (login con hash seguro)
+* 👥 Multiusuario real (aislamiento por `user_id`)
+* 🚗 CRUD completo de vehículos
+* 📍 CRUD completo de lugares (talleres)
+* 🛠 Registro de mantenimientos
+* 🔄 Sincronización automática de UI (sin necesidad de F5)
+* ⏳ Bloqueo de interfaz durante operaciones (loading overlay)
+* 🎯 UX moderna con modales y acciones rápidas
+* 📊 Historial de mantenimientos con filtros
 
-Variables clave:
+---
 
-- `PORT`: puerto del servidor
-- `DATABASE_URL`: conexion completa a PostgreSQL. En produccion esta debe ser la principal.
-- `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`: fallback local para desarrollo
+## 🧱 Stack Tecnológico
 
-La app prioriza `DATABASE_URL`. Si no existe, usa la config local por separado.
+### Backend
 
-## Desarrollo local
+* Node.js
+* Express.js
+* PostgreSQL
+* pg (node-postgres)
+* Crypto (scrypt para hashing)
 
-1. Levanta PostgreSQL local.
-2. Entra a `backend/`.
-3. Ejecuta `npm install`.
-4. Ejecuta `npm run db:setup` para crear tablas y seed.
-5. Ejecuta `npm start`.
+### Frontend
 
-Usuario demo actual:
+* HTML5
+* CSS3 (custom + layout moderno)
+* JavaScript Vanilla (sin frameworks)
 
-- Email: `lucas@mygarage.app`
-- Contrasena: `Lucas2026!`
+### Infraestructura
 
-## Deploy en Render + Neon
+* Docker (entorno local)
+* WSL (Windows Subsystem for Linux)
+* Render (deploy backend)
+* Neon (PostgreSQL serverless)
 
-### 1. Subir el repo a GitHub
+---
 
-Empuja este proyecto a GitHub antes de conectarlo con Render.
+## 🔐 Seguridad
 
-### 2. Crear base gratis en Neon
+* Hash de contraseñas con `crypto.scrypt`
+* Comparación segura con `timingSafeEqual`
+* Queries protegidas por `user_id`
+* Prevención de acceso entre usuarios
 
-1. Crea una cuenta en Neon.
-2. Crea un proyecto nuevo.
-3. Copia la cadena `DATABASE_URL`.
-4. Guarda esa URL porque la vas a pegar en Render.
+---
 
-### 3. Crear el servicio en Render
+## 🧑‍💻 Autor
 
-1. Crea una cuenta en Render.
-2. Conecta tu repo de GitHub.
-3. Crea un `Web Service` nuevo.
-4. Render puede detectar `render.yaml`, o puedes configurarlo manualmente con:
-   - Root Directory: `backend`
-   - Build Command: `npm install`
-   - Start Command: `npm start`
-5. Agrega la variable de entorno `DATABASE_URL` con la URL de Neon.
+Lucas Ibarra
+Proyecto personal enfocado en aprendizaje práctico de backend + frontend + deploy cloud.
 
-### 4. Crear tablas y seed en la base remota
-
-Una vez desplegado el backend con `DATABASE_URL`, ejecuta el script:
-
-- `npm run db:setup`
-
-Puedes correrlo en un shell temporal apuntando a Neon o desde tu entorno local exportando `DATABASE_URL`.
-
-### 5. Probar la app
-
-- Health check: `/api/health`
-- Login demo:
-  - `lucas@mygarage.app`
-  - `Lucas2026!`
-
-## Cambio futuro de free a pago
-
-No deberias rehacer la app.
-
-Cuando quieras pasar de free a pago:
-
-1. Creas una base paga.
-2. Migras los datos.
-3. Cambias `DATABASE_URL`.
-4. Redeploy.
-
-La aplicacion ya esta preparada para ese camino.
-EOF
+---
