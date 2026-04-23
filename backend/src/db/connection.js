@@ -9,10 +9,35 @@ function shouldUseSsl(databaseUrl) {
   return !databaseUrl.includes("localhost") && !databaseUrl.includes("127.0.0.1");
 }
 
-const connectionConfig = config.databaseUrl
+function normalizeDatabaseUrl(databaseUrl) {
+  if (!databaseUrl) {
+    return "";
+  }
+
+  try {
+    const parsed = new URL(databaseUrl);
+    const sslMode = parsed.searchParams.get("sslmode");
+    const legacySslModes = new Set(["prefer", "require", "verify-ca"]);
+
+    if (legacySslModes.has(String(sslMode).toLowerCase())) {
+      parsed.searchParams.set("sslmode", "verify-full");
+    }
+
+    return parsed.toString();
+  } catch (_error) {
+    return databaseUrl
+      .replace(/sslmode=prefer/gi, "sslmode=verify-full")
+      .replace(/sslmode=require/gi, "sslmode=verify-full")
+      .replace(/sslmode=verify-ca/gi, "sslmode=verify-full");
+  }
+}
+
+const normalizedDatabaseUrl = normalizeDatabaseUrl(config.databaseUrl);
+
+const connectionConfig = normalizedDatabaseUrl
   ? {
-      connectionString: config.databaseUrl,
-      ssl: shouldUseSsl(config.databaseUrl)
+      connectionString: normalizedDatabaseUrl,
+      ssl: shouldUseSsl(normalizedDatabaseUrl)
         ? {
             rejectUnauthorized: false,
           }

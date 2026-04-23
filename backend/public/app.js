@@ -1,8 +1,10 @@
+let selectedVehicleId = null;
 let currentPlaces = [];
 let currentVehicles = [];
 let editingVehicleId = null;
 let editingPlaceId = null;
 const SESSION_KEY = "mygarage_session";
+const MAINTENANCE_IMAGES_KEY = "mygarage_maintenance_images";
 
 const dashboard = document.getElementById("dashboard");
 const loginForm = document.getElementById("login-form");
@@ -24,11 +26,25 @@ const vehicleForm = document.getElementById("vehicle-form");
 const placeForm = document.getElementById("place-form");
 const filtersForm = document.getElementById("filters-form");
 const formMessage = document.getElementById("form-message");
-const reloadButton = document.getElementById("reload-button");
 const filtersSubmitButton = document.getElementById("filters-submit");
+const latestButton = document.getElementById("latest-button");
 const maintenanceSubmitButton = document.getElementById("maintenance-submit");
 const vehicleSelect = document.getElementById("vehiculo_id");
 const placeSelect = document.getElementById("lugar_id");
+const menuButton = document.getElementById("menu-toggle");
+const menuPanel = document.getElementById("menu-panel");
+const menuLogoutButton = document.getElementById("menu-logout");
+const menuProfileButton = document.getElementById("menu-profile");
+const menuSettingsButton = document.getElementById("menu-settings");
+const currentVehicleName = document.getElementById("current-vehicle-name");
+const maintenanceImageInput = document.getElementById("maintenance-image");
+const maintenanceImagePreview = document.getElementById("maintenance-image-preview");
+const maintenanceImagePreviewImg = document.getElementById("maintenance-image-preview-img");
+const splashScreen = document.getElementById("splash-screen");
+const splashLogoImg = document.getElementById("splash-logo-img");
+const splashLogoFallback = document.getElementById("splash-logo-fallback");
+
+let maintenanceImageRefs = getMaintenanceImageRefs();
 
 function getSession() {
   try {
@@ -52,12 +68,24 @@ function clearSession() {
   localStorage.removeItem(SESSION_KEY);
 }
 
-function setButtonLoading(button, isLoading) {
+function getMaintenanceImageRefs() {
+  try {
+    return JSON.parse(localStorage.getItem(MAINTENANCE_IMAGES_KEY) || "{}");
+  } catch (_error) {
+    return {};
+  }
+}
+
+function saveMaintenanceImageRefs() {
+  localStorage.setItem(MAINTENANCE_IMAGES_KEY, JSON.stringify(maintenanceImageRefs));
+}
+
+function setButtonLoading(button, isLoading, loadingText = "Guardando...") {
   if (!button) return; // 👈 salva todo
 
   if (isLoading) {
     button.dataset.originalText = button.textContent;
-    button.textContent = "Guardando...";
+    button.textContent = loadingText;
     button.disabled = true;
   } else {
     button.textContent = button.dataset.originalText;
@@ -65,28 +93,99 @@ function setButtonLoading(button, isLoading) {
   }
 }
 
+
+const vehiclesScreen = document.getElementById("vehicles-screen");
+
 function updateSessionUI() {
   const session = getSession();
   const isLoggedIn = Boolean(session?.email);
 
-  dashboard.classList.toggle("hidden", !isLoggedIn);
+  // 👇 estado base
+  dashboard.classList.add("hidden");
   loginForm.classList.toggle("hidden", isLoggedIn);
   sessionBox.classList.toggle("hidden", !isLoggedIn);
   logoutButton.classList.toggle("hidden", !isLoggedIn);
 
   if (isLoggedIn) {
+    // 👇 mostrar pantalla de vehículos
+    if (vehiclesScreen) {
+      vehiclesScreen.classList.remove("hidden");
+    }
+
     sessionEmail.textContent = session.fullName
       ? `${session.fullName} - ${session.email}`
       : session.email;
+
     sessionCopy.textContent = "Tu cuenta esta activa. Ya puedes trabajar en el panel.";
     loginMessage.textContent = "";
+
   } else {
+    // 👇 ocultar vehículos en logout
+    if (vehiclesScreen) {
+      vehiclesScreen.classList.add("hidden");
+    }
+
     sessionEmail.textContent = "";
     sessionCopy.textContent = "Tu panel se desbloquea despues de iniciar sesion.";
   }
 
   return isLoggedIn;
 }
+
+
+function goBackToVehicles() {
+  selectedVehicleId = null;
+
+  document.getElementById("dashboard").classList.add("hidden");
+  document.getElementById("vehicles-screen").classList.remove("hidden");
+  closeMenu();
+
+  loadVehiclesScreen(); // 👈 CLAVE
+}
+
+function closeMenu() {
+  if (!menuPanel) return;
+  menuPanel.classList.add("hidden");
+  if (menuButton) menuButton.setAttribute("aria-expanded", "false");
+}
+
+function showNotAvailable() {
+  setStatus("No disponible");
+  alert("No disponible");
+  closeMenu();
+}
+
+async function playSplashScreen() {
+  if (!splashScreen) return;
+
+  await new Promise((resolve) => {
+    setTimeout(() => {
+      splashScreen.classList.add("fade-out");
+      document.body.classList.remove("splash-active");
+      setTimeout(resolve, 450);
+    }, 2800);
+  });
+}
+
+if (splashLogoImg) {
+  splashLogoImg.addEventListener("error", () => {
+    splashLogoImg.classList.add("hidden");
+    splashLogoFallback?.classList.remove("hidden");
+  });
+
+  splashLogoImg.addEventListener("load", () => {
+    splashLogoImg.classList.remove("hidden");
+    splashLogoFallback?.classList.add("hidden");
+  });
+}
+
+function toggleMenu() {
+  if (!menuPanel) return;
+  const willOpen = menuPanel.classList.contains("hidden");
+  menuPanel.classList.toggle("hidden");
+  if (menuButton) menuButton.setAttribute("aria-expanded", String(willOpen));
+}
+
 
 async function fetchJson(url, options) {
   const response = await fetch(url, options);
@@ -127,6 +226,11 @@ function renderMaintenance(items) {
             </div>
             <strong>$${Number(item.cost).toLocaleString("es-AR")}</strong>
           </div>
+          ${
+            maintenanceImageRefs[item.id]
+              ? `<img class="maintenance-thumb" src="${maintenanceImageRefs[item.id]}" alt="Imagen de mantenimiento" />`
+              : ""
+          }
           <div class="card-meta">
             <span>Fecha: ${item.fecha.slice(0, 10)}</span>
             <span>KM: ${item.km}</span>
@@ -149,8 +253,12 @@ const [vehicles, places] = await Promise.all([
   fetchJson(`/places?user_id=${session.id}`),
 ]);
 
-  vehicleSelect.innerHTML = optionMarkup(vehicles, "nombre");
-  placeSelect.innerHTML = optionMarkup(places, "nombre");
+  if (vehicleSelect) {
+    vehicleSelect.innerHTML = optionMarkup(vehicles, "nombre");
+  }
+  if (placeSelect) {
+    placeSelect.innerHTML = optionMarkup(places, "nombre");
+  }
 }
 
 function hasActiveFilters() {
@@ -186,6 +294,62 @@ async function loadPlacesList() {
     </div>
   `).join("");
 }
+
+
+
+
+async function loadVehiclesScreen() {
+  const session = getSession();
+
+  const vehicles = await fetchJson(`/vehicles?user_id=${session.id}`);
+
+  const container = document.getElementById("vehicles-grid");
+
+  if (vehicles.length === 0) {
+    container.innerHTML = "<p>No tenés vehículos aún</p>";
+    return;
+  }
+
+  container.innerHTML = vehicles.map(v => `
+  <div class="vehicle-card card border-0 shadow-sm" onclick="selectVehicle(${v.id})">
+    <strong>${v.nombre}</strong>
+    <span>${v.modelo || ""}</span>
+  </div>
+`).join("");
+}
+
+function selectVehicle(id) {
+  selectedVehicleId = id;
+  const vehicle = currentVehicles.find((v) => v.id === id);
+  if (currentVehicleName) {
+    currentVehicleName.textContent = vehicle ? `${vehicle.nombre} ${vehicle.modelo ? `- ${vehicle.modelo}` : ""}` : `ID ${id}`;
+  }
+
+  document.getElementById("vehicles-screen").classList.add("hidden");
+  document.getElementById("dashboard").classList.remove("hidden");
+  closeMenu();
+
+  refreshAllData();
+  maintenanceList.innerHTML = '<div class="empty">Usa filtros o presiona "Últimos registros" para cargar el historial.</div>';
+  historyTitle.textContent = "Historial de vehículo";
+  historyCopy.textContent = 'Aún no hay resultados. Usa filtros o presiona "Últimos registros".';
+}
+
+
+if (menuButton && menuPanel) {
+  menuButton.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleMenu();
+  });
+}
+
+document.addEventListener("click", (e) => {
+  if (!menuPanel || !menuButton) return;
+
+  if (!menuPanel.contains(e.target) && !menuButton.contains(e.target)) {
+    closeMenu();
+  }
+});
 
 async function loadVehiclesList() {
   const session = getSession();
@@ -241,6 +405,12 @@ Patente: ${v.patente}
 
 
 async function loadMaintenance(options = {}) {
+  if (!selectedVehicleId) {
+    maintenanceList.innerHTML = '<div class="empty">Primero selecciona un vehículo.</div>';
+    setStatus("Selecciona un vehículo");
+    return;
+  }
+
   const { latestOnly = false } = options;
   const params = new URLSearchParams();
   const formData = new FormData(filtersForm);
@@ -252,24 +422,30 @@ async function loadMaintenance(options = {}) {
     }
   }
 
-  const usingFilters = !latestOnly && params.toString().length > 0;
-
-  if (latestOnly) {
-    params.set("limit", "3");
-    historyTitle.textContent = "Ultimos registros";
-    historyCopy.textContent = "Se muestran los ultimos 3 movimientos. Usa filtros para ver mas.";
-  } else if (usingFilters) {
-    historyTitle.textContent = "Historial filtrado";
-    historyCopy.textContent = "Resultados segun los filtros aplicados.";
-  } else {
-    params.set("limit", "3");
-    historyTitle.textContent = "Ultimos registros";
-    historyCopy.textContent = "Se muestran los ultimos 3 movimientos. Usa filtros para ver mas.";
-  }
+  const usingFilters = params.toString().length > 0;
 
   setStatus("Cargando...");
   const session = getSession();
-params.set("user_id", session.id);
+  params.set("user_id", session.id);
+  if (selectedVehicleId) {
+    params.set("vehiculo_id", String(selectedVehicleId));
+  }
+
+  if (latestOnly) {
+    params.set("limit", "3");
+    historyTitle.textContent = "Últimos registros";
+    historyCopy.textContent = "Se muestran los últimos 3 movimientos del vehículo seleccionado.";
+  } else if (usingFilters) {
+    historyTitle.textContent = "Historial filtrado";
+    historyCopy.textContent = "Resultados según los filtros aplicados al vehículo seleccionado.";
+  } else {
+    historyTitle.textContent = "Historial de vehículo";
+    historyCopy.textContent = 'Aún no hay resultados. Usa filtros o presiona "Últimos registros".';
+    maintenanceList.innerHTML = '<div class="empty">No hay consulta activa.</div>';
+    setStatus("Listo");
+    return;
+  }
+
   const query = params.toString();
   const url = query ? `/maintenance?${query}` : "/maintenance";
   const items = await fetchJson(url);
@@ -284,17 +460,19 @@ await loadPlacesList();
 await loadMaintenance({ latestOnly: true });
 }
 
-togglePasswordButton.addEventListener("click", () => {
-  const showingPassword = passwordInput.type === "text";
-  passwordInput.type = showingPassword ? "password" : "text";
-  togglePasswordButton.setAttribute("aria-pressed", String(!showingPassword));
-  togglePasswordButton.setAttribute(
-    "aria-label",
-    showingPassword ? "Mostrar contrasena" : "Ocultar contrasena"
-  );
-});
+if (togglePasswordButton && passwordInput) {
+  togglePasswordButton.addEventListener("click", () => {
+    const showingPassword = passwordInput.type === "text";
+    passwordInput.type = showingPassword ? "password" : "text";
+    togglePasswordButton.setAttribute("aria-pressed", String(!showingPassword));
+    togglePasswordButton.setAttribute(
+      "aria-label",
+      showingPassword ? "Mostrar contrasena" : "Ocultar contrasena"
+    );
+  });
+}
 
-loginForm.addEventListener("submit", async (event) => {
+loginForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
 
   const formData = new FormData(loginForm);
@@ -319,9 +497,15 @@ loginForm.addEventListener("submit", async (event) => {
     });
 
     saveSession(response.user);
-    updateSessionUI();
-    loginMessage.textContent = "Acceso concedido.";
-    await loadDashboardData();
+updateSessionUI();
+loginMessage.textContent = "Acceso concedido.";
+
+// 👇 NUEVO FLUJO
+await loadVehiclesList();
+await loadVehiclesScreen();
+
+document.getElementById("vehicles-screen").classList.remove("hidden");
+document.getElementById("dashboard").classList.add("hidden");
   } catch (error) {
     clearSession();
     updateSessionUI();
@@ -333,8 +517,9 @@ loginForm.addEventListener("submit", async (event) => {
   }
 });
 
-logoutButton.addEventListener("click", () => {
+function logout() {
   clearSession();
+  selectedVehicleId = null;
   updateSessionUI();
   loginForm.reset();
   passwordInput.type = "password";
@@ -343,11 +528,18 @@ logoutButton.addEventListener("click", () => {
   loginMessage.textContent = "Sesion cerrada.";
   setStatus("Bloqueado");
   maintenanceList.innerHTML = '<div class="empty">Inicia sesion para ver el historial.</div>';
-  historyTitle.textContent = "Ultimos registros";
-  historyCopy.textContent = "Se muestran los ultimos 3 movimientos. Usa filtros para ver mas.";
-});
+  historyTitle.textContent = "Historial de vehículo";
+  historyCopy.textContent = 'Aún no hay resultados. Usa filtros o presiona "Últimos registros".';
+  if (currentVehicleName) currentVehicleName.textContent = "Sin selección";
+  closeMenu();
+}
 
-vehicleForm.addEventListener("submit", async (e) => {
+logoutButton?.addEventListener("click", logout);
+menuLogoutButton?.addEventListener("click", logout);
+menuProfileButton?.addEventListener("click", showNotAvailable);
+menuSettingsButton?.addEventListener("click", showNotAvailable);
+
+vehicleForm?.addEventListener("submit", async (e) => {
   e.preventDefault();
 
   const session = getSession();
@@ -381,6 +573,7 @@ vehicleForm.addEventListener("submit", async (e) => {
 
     vehicleForm.reset();
     await refreshAllData();
+await loadVehiclesScreen(); // 👈 CLAVE
 closeModal("vehicles-modal");
 
   } catch (err) {
@@ -391,7 +584,7 @@ closeModal("vehicles-modal");
 });
 
 
-placeForm.addEventListener("submit", async (e) => {
+placeForm?.addEventListener("submit", async (e) => {
   e.preventDefault();
 
   const session = getSession();
@@ -434,38 +627,49 @@ closeModal("places-modal");
   }
 });
 
-maintenanceForm.addEventListener("submit", async (event) => {
-  console.log("SUBMIT mantenimiento"); // 
+maintenanceForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
+
+  if (!selectedVehicleId) {
+    formMessage.textContent = "Primero selecciona un vehículo.";
+    return;
+  }
+
   formMessage.textContent = "Guardando mantenimiento...";
   setButtonLoading(maintenanceSubmitButton, true, "Guardando...");
 
   const formData = new FormData(maintenanceForm);
   const payload = Object.fromEntries(formData.entries());
-  payload.vehiculo_id = Number(payload.vehiculo_id);
+  payload.vehiculo_id = selectedVehicleId;
   payload.lugar_id = Number(payload.lugar_id);
   payload.km = Number(payload.km);
   payload.cost = Number(payload.cost);
+  const imageRef = await fileToDataUrl(maintenanceImageInput?.files?.[0]);
 
   try {
     const session = getSession();
 
-await fetchJson("/maintenance", {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-  },
-  body: JSON.stringify({
-    ...payload,
-    user_id: session.id
-  }),
-});
+    const created = await fetchJson(`/maintenance`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        ...payload,
+        user_id: session.id,
+      }),
+    });
+
+    if (created?.id && imageRef) {
+      maintenanceImageRefs[created.id] = imageRef;
+      saveMaintenanceImageRefs();
+    }
 
 
     maintenanceForm.reset();
+    clearMaintenanceImagePreview();
     formMessage.textContent = "Mantenimiento guardado correctamente.";
-    await loadSelects();
-    await loadMaintenance({ latestOnly: true });
+    setStatus("Mantenimiento guardado");
   } catch (error) {
     formMessage.textContent = error.message;
   } finally {
@@ -473,20 +677,30 @@ await fetchJson("/maintenance", {
   }
 });
 
-filtersForm.addEventListener("submit", async (event) => {
+filtersForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
   setButtonLoading(filtersSubmitButton, true, "Buscando...");
 
   try {
-    if (!hasActiveFilters()) {
-      await loadMaintenance({ latestOnly: true });
-    } else {
-      await loadMaintenance({ latestOnly: false });
-    }
+    await loadMaintenance({ latestOnly: false });
   } catch (error) {
     setStatus(error.message);
   } finally {
     setButtonLoading(filtersSubmitButton, false, "Buscando...");
+  }
+});
+
+latestButton?.addEventListener("click", async () => {
+  if (filtersForm) {
+    filtersForm.reset();
+  }
+  setButtonLoading(latestButton, true, "Cargando...");
+  try {
+    await loadMaintenance({ latestOnly: true });
+  } catch (error) {
+    setStatus(error.message);
+  } finally {
+    setButtonLoading(latestButton, false, "Cargando...");
   }
 });
 
@@ -511,39 +725,6 @@ async function deleteVehicle(id) {
     hideAppLoading();
   }
 }
-
-reloadButton.addEventListener("click", async () => {
-  filtersForm.reset();
-  setButtonLoading(reloadButton, true, "Cargando...");
-
-  try {
-    await loadMaintenance({ latestOnly: true });
-  } finally {
-    setButtonLoading(reloadButton, false, "Cargando...");
-  }
-});
-
-function toggleSection(id) {
-  const el = document.getElementById(id);
-  el.classList.toggle("hidden");
-}
-
-const menuToggle = document.getElementById("menu-toggle");
-const menuPanel = document.getElementById("menu-panel");
-
-menuToggle.addEventListener("click", () => {
-  menuPanel.classList.toggle("hidden");
-});
-
-function openSection(sectionId) {
-  document.getElementById("vehicles-panel").classList.add("hidden");
-  document.getElementById("places-panel").classList.add("hidden");
-
-  document.getElementById(sectionId).classList.remove("hidden");
-
-  document.getElementById("menu-panel").classList.add("hidden");
-}
-
 
 function openModal(id) {
   document.getElementById(id).classList.remove("hidden");
@@ -631,8 +812,60 @@ document.addEventListener("click", (e) => {
   });
 });
 
+function toggleSection(header) {
+  const section = header.closest(".collapsible");
+  section.classList.toggle("open");
+}
+
+function openVehiclesModal() {
+  openModal("vehicles-modal");
+  closeMenu();
+}
+
+function openPlacesModal() {
+  openModal("places-modal");
+  closeMenu();
+}
+
+function fileToDataUrl(file) {
+  if (!file) return Promise.resolve("");
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("No se pudo leer la imagen seleccionada."));
+    reader.readAsDataURL(file);
+  });
+}
+
+function clearMaintenanceImagePreview() {
+  if (maintenanceImagePreviewImg) {
+    maintenanceImagePreviewImg.src = "";
+  }
+  maintenanceImagePreview?.classList.add("hidden");
+}
+
+maintenanceImageInput?.addEventListener("change", async () => {
+  try {
+    const dataUrl = await fileToDataUrl(maintenanceImageInput.files?.[0]);
+    if (!dataUrl) {
+      clearMaintenanceImagePreview();
+      return;
+    }
+    if (maintenanceImagePreviewImg) {
+      maintenanceImagePreviewImg.src = dataUrl;
+    }
+    maintenanceImagePreview?.classList.remove("hidden");
+  } catch (error) {
+    clearMaintenanceImagePreview();
+    formMessage.textContent = error.message;
+  }
+});
+
+
 
 (async function init() {
+  await playSplashScreen();
+
   const isLoggedIn = updateSessionUI();
 
   if (!isLoggedIn) {
@@ -641,8 +874,11 @@ document.addEventListener("click", (e) => {
     return;
   }
 
+  
+
   try {
-    await loadDashboardData();
+    await loadVehiclesList();
+    await loadVehiclesScreen();
   } catch (error) {
     console.error(error);
     setStatus(error.message);
