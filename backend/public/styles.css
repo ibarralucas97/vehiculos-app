@@ -42,7 +42,7 @@ select {
 .app-shell {
   width: min(1120px, calc(100% - 28px));
   margin: 0 auto;
-  padding: 24px 0 24px;
+  padding: 18px 0 24px;
   opacity: 1;
   transition: opacity 0.45s ease;
 }
@@ -50,6 +50,64 @@ select {
 body.splash-active .app-shell {
   opacity: 0;
   pointer-events: none;
+}
+
+.app-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 18px;
+  margin-bottom: 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 8px 20px rgba(31, 42, 61, 0.08);
+}
+
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.app-topbar .app-title {
+  margin-bottom: 0;
+  white-space: nowrap;
+}
+
+.topbar-back-button {
+  width: auto;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 1px solid #c4c9d1;
+  border-radius: 10px;
+  background: #fff;
+  color: #1f2a3d;
+  font-size: 1rem;
+  font-weight: 800;
+  box-shadow: none;
+}
+
+.topbar-back-button.is-inactive {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.topbar-user-name {
+  flex: 1 1 auto;
+  text-align: center;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #4b5563;
+  min-width: 96px;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin: 0 6px;
 }
 
 .hero-card,
@@ -155,35 +213,33 @@ button {
 
 .menu-btn {
   min-height: auto;
-  position: fixed;
-  top: 20px;
-  right: 20px;   /* 👈 clave */
-  left: auto;    /* 👈 evita conflictos */
-
-  width: auto;          /* 🔥 CLAVE */
-  padding: 6px 10px;    /* 🔥 CLAVE */
-
+  width: auto;
+  min-width: 42px;
+  padding: 6px 10px;
   font-size: 18px;
-
-  background: linear-gradient(90deg, #0fa8ab, #1f9ae0);
-  color: white;
-
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  z-index: 1000;
+  background: #fff;
+  color: #1f2a3d;
+  border: 1px solid #c4c9d1;
+  border-radius: 10px;
+  box-shadow: none;
+  flex-shrink: 0;
 }
 
 .menu-btn:hover {
-  opacity: 0.9;
+  opacity: 1;
+}
+
+.topbar-menu {
+  position: relative;
+  flex-shrink: 0;
 }
 
 .menu-panel {
-  position: fixed;
-  top: 60px;
-  right: 20px;
-  left: auto;
-
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: max-content;
+  min-width: 220px;
   background: white;
   border-radius: 12px;
   padding: 10px;
@@ -193,13 +249,10 @@ button {
   display: flex;
   flex-direction: column;
   gap: 10px;
-
-  z-index: 1000;
-
-  /* animación */
-  transform: translateY(-10px);
-  opacity: 0;
+  z-index: 1400;
   pointer-events: none;
+  transform: translateY(-6px);
+  opacity: 0;
   transition: all 0.2s ease;
 }
 
@@ -237,13 +290,15 @@ button {
   content: "";
   position: absolute;
   top: -6px;
-  right: 15px;
-
+  right: 14px;
   width: 12px;
   height: 12px;
-
   background: white;
   transform: rotate(45deg);
+}
+
+#vehicles-screen {
+  margin-top: 0;
 }
 
 input,
@@ -506,7 +561,41 @@ button.is-loading {
 @media (max-width: 640px) {
   .app-shell {
     width: min(100% - 16px, 1120px);
-    padding: 12px 0 20px;
+    padding: 10px 0 18px;
+  }
+
+  .app-topbar {
+    padding: 10px 14px;
+    margin-bottom: 12px;
+    gap: 8px;
+  }
+
+  .topbar-left {
+    gap: 8px;
+  }
+
+  .topbar-user-name {
+    min-width: 70px;
+    max-width: 110px;
+    font-size: 0.82rem;
+  }
+
+  .app-topbar .app-title {
+    font-size: 1.5rem;
+  }
+
+  .topbar-back-button,
+  .menu-btn {
+    min-height: 34px;
+    min-width: 34px;
+    padding: 5px 8px;
+    font-size: 0.95rem;
+  }
+
+  .splash-logo {
+    width: 138px;
+    height: 138px;
+    border-radius: 28px;
   }
 
   .hero-card,
@@ -677,7 +766,7 @@ button.is-loading {
 
 
 .app-title {
-  font-size: 32px;
+  font-size: clamp(1.5rem, 4vw, 2rem);
   font-weight: 800;
 
   background: linear-gradient(90deg, #3a7bd5, #00d2ff);
@@ -774,23 +863,6 @@ button.is-loading {
   font-size: 0.85rem;
 }
 
-.nav-float-btn {
-  position: fixed;
-  top: 20px;
-  left: 20px;
-  width: 42px;
-  min-height: 42px;
-  height: 42px;
-  border-radius: 10px;
-  padding: 0;
-  z-index: 1000;
-  font-size: 1.05rem;
-  font-weight: 800;
-  background: #1f2a3d !important;
-  color: #fff !important;
-  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.24);
-}
-
 .splash-screen {
   position: fixed;
   inset: 0;
@@ -815,18 +887,18 @@ button.is-loading {
 
 .splash-logo {
   position: relative;
-  width: 84px;
-  height: 84px;
-  margin: 0 auto 14px;
-  border-radius: 20px;
+  width: 168px;
+  height: 168px;
+  margin: 14px auto 24px;
+  border-radius: 30px;
   background: linear-gradient(135deg, #0ea5e9, #2563eb);
   color: #fff;
   font-weight: 800;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.8rem;
-  box-shadow: 0 12px 32px rgba(37, 99, 235, 0.45);
+  font-size: 2.2rem;
+  box-shadow: 0 20px 46px rgba(37, 99, 235, 0.5);
   overflow: hidden;
 }
 

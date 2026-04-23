@@ -43,6 +43,10 @@ const maintenanceImagePreviewImg = document.getElementById("maintenance-image-pr
 const splashScreen = document.getElementById("splash-screen");
 const splashLogoImg = document.getElementById("splash-logo-img");
 const splashLogoFallback = document.getElementById("splash-logo-fallback");
+const welcomeScreen = document.getElementById("welcome-screen");
+const topbar = document.getElementById("app-topbar");
+const topbarUserName = document.getElementById("topbar-user-name");
+const topbarBackButton = document.getElementById("topbar-back-button");
 
 let maintenanceImageRefs = getMaintenanceImageRefs();
 
@@ -96,15 +100,24 @@ function setButtonLoading(button, isLoading, loadingText = "Guardando...") {
 
 const vehiclesScreen = document.getElementById("vehicles-screen");
 
+function updateTopbarContext() {
+  if (!topbarBackButton) return;
+  const inVehicleDetail = !dashboard.classList.contains("hidden");
+  topbarBackButton.disabled = !inVehicleDetail;
+  topbarBackButton.classList.toggle("is-inactive", !inVehicleDetail);
+}
+
 function updateSessionUI() {
   const session = getSession();
   const isLoggedIn = Boolean(session?.email);
 
   // 👇 estado base
   dashboard.classList.add("hidden");
+  welcomeScreen?.classList.toggle("hidden", isLoggedIn);
+  topbar?.classList.toggle("hidden", !isLoggedIn);
   loginForm.classList.toggle("hidden", isLoggedIn);
   sessionBox.classList.toggle("hidden", !isLoggedIn);
-  logoutButton.classList.toggle("hidden", !isLoggedIn);
+  logoutButton.classList.add("hidden");
 
   if (isLoggedIn) {
     // 👇 mostrar pantalla de vehículos
@@ -115,8 +128,11 @@ function updateSessionUI() {
     sessionEmail.textContent = session.fullName
       ? `${session.fullName} - ${session.email}`
       : session.email;
+    if (topbarUserName) {
+      topbarUserName.textContent = session.fullName || session.email;
+    }
 
-    sessionCopy.textContent = "Tu cuenta esta activa. Ya puedes trabajar en el panel.";
+    sessionCopy.textContent = "";
     loginMessage.textContent = "";
 
   } else {
@@ -126,9 +142,13 @@ function updateSessionUI() {
     }
 
     sessionEmail.textContent = "";
-    sessionCopy.textContent = "Tu panel se desbloquea despues de iniciar sesion.";
+    if (topbarUserName) {
+      topbarUserName.textContent = "";
+    }
+    sessionCopy.textContent = "Ingresa para continuar.";
   }
 
+  updateTopbarContext();
   return isLoggedIn;
 }
 
@@ -139,6 +159,7 @@ function goBackToVehicles() {
   document.getElementById("dashboard").classList.add("hidden");
   document.getElementById("vehicles-screen").classList.remove("hidden");
   closeMenu();
+  updateTopbarContext();
 
   loadVehiclesScreen(); // 👈 CLAVE
 }
@@ -328,6 +349,7 @@ function selectVehicle(id) {
   document.getElementById("vehicles-screen").classList.add("hidden");
   document.getElementById("dashboard").classList.remove("hidden");
   closeMenu();
+  updateTopbarContext();
 
   refreshAllData();
   maintenanceList.innerHTML = '<div class="empty">Usa filtros o presiona "Últimos registros" para cargar el historial.</div>';
@@ -348,6 +370,12 @@ document.addEventListener("click", (e) => {
 
   if (!menuPanel.contains(e.target) && !menuButton.contains(e.target)) {
     closeMenu();
+  }
+});
+
+topbarBackButton?.addEventListener("click", () => {
+  if (!topbarBackButton.disabled) {
+    goBackToVehicles();
   }
 });
 
@@ -498,7 +526,7 @@ loginForm?.addEventListener("submit", async (event) => {
 
     saveSession(response.user);
 updateSessionUI();
-loginMessage.textContent = "Acceso concedido.";
+loginMessage.textContent = "";
 
 // 👇 NUEVO FLUJO
 await loadVehiclesList();
@@ -527,7 +555,7 @@ function logout() {
   togglePasswordButton.setAttribute("aria-label", "Mostrar contrasena");
   loginMessage.textContent = "Sesion cerrada.";
   setStatus("Bloqueado");
-  maintenanceList.innerHTML = '<div class="empty">Inicia sesion para ver el historial.</div>';
+  maintenanceList.innerHTML = '<div class="empty">Selecciona un vehículo para comenzar.</div>';
   historyTitle.textContent = "Historial de vehículo";
   historyCopy.textContent = 'Aún no hay resultados. Usa filtros o presiona "Últimos registros".';
   if (currentVehicleName) currentVehicleName.textContent = "Sin selección";
@@ -870,7 +898,7 @@ maintenanceImageInput?.addEventListener("change", async () => {
 
   if (!isLoggedIn) {
     setStatus("Bloqueado");
-    maintenanceList.innerHTML = '<div class="empty">Inicia sesion para ver el historial.</div>';
+    maintenanceList.innerHTML = '<div class="empty">Accede para continuar.</div>';
     return;
   }
 

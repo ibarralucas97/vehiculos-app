@@ -31,15 +31,29 @@
       </div>
     </div>
     <main class="app-shell">
+      <header id="app-topbar" class="app-topbar hidden">
+        <div class="topbar-left">
+          <button id="topbar-back-button" class="topbar-back-button" type="button" aria-label="Volver a mis vehículos">←</button>
+          <h1 class="app-title">Rodado Control</h1>
+        </div>
+        <span id="topbar-user-name" class="topbar-user-name"></span>
+        <div class="topbar-menu">
+          <button id="menu-toggle" class="menu-btn" type="button" aria-expanded="false">☰</button>
+          <div id="menu-panel" class="menu-panel hidden">
+            <button onclick="goBackToVehicles()" type="button">🚗 Mis vehículos</button>
+            <button onclick="openPlacesModal()" type="button">📍 Lugares</button>
+            <hr />
+            <button id="menu-profile" type="button">👤 Mi perfil</button>
+            <button id="menu-settings" type="button">⚙️ Configuración</button>
+            <hr />
+            <button id="menu-logout" type="button">🚪 Cerrar sesión</button>
+          </div>
+        </div>
+      </header>
       <section class="hero-card" id="welcome-screen">
         <div class="hero-copy">
           <h1 class="app-title">Rodado Control</h1>
-          <h2 class="hero-title">
-  Controla el mantenimiento de tus vehiculos de forma simple y ordenada
-</h2>
-          <p class="lead">
-            Inicia sesion para entrar a tu cuenta y revisar historial, gastos y nuevos servicios desde cualquier dispositivo.
-          </p>
+          <h2 class="hero-title">Controla el mantenimiento de tus vehiculos de forma simple y ordenada</h2>
         </div>
 
         <aside class="login-card">
@@ -51,7 +65,7 @@
             <button id="logout-button" class="ghost hidden" type="button">Cerrar sesion</button>
           </div>
 
-          <p id="session-copy" class="section-copy">Tu panel se desbloquea despues de iniciar sesion.</p>
+          <p id="session-copy" class="section-copy">Ingresa para continuar.</p>
 
           <form id="login-form" class="form-stack">
             <label>
@@ -110,26 +124,6 @@
 </section>
 
       <section id="dashboard" class="hidden">
-
-<button id="menu-toggle" class="menu-btn" type="button" aria-expanded="false">☰</button>
-
-<div id="menu-panel" class="menu-panel hidden">
-
-  <button onclick="goBackToVehicles()" type="button">🚗 Mis vehículos</button>
-  <button onclick="openPlacesModal()" type="button">📍 Lugares</button>
-
-  <hr />
-
-  <button id="menu-profile" type="button">👤 Mi perfil</button>
-  <button id="menu-settings" type="button">⚙️ Configuración</button>
-
-  <hr />
-
-  <button id="menu-logout" type="button">🚪 Cerrar sesión</button>
-
-</div>
-
-<button onclick="goBackToVehicles()" class="nav-float-btn" type="button" aria-label="Volver a mis vehículos">></button>
 
 <section class="panel vehicle-context-panel">
   <div class="section-head mb-0">
