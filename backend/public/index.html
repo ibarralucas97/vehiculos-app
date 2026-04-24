@@ -126,10 +126,17 @@
       <section id="dashboard" class="hidden">
 
 <section class="panel vehicle-context-panel">
-  <div class="section-head mb-0">
+  <div class="section-head mb-0 vehicle-context-head">
     <div>
-      <p class="vehicle-context-label">Vehículo actual</p>
-      <h2 id="current-vehicle-name">Sin selección</h2>
+      <p class="vehicle-context-label">Vehiculo actual</p>
+      <h2 id="current-vehicle-name">Sin seleccion</h2>
+    </div>
+    <div class="km-panel">
+      <p class="km-panel-label">KM actuales</p>
+      <div class="km-panel-row">
+        <strong id="current-vehicle-km">Sin dato</strong>
+        <button id="update-km-button" class="ghost" type="button">Actualizar</button>
+      </div>
     </div>
   </div>
 </section>
@@ -184,60 +191,48 @@
 </div>
 </section>
 
-<section class="panel side-panel collapsible">
-
-  <div class="section-head section-head-stack collapsible-header" onclick="toggleSection(this)">
-    <div>
-      <h2>Historial de vehículo</h2>
-      <p class="section-copy">Aplica filtros o consulta los últimos registros del vehículo seleccionado.</p>
-    </div>
-    <span class="arrow">▼</span>
-  </div>
-
-  <div class="collapsible-content">
-    <form id="filters-form" class="form-stack compact">
-              <label>
-                Buscar
-                <input type="text" name="search" placeholder="vehiculo, patente, taller, accion" />
-              </label>
-              <div class="split-fields">
-                <label>
-                  Desde
-                  <input type="date" name="from" />
-                </label>
-                <label>
-                  Hasta
-                  <input type="date" name="to" />
-                </label>
-              </div>
-              <div class="split-fields">
-                <button id="filters-submit" type="submit" class="secondary">Aplicar filtros</button>
-                <button id="latest-button" class="ghost" type="button">Últimos registros</button>
-              </div>
-            </form>
-          </div>
-          </section>
-
-                  <section class="panel history-panel collapsible">
+<section class="panel history-panel collapsible">
 
   <div class="section-head collapsible-header" onclick="toggleSection(this)">
-    
     <div>
-      <h2 id="history-title">Historial de vehículo</h2>
+      <h2 id="history-title">Historial del vehiculo</h2>
       <p id="history-copy" class="section-copy">
-        Aún no hay resultados. Usa filtros o presiona "Últimos registros".
+        Aplica filtros o presiona "Ultimos registros".
       </p>
     </div>
 
     <div style="display:flex; align-items:center; gap:10px;">
-      <span id="status-pill" class="pill">Listo</span>
-      <span class="arrow">▼</span>
+      <span id="status-pill" class="pill">Sin consulta</span>
+      <span class="arrow"></span>
     </div>
 
   </div>
 
   <div class="collapsible-content">
-    <div id="maintenance-list" class="cards"></div>
+    <form id="filters-form" class="form-stack compact history-filters">
+      <label>
+        Buscar
+        <input type="text" name="search" placeholder="vehiculo, patente, taller, accion" />
+      </label>
+      <div class="split-fields">
+        <label>
+          Desde
+          <input type="date" name="from" />
+        </label>
+        <label>
+          Hasta
+          <input type="date" name="to" />
+        </label>
+      </div>
+      <div class="split-fields">
+        <button id="filters-submit" type="submit" class="secondary">Aplicar filtros</button>
+        <button id="latest-button" class="ghost" type="button">Ultimos registros</button>
+      </div>
+    </form>
+
+    <div id="maintenance-list" class="cards">
+      <div class="empty">Aplica filtros o presiona "Ultimos registros".</div>
+    </div>
   </div>
 
 </section>
@@ -254,6 +249,7 @@
     </main>
 
     <script src="/app.js" defer></script>
+    <script src="/dashboard-enhancements.js" defer></script>
     <script
       src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
       integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
@@ -269,10 +265,16 @@
 
     <h2>Vehículos</h2>
 
-    <form id="vehicle-form">
+    <form id="vehicle-form" class="vehicle-form-grid">
       <input name="nombre" placeholder="Nombre" required />
       <input name="modelo" placeholder="Modelo" required />
       <input name="patente" placeholder="Patente" required />
+      <input name="km_actual" type="number" inputmode="numeric" pattern="[0-9]*" placeholder="KM actual" />
+      <input name="ultimo_service_km" type="number" inputmode="numeric" pattern="[0-9]*" placeholder="Ultimo service (KM)" />
+      <input name="intervalo_km" type="number" inputmode="numeric" pattern="[0-9]*" placeholder="Intervalo KM" />
+      <input name="fecha_ultimo_service" type="date" placeholder="Fecha ultimo service" />
+      <input name="intervalo_tiempo" type="number" inputmode="numeric" pattern="[0-9]*" placeholder="Intervalo meses" />
+      <p class="helper-copy">Podes definir recordatorios por kilometros, por tiempo o por ambos.</p>
       <button type="submit">Crear</button>
     </form>
 
@@ -298,6 +300,18 @@
 
     <div id="places-list"></div>
 
+  </div>
+</div>
+
+<div id="ui-modal" class="modal hidden">
+  <div class="modal-content modal-content-wide">
+    <button class="modal-close" id="ui-modal-close" type="button">?</button>
+    <h2 id="ui-modal-title">Informacion</h2>
+    <div id="ui-modal-body" class="modal-body-copy"></div>
+    <div class="modal-actions">
+      <button id="ui-modal-cancel" class="ghost hidden" type="button">Cancelar</button>
+      <button id="ui-modal-confirm" type="button">Aceptar</button>
+    </div>
   </div>
 </div>
 

@@ -6,10 +6,63 @@ VALUES (
 )
 ON CONFLICT (email) DO NOTHING;
 
-INSERT INTO vehiculos (nombre, modelo, patente)
-VALUES ('Auto', 'Gol Trend', 'ABC123')
+INSERT INTO vehiculos (
+  user_id,
+  nombre,
+  modelo,
+  patente,
+  km_actual,
+  ultimo_service_km,
+  intervalo_km,
+  fecha_ultimo_service,
+  intervalo_tiempo
+)
+SELECT
+  u.id,
+  'Auto',
+  'Gol Trend',
+  'ABC123',
+  15500,
+  15000,
+  10000,
+  '2026-04-24',
+  6
+FROM users u
+WHERE u.email = 'lucas@mygarage.app'
 ON CONFLICT (patente) DO NOTHING;
 
-INSERT INTO lugares (nombre, ubicacion, contacto_nombre, contacto_numero)
-VALUES ('Taller Juan', 'Cordoba', 'Juan Perez', '3511234567')
-ON CONFLICT DO NOTHING;
+INSERT INTO lugares (user_id, nombre, ubicacion, contacto_nombre, contacto_numero)
+SELECT
+  u.id,
+  'Taller Juan',
+  'Cordoba',
+  'Juan Perez',
+  '3511234567'
+FROM users u
+WHERE u.email = 'lucas@mygarage.app'
+AND NOT EXISTS (
+  SELECT 1 FROM lugares l WHERE l.nombre = 'Taller Juan' AND l.user_id = u.id
+);
+
+INSERT INTO mantenimiento (user_id, fecha, vehiculo_id, lugar_id, accion, km, cost)
+SELECT
+  u.id,
+  '2026-04-24',
+  v.id,
+  l.id,
+  'Cambio de aceite',
+  15000,
+  25000
+FROM users u
+JOIN vehiculos v ON v.user_id = u.id AND v.patente = 'ABC123'
+JOIN lugares l ON l.user_id = u.id AND l.nombre = 'Taller Juan'
+WHERE u.email = 'lucas@mygarage.app'
+AND NOT EXISTS (
+  SELECT 1
+  FROM mantenimiento m
+  WHERE m.user_id = u.id
+    AND m.vehiculo_id = v.id
+    AND m.lugar_id = l.id
+    AND m.accion = 'Cambio de aceite'
+    AND m.km = 15000
+);

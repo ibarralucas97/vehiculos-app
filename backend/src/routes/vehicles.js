@@ -3,9 +3,6 @@ const router = express.Router();
 const pool = require("../db/connection");
 const { validateVehiclePayload } = require("../utils/validation");
 
-// =====================
-// GET /vehicles
-// =====================
 router.get("/", async (req, res) => {
   try {
     const userId = Number(req.query.user_id);
@@ -15,7 +12,19 @@ router.get("/", async (req, res) => {
     }
 
     const result = await pool.query(
-      "SELECT id, nombre, modelo, patente FROM vehiculos WHERE user_id = $1 ORDER BY id ASC",
+      `SELECT
+        id,
+        nombre,
+        modelo,
+        patente,
+        km_actual,
+        ultimo_service_km,
+        intervalo_km,
+        fecha_ultimo_service,
+        intervalo_tiempo
+       FROM vehiculos
+       WHERE user_id = $1
+       ORDER BY id ASC`,
       [userId]
     );
 
@@ -26,10 +35,6 @@ router.get("/", async (req, res) => {
   }
 });
 
-
-// =====================
-// POST /vehicles
-// =====================
 router.post("/", async (req, res) => {
   try {
     const { errors, data } = validateVehiclePayload(req.body);
@@ -44,20 +49,37 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ error: "user_id requerido" });
     }
 
-    const count = await pool.query(
-  "SELECT COUNT(*) FROM vehiculos WHERE user_id = $1",
-  [userId]
-);
+    const count = await pool.query("SELECT COUNT(*) FROM vehiculos WHERE user_id = $1", [userId]);
 
-if (Number(count.rows[0].count) >= 3) {
-  return res.status(400).json({ error: "Limite de vehiculos alcanzado" });
-}
+    if (Number(count.rows[0].count) >= 3) {
+      return res.status(400).json({ error: "Limite de vehiculos alcanzado" });
+    }
 
     const result = await pool.query(
-      `INSERT INTO vehiculos (nombre, modelo, patente, user_id)
-       VALUES ($1, $2, $3, $4)
-       RETURNING *`,
-      [data.nombre, data.modelo, data.patente, userId]
+      `INSERT INTO vehiculos (
+        nombre,
+        modelo,
+        patente,
+        user_id,
+        km_actual,
+        ultimo_service_km,
+        intervalo_km,
+        fecha_ultimo_service,
+        intervalo_tiempo
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      RETURNING *`,
+      [
+        data.nombre,
+        data.modelo,
+        data.patente,
+        userId,
+        data.km_actual,
+        data.ultimo_service_km,
+        data.intervalo_km,
+        data.fecha_ultimo_service,
+        data.intervalo_tiempo,
+      ]
     );
 
     res.status(201).json(result.rows[0]);
@@ -71,8 +93,11 @@ router.put("/:id", async (req, res) => {
   try {
     const userId = Number(req.body.user_id);
     const id = Number(req.params.id);
+    const { errors, data } = validateVehiclePayload(req.body);
 
-    const { nombre, modelo, patente } = req.body;
+    if (errors.length > 0) {
+      return res.status(400).json({ errors });
+    }
 
     if (!userId) {
       return res.status(400).json({ error: "user_id requerido" });
@@ -82,11 +107,31 @@ router.put("/:id", async (req, res) => {
       `UPDATE vehiculos
        SET nombre = $1,
            modelo = $2,
-           patente = $3
-       WHERE id = $4 AND user_id = $5
+           patente = $3,
+           km_actual = $4,
+           ultimo_service_km = $5,
+           intervalo_km = $6,
+           fecha_ultimo_service = $7,
+           intervalo_tiempo = $8
+       WHERE id = $9 AND user_id = $10
        RETURNING *`,
-      [nombre, modelo, patente, id, userId]
+      [
+        data.nombre,
+        data.modelo,
+        data.patente,
+        data.km_actual,
+        data.ultimo_service_km,
+        data.intervalo_km,
+        data.fecha_ultimo_service,
+        data.intervalo_tiempo,
+        id,
+        userId,
+      ]
     );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Vehiculo no encontrado" });
+    }
 
     res.json(result.rows[0]);
   } catch (error) {
@@ -95,9 +140,50 @@ router.put("/:id", async (req, res) => {
   }
 });
 
-// =====================
-// DELETE /vehicles/:id
-// =====================
+router.patch("/:id/km", async (req, res) => {
+  try {
+    const userId = Number(req.body.user_id);
+    const id = Number(req.params.id);
+    const kmActual = Number(req.body.km_actual);
+
+    if (!userId) {
+      return res.status(400).json({ error: "user_id requerido" });
+    }
+
+    if (!Number.isFinite(kmActual) || kmActual < 0) {
+      return res.status(400).json({ error: "km_actual debe ser un numero valido mayor o igual a 0" });
+    }
+
+    const currentResult = await pool.query(
+      "SELECT id, km_actual FROM vehiculos WHERE id = $1 AND user_id = $2",
+      [id, userId]
+    );
+
+    if (currentResult.rowCount === 0) {
+      return res.status(404).json({ error: "Vehiculo no encontrado" });
+    }
+
+    const currentKm = currentResult.rows[0].km_actual;
+
+    if (currentKm !== null && Number(kmActual) < Number(currentKm)) {
+      return res.status(400).json({ error: "No puedes bajar el kilometraje actual" });
+    }
+
+    const result = await pool.query(
+      `UPDATE vehiculos
+       SET km_actual = $1
+       WHERE id = $2 AND user_id = $3
+       RETURNING id, nombre, modelo, patente, km_actual, ultimo_service_km, intervalo_km, fecha_ultimo_service, intervalo_tiempo`,
+      [kmActual, id, userId]
+    );
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error al actualizar kilometraje" });
+  }
+});
+
 router.delete("/:id", async (req, res) => {
   try {
     const userId = Number(req.query.user_id);

@@ -5,6 +5,7 @@ const pool = require("./db/connection");
 const config = require("./config");
 
 const authRoutes = require("./routes/auth");
+const dashboardRoutes = require("./routes/dashboard");
 const maintenanceRoutes = require("./routes/maintenance");
 const vehicleRoutes = require("./routes/vehicles");
 const placeRoutes = require("./routes/places");
@@ -29,6 +30,7 @@ app.get("/", (_req, res) => {
 });
 
 app.use("/auth", authRoutes);
+app.use("/dashboard", dashboardRoutes);
 app.use("/maintenance", maintenanceRoutes);
 app.use("/vehicles", vehicleRoutes);
 app.use("/places", placeRoutes);

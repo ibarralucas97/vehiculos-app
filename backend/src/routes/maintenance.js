@@ -3,9 +3,6 @@ const router = express.Router();
 const pool = require("../db/connection");
 const { validateMaintenancePayload } = require("../utils/validation");
 
-// =====================
-// POST /maintenance
-// =====================
 router.post("/", async (req, res) => {
   try {
     const { errors, data } = validateMaintenancePayload(req.body);
@@ -32,8 +29,18 @@ router.post("/", async (req, res) => {
         data.accion,
         data.km,
         data.cost,
-        userId
+        userId,
       ]
+    );
+
+    await pool.query(
+      `UPDATE vehiculos
+       SET km_actual = CASE
+         WHEN km_actual IS NULL OR km_actual < $1 THEN $1
+         ELSE km_actual
+       END
+       WHERE id = $2 AND user_id = $3`,
+      [data.km, data.vehiculo_id, userId]
     );
 
     res.status(201).json(result.rows[0]);
@@ -43,10 +50,6 @@ router.post("/", async (req, res) => {
   }
 });
 
-
-// =====================
-// GET /maintenance
-// =====================
 router.get("/", async (req, res) => {
   try {
     const conditions = [];
@@ -58,7 +61,6 @@ router.get("/", async (req, res) => {
       return res.status(400).json({ error: "user_id requerido" });
     }
 
-    // 🔥 SIEMPRE filtrar por usuario
     values.push(userId);
     conditions.push(`m.user_id = $${values.length}`);
 
@@ -84,25 +86,17 @@ router.get("/", async (req, res) => {
 
     if (req.query.search) {
       values.push(`%${req.query.search.trim()}%`);
-      conditions.push(`
-        (
-          LOWER(v.nombre) LIKE LOWER($${values.length}) OR 
-          LOWER(v.patente) LIKE LOWER($${values.length}) OR 
-          LOWER(l.nombre) LIKE LOWER($${values.length}) OR 
-          LOWER(m.accion) LIKE LOWER($${values.length})
-        )
-      `);
+      conditions.push(`(
+        LOWER(v.nombre) LIKE LOWER($${values.length}) OR
+        LOWER(v.patente) LIKE LOWER($${values.length}) OR
+        LOWER(l.nombre) LIKE LOWER($${values.length}) OR
+        LOWER(m.accion) LIKE LOWER($${values.length})
+      )`);
     }
 
     const rawLimit = Number(req.query.limit);
-    const limit =
-      Number.isInteger(rawLimit) && rawLimit > 0
-        ? Math.min(rawLimit, 100)
-        : null;
-
-    const whereClause =
-      conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-
+    const limit = Number.isInteger(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 100) : null;
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
     const limitClause = limit ? `LIMIT ${limit}` : "";
 
     const result = await pool.query(

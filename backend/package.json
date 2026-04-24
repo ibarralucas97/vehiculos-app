@@ -7,7 +7,7 @@
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "db:setup": "node scripts/apply-db.js",
-    "check": "node --check src/index.js && node --check src/routes/auth.js && node --check src/routes/maintenance.js && node --check src/routes/vehicles.js && node --check src/routes/places.js && node --check src/utils/password.js && node --check src/utils/validation.js && node --check scripts/apply-db.js && node --check public/app.js"
+    "check": "node --check src/index.js && node --check src/routes/auth.js && node --check src/routes/dashboard.js && node --check src/routes/maintenance.js && node --check src/routes/vehicles.js && node --check src/routes/places.js && node --check src/utils/password.js && node --check src/utils/reminders.js && node --check src/utils/validation.js && node --check scripts/apply-db.js && node --check public/app.js && node --check public/dashboard-enhancements.js"
   },
   "keywords": [
     "express",
@@ -22,3 +22,4 @@
     "pg": "^8.20.0"
   }
 }
+

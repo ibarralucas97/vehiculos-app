@@ -10,6 +10,44 @@ function normalizeText(value) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function parseOptionalInteger(value, fieldName, { min = 0, positiveOnly = false } = {}) {
+  const normalized = String(value ?? "").trim();
+
+  if (normalized === "") {
+    return { value: null, error: null };
+  }
+
+  const parsed = Number(normalized);
+  const valid = positiveOnly ? isPositiveInteger(parsed) : Number.isInteger(parsed) && parsed >= min;
+
+  if (!valid) {
+    return {
+      value: null,
+      error: positiveOnly
+        ? `${fieldName} debe ser un entero positivo`
+        : `${fieldName} debe ser un entero mayor o igual a ${min}`,
+    };
+  }
+
+  return { value: parsed, error: null };
+}
+
+function parseOptionalDate(value, fieldName) {
+  const normalized = normalizeText(value);
+
+  if (!normalized) {
+    return { value: null, error: null };
+  }
+
+  const isValid = /^\d{4}-\d{2}-\d{2}$/.test(normalized);
+
+  if (!isValid) {
+    return { value: null, error: `${fieldName} debe tener formato YYYY-MM-DD` };
+  }
+
+  return { value: normalized, error: null };
+}
+
 function validateMaintenancePayload(payload) {
   const fecha = normalizeText(payload.fecha);
   const accion = normalizeText(payload.accion);
@@ -61,13 +99,46 @@ function validateVehiclePayload(payload) {
   const nombre = normalizeText(payload.nombre);
   const modelo = normalizeText(payload.modelo);
   const patente = normalizeText(payload.patente).toUpperCase();
+
+  const kmActual = parseOptionalInteger(payload.km_actual, "km_actual");
+  const ultimoServiceKm = parseOptionalInteger(payload.ultimo_service_km, "ultimo_service_km");
+  const intervaloKm = parseOptionalInteger(payload.intervalo_km, "intervalo_km", { positiveOnly: true });
+  const fechaUltimoService = parseOptionalDate(payload.fecha_ultimo_service, "fecha_ultimo_service");
+  const intervaloTiempo = parseOptionalInteger(payload.intervalo_tiempo, "intervalo_tiempo", { positiveOnly: true });
+
   const errors = [];
 
   if (!nombre) errors.push("nombre es obligatorio");
   if (!modelo) errors.push("modelo es obligatorio");
   if (!patente) errors.push("patente es obligatoria");
 
-  return { errors, data: { nombre, modelo, patente } };
+  [kmActual, ultimoServiceKm, intervaloKm, fechaUltimoService, intervaloTiempo].forEach((result) => {
+    if (result.error) {
+      errors.push(result.error);
+    }
+  });
+
+  if (
+    kmActual.value !== null &&
+    ultimoServiceKm.value !== null &&
+    kmActual.value < ultimoServiceKm.value
+  ) {
+    errors.push("km_actual no puede ser menor que ultimo_service_km");
+  }
+
+  return {
+    errors,
+    data: {
+      nombre,
+      modelo,
+      patente,
+      km_actual: kmActual.value,
+      ultimo_service_km: ultimoServiceKm.value,
+      intervalo_km: intervaloKm.value,
+      fecha_ultimo_service: fechaUltimoService.value,
+      intervalo_tiempo: intervaloTiempo.value,
+    },
+  };
 }
 
 function validatePlacePayload(payload) {

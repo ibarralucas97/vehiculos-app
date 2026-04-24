@@ -37,6 +37,8 @@ const menuLogoutButton = document.getElementById("menu-logout");
 const menuProfileButton = document.getElementById("menu-profile");
 const menuSettingsButton = document.getElementById("menu-settings");
 const currentVehicleName = document.getElementById("current-vehicle-name");
+const currentVehicleKm = document.getElementById("current-vehicle-km");
+const updateKmButton = document.getElementById("update-km-button");
 const maintenanceImageInput = document.getElementById("maintenance-image");
 const maintenanceImagePreview = document.getElementById("maintenance-image-preview");
 const maintenanceImagePreviewImg = document.getElementById("maintenance-image-preview-img");
@@ -161,8 +163,12 @@ function goBackToVehicles() {
   closeMenu();
   updateTopbarContext();
 
-  loadVehiclesScreen(); // 👈 CLAVE
+  if (currentVehicleKm) currentVehicleKm.textContent = "Sin dato";
+  if (updateKmButton) updateKmButton.disabled = true;
+
+  loadVehiclesScreen();
 }
+
 
 function closeMenu() {
   if (!menuPanel) return;
@@ -172,8 +178,15 @@ function closeMenu() {
 
 function showNotAvailable() {
   setStatus("No disponible");
-  alert("No disponible");
   closeMenu();
+
+  if (typeof openUiModal === "function") {
+    openUiModal({
+      title: "Proximamente",
+      bodyHtml: "<p>Esta seccion todavia no esta disponible.</p>",
+    });
+    return;
+  }
 }
 
 async function playSplashScreen() {
@@ -224,6 +237,151 @@ function setStatus(text) {
   statusPill.textContent = text;
 }
 
+function getSelectedVehicle() {
+  return currentVehicles.find((item) => item.id === selectedVehicleId) || null;
+}
+
+function formatKmValue(value) {
+  if (value === null || value === undefined || value === "") {
+    return "Sin dato";
+  }
+
+  return `${Number(value).toLocaleString("es-AR")} km`;
+}
+
+function renderCurrentVehicleKm() {
+  const vehicle = getSelectedVehicle();
+
+  if (!currentVehicleKm) return;
+
+  currentVehicleKm.textContent = formatKmValue(vehicle?.km_actual ?? null);
+
+  if (updateKmButton) {
+    updateKmButton.disabled = !vehicle;
+  }
+}
+
+async function openKmUpdateModal() {
+  const vehicle = getSelectedVehicle();
+
+  if (!vehicle || typeof openUiModal !== "function") {
+    return;
+  }
+
+  const existingKm = vehicle.km_actual ?? "";
+  const confirmation = openUiModal({
+    title: "Actualizar kilometraje",
+    bodyHtml: `
+      <label class="form-stack">
+        <span>Ingresa el kilometraje actual del vehiculo.</span>
+        <input id="km-update-input" type="number" min="0" inputmode="numeric" pattern="[0-9]*" placeholder="KM actual" value="${existingKm}" />
+      </label>
+      <p class="section-copy">Este valor se usa como base para recordatorios y calculos futuros.</p>
+      <p id="km-update-feedback" class="message"></p>
+    `,
+    confirmLabel: "Guardar",
+    cancelLabel: "Cancelar",
+    showCancel: true,
+  });
+
+  setTimeout(() => {
+    const input = document.getElementById("km-update-input");
+    input?.focus();
+    input?.select();
+  }, 0);
+
+  const confirmed = await confirmation;
+
+  if (!confirmed) {
+    return;
+  }
+
+  const input = document.getElementById("km-update-input");
+  const feedback = document.getElementById("km-update-feedback");
+  const rawValue = String(input?.value || "").trim();
+  const nextKm = Number(rawValue);
+
+  if (!rawValue || !Number.isFinite(nextKm) || nextKm < 0) {
+    if (feedback) feedback.textContent = "Ingresa un kilometraje valido mayor o igual a 0.";
+    return;
+  }
+
+  if (vehicle.km_actual !== null && vehicle.km_actual !== undefined && nextKm < Number(vehicle.km_actual)) {
+    if (feedback) feedback.textContent = "No puedes bajar el kilometraje actual.";
+    return;
+  }
+
+  const session = getSession();
+
+  try {
+    showAppLoading("Actualizando kilometraje...");
+    const updatedVehicle = await fetchJson(`/vehicles/${vehicle.id}/km`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        user_id: session.id,
+        km_actual: nextKm,
+      }),
+    });
+
+    currentVehicles = currentVehicles.map((item) => (item.id === updatedVehicle.id ? { ...item, ...updatedVehicle } : item));
+    renderCurrentVehicleKm();
+    await refreshAllData();
+    if (typeof loadDashboardOverview === "function") {
+      await loadDashboardOverview();
+    }
+    setStatus("KM actualizado");
+  } catch (error) {
+    await openUiModal({
+      title: "No se pudo actualizar",
+      bodyHtml: `<p>${error.message}</p>`,
+    });
+  } finally {
+    hideAppLoading();
+  }
+}
+
+function setHistoryState(state, detail = "") {
+  historyTitle.textContent = "Historial del vehiculo";
+
+  const states = {
+    initial: {
+      pill: "Sin consulta",
+      copy: 'Aplica filtros o presiona "Ultimos registros".',
+      body: '<div class="empty">Aplica filtros o presiona "Ultimos registros".</div>',
+    },
+    loading: {
+      pill: "Cargando",
+      copy: "Cargando historial...",
+      body: '<div class="empty">Cargando historial...</div>',
+    },
+    empty: {
+      pill: "Sin resultados",
+      copy: "No se encontraron registros",
+      body: '<div class="empty">No se encontraron registros</div>',
+    },
+    error: {
+      pill: "Error",
+      copy: detail || "Ocurrio un error",
+      body: `<div class="empty">${detail || "Ocurrio un error"}</div>`,
+    },
+  };
+
+  const config = states[state];
+
+  if (!config) {
+    historyCopy.textContent = detail;
+    setStatus(state);
+    return;
+  }
+
+  historyCopy.textContent = config.copy;
+  setStatus(config.pill);
+  maintenanceList.innerHTML = config.body;
+}
+
 function optionMarkup(items, labelKey) {
   return items
     .map((item) => `<option value="${item.id}">${item[labelKey]}</option>`)
@@ -232,7 +390,7 @@ function optionMarkup(items, labelKey) {
 
 function renderMaintenance(items) {
   if (items.length === 0) {
-    maintenanceList.innerHTML = '<div class="empty">No hay resultados para mostrar.</div>';
+    setHistoryState("empty");
     return;
   }
 
@@ -265,8 +423,6 @@ function renderMaintenance(items) {
 }
 
 async function loadSelects() {
-  setStatus("Cargando catalogos...");
-
  const session = getSession();
 
 const [vehicles, places] = await Promise.all([
@@ -345,6 +501,7 @@ function selectVehicle(id) {
   if (currentVehicleName) {
     currentVehicleName.textContent = vehicle ? `${vehicle.nombre} ${vehicle.modelo ? `- ${vehicle.modelo}` : ""}` : `ID ${id}`;
   }
+  renderCurrentVehicleKm();
 
   document.getElementById("vehicles-screen").classList.add("hidden");
   document.getElementById("dashboard").classList.remove("hidden");
@@ -423,11 +580,12 @@ function viewVehicle(id) {
   const v = currentVehicles.find(v => v.id === id);
   if (!v) return;
 
-  alert(`
-Nombre: ${v.nombre}
-Modelo: ${v.modelo}
-Patente: ${v.patente}
-  `);
+  if (typeof openUiModal === "function") {
+    openUiModal({
+      title: "Detalle del vehiculo",
+      bodyHtml: `<div class="vehicle-detail-grid"><div><strong>Nombre:</strong> ${v.nombre}</div><div><strong>Modelo:</strong> ${v.modelo}</div><div><strong>Patente:</strong> ${v.patente}</div></div>`,
+    });
+  }
 }
 
 
@@ -452,7 +610,7 @@ async function loadMaintenance(options = {}) {
 
   const usingFilters = params.toString().length > 0;
 
-  setStatus("Cargando...");
+  setHistoryState("loading");
   const session = getSession();
   params.set("user_id", session.id);
   if (selectedVehicleId) {
@@ -477,7 +635,16 @@ async function loadMaintenance(options = {}) {
   const query = params.toString();
   const url = query ? `/maintenance?${query}` : "/maintenance";
   const items = await fetchJson(url);
+
+  if (items.length === 0) {
+    setHistoryState("empty");
+    return;
+  }
+
   renderMaintenance(items);
+  historyCopy.textContent = latestOnly
+    ? "Se muestran los ultimos 3 movimientos del vehiculo seleccionado."
+    : "Resultados segun los filtros aplicados al vehiculo seleccionado.";
   setStatus(`${items.length} registros`);
 }
 
@@ -485,7 +652,7 @@ async function loadDashboardData() {
 await loadSelects();
 await loadVehiclesList();
 await loadPlacesList();
-await loadMaintenance({ latestOnly: true });
+setHistoryState("initial");
 }
 
 if (togglePasswordButton && passwordInput) {
@@ -538,8 +705,7 @@ document.getElementById("dashboard").classList.add("hidden");
     clearSession();
     updateSessionUI();
     loginMessage.textContent = error.message;
-    setStatus(error.message);
-    maintenanceList.innerHTML = `<div class="empty">${error.message}</div>`;
+    setHistoryState("error", error.message);
   } finally {
     setButtonLoading(loginSubmitButton, false, "Ingresando...");
   }
@@ -555,12 +721,15 @@ function logout() {
   togglePasswordButton.setAttribute("aria-label", "Mostrar contrasena");
   loginMessage.textContent = "Sesion cerrada.";
   setStatus("Bloqueado");
-  maintenanceList.innerHTML = '<div class="empty">Selecciona un vehículo para comenzar.</div>';
-  historyTitle.textContent = "Historial de vehículo";
-  historyCopy.textContent = 'Aún no hay resultados. Usa filtros o presiona "Últimos registros".';
-  if (currentVehicleName) currentVehicleName.textContent = "Sin selección";
+  maintenanceList.innerHTML = '<div class="empty">Selecciona un vehiculo para comenzar.</div>';
+  historyTitle.textContent = "Historial del vehiculo";
+  historyCopy.textContent = 'Aplica filtros o presiona "Ultimos registros".';
+  if (currentVehicleName) currentVehicleName.textContent = "Sin seleccion";
+  if (currentVehicleKm) currentVehicleKm.textContent = "Sin dato";
+  if (updateKmButton) updateKmButton.disabled = true;
   closeMenu();
 }
+
 
 logoutButton?.addEventListener("click", logout);
 menuLogoutButton?.addEventListener("click", logout);
@@ -718,6 +887,9 @@ filtersForm?.addEventListener("submit", async (event) => {
   }
 });
 
+
+updateKmButton?.addEventListener("click", openKmUpdateModal);
+
 latestButton?.addEventListener("click", async () => {
   if (filtersForm) {
     filtersForm.reset();
@@ -736,10 +908,21 @@ latestButton?.addEventListener("click", async () => {
 async function deleteVehicle(id) {
   const session = getSession();
 
-  if (!confirm("¿Seguro que querés eliminar este vehículo?")) return;
+  const confirmed = typeof openUiModal === "function"
+    ? await openUiModal({
+        title: "Eliminar vehiculo",
+        bodyHtml: "<p>Esta accion no se puede deshacer.</p>",
+        confirmLabel: "Eliminar",
+        cancelLabel: "Cancelar",
+        showCancel: true,
+        destructive: true,
+      })
+    : true;
+
+  if (!confirmed) return;
 
   try {
-    showAppLoading("Eliminando vehículo...");
+    showAppLoading("Eliminando vehiculo...");
 
     await fetchJson(`/vehicles/${id}?user_id=${session.id}`, {
       method: "DELETE",
@@ -764,16 +947,26 @@ function closeModal(id) {
 
 
 function viewPlace(id) {
-  const place = currentPlaces.find(p => p.id === id);
+  const place = currentPlaces.find((p) => p.id === id);
 
   if (!place) return;
 
-  alert(`
-Nombre: ${place.nombre}
-Ubicación: ${place.ubicacion}
-Contacto: ${place.contacto_nombre}
-Teléfono: ${place.contacto_numero}
-  `);
+  if (typeof openUiModal === "function") {
+    openUiModal({
+      title: "Detalle del lugar",
+      bodyHtml: `
+        <div class="place-detail-grid">
+          <div><strong>Nombre:</strong> ${place.nombre}</div>
+          <div><strong>Ubicacion:</strong> ${place.ubicacion || "Sin dato"}</div>
+          <div><strong>Contacto:</strong> ${place.contacto_nombre || "Sin dato"}</div>
+          <div><strong>Telefono:</strong> ${place.contacto_numero || "Sin dato"}</div>
+        </div>
+      `,
+    });
+    return;
+  }
+
+  console.log(place);
 }
 
 function editPlace(id) {
@@ -793,7 +986,18 @@ function editPlace(id) {
 async function deletePlace(id) {
   const session = getSession();
 
-  if (!confirm("¿Seguro que querés eliminar este lugar?")) return;
+  const confirmed = typeof openUiModal === "function"
+    ? await openUiModal({
+        title: "Eliminar lugar",
+        bodyHtml: "<p>Esta accion no se puede deshacer.</p>",
+        confirmLabel: "Eliminar",
+        cancelLabel: "Cancelar",
+        showCancel: true,
+        destructive: true,
+      })
+    : true;
+
+  if (!confirmed) return;
 
   try {
     showAppLoading("Eliminando lugar...");

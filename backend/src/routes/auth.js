@@ -1,4 +1,3 @@
-console.log("🔥 AUTH ROUTE CARGADO 🔥");
 const express = require("express");
 const router = express.Router();
 const pool = require("../db/connection");
@@ -26,16 +25,8 @@ router.post("/login", async (req, res) => {
       return res.status(401).json({ error: "Credenciales invalidas" });
     }
 
-    console.log("EMAIL:", email);
-console.log("PASSWORD INGRESADA:", password);
-console.log("HASH DB:", user.password_hash);
-
-
-console.log("USER DB:", user);
-
-
     const isValidPassword = await verifyPassword(password, user.password_hash);
-   console.log("RESULTADO:", isValidPassword);
+
     if (!isValidPassword) {
       return res.status(401).json({ error: "Credenciales invalidas" });
     }
@@ -53,7 +44,5 @@ console.log("USER DB:", user);
     res.status(500).json({ error: "Error al iniciar sesion" });
   }
 });
-
-
 
 module.exports = router;
