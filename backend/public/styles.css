@@ -651,6 +651,13 @@ button.is-loading {
   z-index: 2000;
 }
 
+/* Prevent body scroll when modal is open */
+body.modal-open {
+  overflow: hidden;
+  position: fixed;
+  width: 100%;
+  height: 100%;
+}
 
 .modal-content {
   position: relative;
@@ -659,6 +666,13 @@ button.is-loading {
   border-radius: 12px;
   width: 90%;
   max-width: 400px;
+  
+  /* Mobile viewport constraints */
+  max-height: 90vh;
+  overflow-y: auto;
+  
+  /* Ensure proper scrolling behavior */
+  -webkit-overflow-scrolling: touch;
 }
 
 .modal-close {
@@ -1175,5 +1189,40 @@ button.is-loading {
 
   .km-panel-row {
     flex-wrap: wrap;
+  }
+}
+
+/* Mobile modal optimizations for small screens */
+@media (max-width: 480px) {
+  .modal-content {
+    width: 95%;
+    max-width: none;
+    max-height: 85vh;
+    margin: 10px;
+    padding: 16px;
+    border-radius: 16px;
+  }
+  
+  .modal-close {
+    width: 36px;
+    height: 36px;
+    top: 8px;
+    right: 8px;
+    font-size: 20px;
+  }
+  
+  .modal-content h2 {
+    font-size: 1.3rem;
+    margin-bottom: 16px;
+    padding-right: 40px;
+  }
+  
+  .vehicle-form-grid {
+    gap: 12px;
+  }
+  
+  .vehicle-form-grid input {
+    min-height: 48px;
+    font-size: 16px; /* Prevent zoom on iOS */
   }
 }
