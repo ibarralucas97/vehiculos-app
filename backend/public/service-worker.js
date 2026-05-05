@@ -1,4 +1,4 @@
-const CACHE_NAME = "rodado-control-v2";
+const CACHE_NAME = "rodado-control-v5";
 const APP_SHELL = [
   "/",
   "/index.html",
@@ -7,6 +7,9 @@ const APP_SHELL = [
   "/dashboard-enhancements.js",
   "/manifest.json",
   "/logo.png",
+  "/app-icon.png",
+  "/login-logo.png",
+  "/splash-vertical.png",
 ];
 
 self.addEventListener("install", (event) => {

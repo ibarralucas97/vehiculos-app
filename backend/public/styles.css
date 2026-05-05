@@ -130,6 +130,15 @@ body.splash-active .app-shell {
 
 .hero-copy {
   padding: 6px 4px;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 18px;
+}
+
+.login-brand-logo {
+  width: min(100%, 620px);
+  display: block;
 }
 
 .eyebrow,
@@ -593,8 +602,8 @@ button.is-loading {
   }
 
   .splash-logo {
-    width: 138px;
-    height: 138px;
+    width: min(86vw, 360px);
+    height: min(70vh, 640px);
     border-radius: 28px;
   }
 
@@ -800,6 +809,8 @@ body.modal-open {
   color: #2c3e50;
 
   margin-bottom: 10px;
+  max-width: 24ch;
+  text-align: center;
 }
 
 .collapsible-content {
@@ -901,25 +912,18 @@ body.modal-open {
 
 .splash-logo {
   position: relative;
-  width: 168px;
-  height: 168px;
-  margin: 14px auto 24px;
-  border-radius: 30px;
-  background: linear-gradient(135deg, #0ea5e9, #2563eb);
-  color: #fff;
-  font-weight: 800;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 2.2rem;
-  box-shadow: 0 20px 46px rgba(37, 99, 235, 0.5);
+  width: min(82vw, 420px);
+  height: min(74vh, 746px);
+  margin: 0 auto;
+  border-radius: 40px;
+  background: transparent;
   overflow: hidden;
 }
 
 .splash-logo img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .splash-logo-fallback {
