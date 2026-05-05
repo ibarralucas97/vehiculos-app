@@ -3,6 +3,11 @@ const router = express.Router();
 const pool = require("../db/connection");
 const { verifyPassword } = require("../utils/password");
 
+function buildFullName(user) {
+  const parts = [user.nombre, user.apellido].filter(Boolean);
+  return parts.join(" ").trim() || user.full_name || user.email;
+}
+
 router.post("/login", async (req, res) => {
   try {
     const email = String(req.body.email || "").trim().toLowerCase();
@@ -13,7 +18,18 @@ router.post("/login", async (req, res) => {
     }
 
     const result = await pool.query(
-      `SELECT id, full_name, email, password_hash
+      `SELECT
+        id,
+        full_name,
+        nombre,
+        apellido,
+        email,
+        telefono,
+        profile_photo_url,
+        mileage_unit,
+        reminders_enabled,
+        created_at,
+        password_hash
        FROM users
        WHERE email = $1`,
       [email]
@@ -35,8 +51,15 @@ router.post("/login", async (req, res) => {
       ok: true,
       user: {
         id: user.id,
-        fullName: user.full_name,
+        nombre: user.nombre || "",
+        apellido: user.apellido || "",
+        fullName: buildFullName(user),
         email: user.email,
+        telefono: user.telefono || "",
+        profilePhotoUrl: user.profile_photo_url || "",
+        mileageUnit: user.mileage_unit || "km",
+        remindersEnabled: user.reminders_enabled !== false,
+        createdAt: user.created_at,
       },
     });
   } catch (error) {

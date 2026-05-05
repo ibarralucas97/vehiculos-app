@@ -12,6 +12,13 @@ router.get("/overview", async (req, res) => {
       return res.status(400).json({ error: "user_id requerido" });
     }
 
+    const userResult = await pool.query(
+      "SELECT reminders_enabled FROM users WHERE id = $1",
+      [userId]
+    );
+
+    const remindersEnabled = userResult.rows[0]?.reminders_enabled !== false;
+
     const vehiclesResult = await pool.query(
       `SELECT
         v.id,
@@ -43,12 +50,14 @@ router.get("/overview", async (req, res) => {
       ? reminders.find((item) => item.vehicleId === vehicleId) || null
       : null;
 
-    const alertItems = reminders
+    const alertItems = remindersEnabled
+      ? reminders
       .filter((item) => item.status === "proximo" || item.status === "atrasado")
       .sort((a, b) => {
         const priority = { atrasado: 0, proximo: 1, normal: 2, sin_configurar: 3 };
         return priority[a.status] - priority[b.status];
-      });
+      })
+      : [];
 
     const spendValues = [userId];
     let spendWhere = "user_id = $1";
@@ -78,6 +87,7 @@ router.get("/overview", async (req, res) => {
       totalSpend: Number(totalResult.rows[0].total || 0),
       selectedReminder,
       alerts: alertItems,
+      remindersEnabled,
       vehicleCount: reminders.length,
     });
   } catch (error) {

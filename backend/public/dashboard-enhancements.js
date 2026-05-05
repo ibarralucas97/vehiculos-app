@@ -108,11 +108,16 @@ function clearOverview() {
 function renderOverview(data) {
   if (!hasOverviewUi) return;
   const reminder = data.selectedReminder;
+  const remindersEnabled = data.remindersEnabled !== false;
 
   overviewMonthlyTotal.textContent = formatCurrency(data.monthlySpend);
   overviewTotalInvested.textContent = formatCurrency(data.totalSpend);
 
-  if (!reminder) {
+  if (!remindersEnabled) {
+    overviewStatusLabel.textContent = "Pausados";
+    overviewStatusCopy.textContent = "Los recordatorios estan desactivados en configuracion.";
+    overviewNextService.textContent = "Recordatorios desactivados";
+  } else if (!reminder) {
     overviewStatusLabel.textContent = "Sin configuracion";
     overviewStatusCopy.textContent = "Todavia no hay datos suficientes para calcular el proximo mantenimiento.";
     overviewNextService.textContent = "Sin calculo";
@@ -131,6 +136,11 @@ function renderOverview(data) {
   }
 
   const alerts = data.alerts || [];
+
+  if (!remindersEnabled) {
+    remindersList.innerHTML = '<div class="empty">Activa los recordatorios desde Configuracion para ver alertas aqui.</div>';
+    return;
+  }
 
   if (alerts.length === 0 && reminder) {
     remindersList.innerHTML = `
@@ -355,19 +365,3 @@ maintenanceForm?.addEventListener("submit", () => {
 });
 
 clearOverview();
-
-
-if (menuProfileButton) {
-  const replacement = menuProfileButton.cloneNode(true);
-  menuProfileButton.replaceWith(replacement);
-  replacement.addEventListener("click", showNotAvailable);
-}
-
-if (menuSettingsButton) {
-  const replacement = menuSettingsButton.cloneNode(true);
-  menuSettingsButton.replaceWith(replacement);
-  replacement.addEventListener("click", showNotAvailable);
-}
-
-clearOverview();
-

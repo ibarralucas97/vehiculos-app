@@ -28,6 +28,7 @@ const filtersForm = document.getElementById("filters-form");
 const formMessage = document.getElementById("form-message");
 const filtersSubmitButton = document.getElementById("filters-submit");
 const latestButton = document.getElementById("latest-button");
+const exportPdfButton = document.getElementById("export-pdf-button");
 const maintenanceSubmitButton = document.getElementById("maintenance-submit");
 const vehicleSelect = document.getElementById("vehiculo_id");
 const placeSelect = document.getElementById("lugar_id");
@@ -49,8 +50,42 @@ const welcomeScreen = document.getElementById("welcome-screen");
 const topbar = document.getElementById("app-topbar");
 const topbarUserName = document.getElementById("topbar-user-name");
 const topbarBackButton = document.getElementById("topbar-back-button");
+const profileForm = document.getElementById("profile-form");
+const profileMessage = document.getElementById("profile-message");
+const profileSaveButton = document.getElementById("profile-save-button");
+const profileAvatarPreview = document.getElementById("profile-avatar-preview");
+const profileAvatarImage = document.getElementById("profile-avatar-image");
+const profileAvatarFallback = document.getElementById("profile-avatar-fallback");
+const profileCreatedAt = document.getElementById("profile-created-at");
+const preferencesForm = document.getElementById("preferences-form");
+const preferencesMessage = document.getElementById("preferences-message");
+const preferencesSaveButton = document.getElementById("preferences-save-button");
+const passwordForm = document.getElementById("password-form");
+const passwordMessage = document.getElementById("password-message");
+const passwordSaveButton = document.getElementById("password-save-button");
+const settingsLogoutButton = document.getElementById("settings-logout-button");
 
 let maintenanceImageRefs = getMaintenanceImageRefs();
+
+function buildFullName(user = {}) {
+  return [user.nombre, user.apellido].filter(Boolean).join(" ").trim() || user.fullName || user.email || "";
+}
+
+function normalizeSessionUser(user = {}) {
+  return {
+    ...user,
+    nombre: user.nombre || "",
+    apellido: user.apellido || "",
+    telefono: user.telefono || "",
+    profilePhotoUrl: user.profilePhotoUrl || user.profile_photo_url || "",
+    mileageUnit: user.mileageUnit || user.mileage_unit || "km",
+    remindersEnabled:
+      typeof user.remindersEnabled === "boolean"
+        ? user.remindersEnabled
+        : user.reminders_enabled !== false,
+    fullName: buildFullName(user),
+  };
+}
 
 function getSession() {
   try {
@@ -61,11 +96,12 @@ function getSession() {
 }
 
 function saveSession(user) {
+  const normalizedUser = normalizeSessionUser(user);
   localStorage.setItem(
     SESSION_KEY,
     JSON.stringify({
-      ...user,
-      createdAt: new Date().toISOString(),
+      ...normalizedUser,
+      createdAt: normalizedUser.createdAt || user.created_at || new Date().toISOString(),
     })
   );
 }
@@ -84,6 +120,13 @@ function getMaintenanceImageRefs() {
 
 function saveMaintenanceImageRefs() {
   localStorage.setItem(MAINTENANCE_IMAGES_KEY, JSON.stringify(maintenanceImageRefs));
+}
+
+function syncSession(user) {
+  if (!user) return null;
+  saveSession(user);
+  updateSessionUI();
+  return getSession();
 }
 
 function setButtonLoading(button, isLoading, loadingText = "Guardando...") {
@@ -110,7 +153,7 @@ function updateTopbarContext() {
 }
 
 function updateSessionUI() {
-  const session = getSession();
+  const session = normalizeSessionUser(getSession() || {});
   const isLoggedIn = Boolean(session?.email);
 
   // 👇 estado base
@@ -127,11 +170,10 @@ function updateSessionUI() {
       vehiclesScreen.classList.remove("hidden");
     }
 
-    sessionEmail.textContent = session.fullName
-      ? `${session.fullName} - ${session.email}`
-      : session.email;
+    const fullName = buildFullName(session);
+    sessionEmail.textContent = fullName ? `${fullName} - ${session.email}` : session.email;
     if (topbarUserName) {
-      topbarUserName.textContent = session.fullName || session.email;
+      topbarUserName.textContent = fullName || session.email;
     }
 
     sessionCopy.textContent = "";
@@ -174,6 +216,48 @@ function closeMenu() {
   if (!menuPanel) return;
   menuPanel.classList.add("hidden");
   if (menuButton) menuButton.setAttribute("aria-expanded", "false");
+}
+
+async function fetchCurrentProfile() {
+  const session = getSession();
+
+  if (!session?.id) {
+    throw new Error("No hay una sesion activa.");
+  }
+
+  const profile = await fetchJson(`/users/profile?user_id=${session.id}`);
+  syncSession(profile);
+  return normalizeSessionUser(profile);
+}
+
+async function openProfileModal() {
+  closeMenu();
+  openModal("profile-modal");
+  if (profileMessage) profileMessage.textContent = "Cargando perfil...";
+
+  try {
+    const profile = await fetchCurrentProfile();
+    fillProfileForm(profile);
+    if (profileMessage) profileMessage.textContent = "";
+  } catch (error) {
+    if (profileMessage) profileMessage.textContent = error.message;
+  }
+}
+
+async function openSettingsModal() {
+  closeMenu();
+  openModal("settings-modal");
+  if (preferencesMessage) preferencesMessage.textContent = "Cargando preferencias...";
+  if (passwordMessage) passwordMessage.textContent = "";
+  passwordForm?.reset();
+
+  try {
+    const profile = await fetchCurrentProfile();
+    fillPreferencesForm(profile);
+    if (preferencesMessage) preferencesMessage.textContent = "";
+  } catch (error) {
+    if (preferencesMessage) preferencesMessage.textContent = error.message;
+  }
 }
 
 function showNotAvailable() {
@@ -237,16 +321,124 @@ function setStatus(text) {
   statusPill.textContent = text;
 }
 
+function getMileageUnit() {
+  return getSession()?.mileageUnit === "millas" ? "millas" : "km";
+}
+
+function getDistanceUnitLabel() {
+  return getMileageUnit() === "millas" ? "mi" : "km";
+}
+
+function convertDistanceValue(value) {
+  const numericValue = Number(value);
+
+  if (!Number.isFinite(numericValue)) {
+    return null;
+  }
+
+  return getMileageUnit() === "millas" ? numericValue / 1.60934 : numericValue;
+}
+
+function formatDistance(value) {
+  if (value === null || value === undefined || value === "") {
+    return "Sin dato";
+  }
+
+  const convertedValue = convertDistanceValue(value);
+
+  if (convertedValue === null) {
+    return "Sin dato";
+  }
+
+  const decimals = getMileageUnit() === "millas" ? 1 : 0;
+
+  return `${convertedValue.toLocaleString("es-AR", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: decimals,
+  })} ${getDistanceUnitLabel()}`;
+}
+
+function formatCurrency(value) {
+  return Number(value || 0).toLocaleString("es-AR", {
+    style: "currency",
+    currency: "ARS",
+    maximumFractionDigits: 0,
+  });
+}
+
+function formatRegisteredDate(value) {
+  if (!value) {
+    return "Alta sin datos";
+  }
+
+  return `Alta: ${new Date(value).toLocaleDateString("es-AR", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  })}`;
+}
+
+function setProfileAvatar(photoUrl, userName = "") {
+  const initials = userName
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() || "")
+    .join("") || "RC";
+
+  if (profileAvatarFallback) {
+    profileAvatarFallback.textContent = initials;
+  }
+
+  if (photoUrl) {
+    profileAvatarImage.src = photoUrl;
+    profileAvatarPreview?.classList.remove("hidden");
+    profileAvatarFallback?.classList.add("hidden");
+    return;
+  }
+
+  if (profileAvatarImage) {
+    profileAvatarImage.removeAttribute("src");
+  }
+  profileAvatarPreview?.classList.add("hidden");
+  profileAvatarFallback?.classList.remove("hidden");
+}
+
+function fillProfileForm(user) {
+  if (!profileForm || !user) return;
+
+  profileForm.elements.nombre.value = user.nombre || "";
+  profileForm.elements.apellido.value = user.apellido || "";
+  profileForm.elements.email.value = user.email || "";
+  profileForm.elements.telefono.value = user.telefono || "";
+  profileForm.elements.profile_photo_url.value = user.profilePhotoUrl || "";
+  if (profileCreatedAt) {
+    profileCreatedAt.textContent = formatRegisteredDate(user.createdAt);
+  }
+  setProfileAvatar(user.profilePhotoUrl, buildFullName(user));
+}
+
+function fillPreferencesForm(user) {
+  if (!preferencesForm || !user) return;
+  preferencesForm.elements.mileage_unit.value = user.mileageUnit || "km";
+  preferencesForm.elements.reminders_enabled.checked = user.remindersEnabled !== false;
+}
+
+function isValidEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
+}
+
+function isValidPhone(value) {
+  const normalized = String(value || "").trim();
+  return normalized === "" || /^[0-9+\s()\-]{6,20}$/.test(normalized);
+}
+
 function getSelectedVehicle() {
   return currentVehicles.find((item) => item.id === selectedVehicleId) || null;
 }
 
 function formatKmValue(value) {
-  if (value === null || value === undefined || value === "") {
-    return "Sin dato";
-  }
-
-  return `${Number(value).toLocaleString("es-AR")} km`;
+  return formatDistance(value);
 }
 
 function renderCurrentVehicleKm() {
@@ -388,6 +580,25 @@ function optionMarkup(items, labelKey) {
     .join("");
 }
 
+function persistMaintenanceImages(items) {
+  let hasChanges = false;
+
+  items.forEach((item) => {
+    if (item?.id && item.image_source && maintenanceImageRefs[item.id] !== item.image_source) {
+      maintenanceImageRefs[item.id] = item.image_source;
+      hasChanges = true;
+    }
+  });
+
+  if (hasChanges) {
+    saveMaintenanceImageRefs();
+  }
+}
+
+function getMaintenanceImageSource(item) {
+  return item?.image_source || maintenanceImageRefs[item?.id] || "";
+}
+
 function renderMaintenance(items) {
   if (items.length === 0) {
     setHistoryState("empty");
@@ -403,16 +614,16 @@ function renderMaintenance(items) {
               <h3>${item.accion}</h3>
               <p>${item.vehiculo} ${item.modelo ? `- ${item.modelo}` : ""}</p>
             </div>
-            <strong>$${Number(item.cost).toLocaleString("es-AR")}</strong>
+            <strong>${formatCurrency(item.cost)}</strong>
           </div>
           ${
-            maintenanceImageRefs[item.id]
-              ? `<img class="maintenance-thumb" src="${maintenanceImageRefs[item.id]}" alt="Imagen de mantenimiento" />`
+            getMaintenanceImageSource(item)
+              ? `<img class="maintenance-thumb" src="${getMaintenanceImageSource(item)}" alt="Imagen de mantenimiento" />`
               : ""
           }
           <div class="card-meta">
             <span>Fecha: ${item.fecha.slice(0, 10)}</span>
-            <span>KM: ${item.km}</span>
+            <span>Unidad: ${formatDistance(item.km)}</span>
             <span>Taller: ${item.lugar}</span>
             <span>Patente: ${item.patente}</span>
           </div>
@@ -635,6 +846,7 @@ async function loadMaintenance(options = {}) {
   const query = params.toString();
   const url = query ? `/maintenance?${query}` : "/maintenance";
   const items = await fetchJson(url);
+  persistMaintenanceImages(items);
 
   if (items.length === 0) {
     setHistoryState("empty");
@@ -691,9 +903,8 @@ loginForm?.addEventListener("submit", async (event) => {
       body: JSON.stringify({ email, password }),
     });
 
-    saveSession(response.user);
-updateSessionUI();
-loginMessage.textContent = "";
+    syncSession(response.user);
+    loginMessage.textContent = "";
 
 // 👇 NUEVO FLUJO
 await loadVehiclesList();
@@ -716,10 +927,16 @@ function logout() {
   selectedVehicleId = null;
   updateSessionUI();
   loginForm.reset();
+  profileForm?.reset();
+  preferencesForm?.reset();
+  passwordForm?.reset();
   passwordInput.type = "password";
   togglePasswordButton.setAttribute("aria-pressed", "false");
   togglePasswordButton.setAttribute("aria-label", "Mostrar contrasena");
   loginMessage.textContent = "Sesion cerrada.";
+  if (profileMessage) profileMessage.textContent = "";
+  if (preferencesMessage) preferencesMessage.textContent = "";
+  if (passwordMessage) passwordMessage.textContent = "";
   setStatus("Bloqueado");
   maintenanceList.innerHTML = '<div class="empty">Selecciona un vehiculo para comenzar.</div>';
   historyTitle.textContent = "Historial del vehiculo";
@@ -727,14 +944,17 @@ function logout() {
   if (currentVehicleName) currentVehicleName.textContent = "Sin seleccion";
   if (currentVehicleKm) currentVehicleKm.textContent = "Sin dato";
   if (updateKmButton) updateKmButton.disabled = true;
+  closeModal("profile-modal");
+  closeModal("settings-modal");
   closeMenu();
 }
 
 
 logoutButton?.addEventListener("click", logout);
 menuLogoutButton?.addEventListener("click", logout);
-menuProfileButton?.addEventListener("click", showNotAvailable);
-menuSettingsButton?.addEventListener("click", showNotAvailable);
+settingsLogoutButton?.addEventListener("click", logout);
+menuProfileButton?.addEventListener("click", openProfileModal);
+menuSettingsButton?.addEventListener("click", openSettingsModal);
 
 vehicleForm?.addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -842,6 +1062,7 @@ maintenanceForm?.addEventListener("submit", async (event) => {
   payload.km = Number(payload.km);
   payload.cost = Number(payload.cost);
   const imageRef = await fileToDataUrl(maintenanceImageInput?.files?.[0]);
+  let maintenanceFeedback = "";
 
   try {
     const session = getSession();
@@ -858,14 +1079,30 @@ maintenanceForm?.addEventListener("submit", async (event) => {
     });
 
     if (created?.id && imageRef) {
-      maintenanceImageRefs[created.id] = imageRef;
-      saveMaintenanceImageRefs();
-    }
+      try {
+        const imageResponse = await fetchJson(`/maintenance/${created.id}/images`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            user_id: session.id,
+            image_base64: imageRef,
+          }),
+        });
 
+        maintenanceImageRefs[created.id] = imageResponse.image.imageSource || imageRef;
+        saveMaintenanceImageRefs();
+      } catch (imageError) {
+        maintenanceImageRefs[created.id] = imageRef;
+        saveMaintenanceImageRefs();
+        maintenanceFeedback = `Mantenimiento guardado. La imagen quedo en respaldo local: ${imageError.message}`;
+      }
+    }
 
     maintenanceForm.reset();
     clearMaintenanceImagePreview();
-    formMessage.textContent = "Mantenimiento guardado correctamente.";
+    formMessage.textContent = maintenanceFeedback || "Mantenimiento guardado correctamente.";
     setStatus("Mantenimiento guardado");
   } catch (error) {
     formMessage.textContent = error.message;
@@ -938,13 +1175,17 @@ async function deleteVehicle(id) {
 }
 
 function openModal(id) {
-  document.getElementById(id).classList.remove("hidden");
+  const modal = document.getElementById(id);
+  if (!modal) return;
+  modal.classList.remove("hidden");
   // Prevent body scroll when modal is open
   document.body.classList.add("modal-open");
 }
 
 function closeModal(id) {
-  document.getElementById(id).classList.add("hidden");
+  const modal = document.getElementById(id);
+  if (!modal) return;
+  modal.classList.add("hidden");
   // Restore body scroll when modal is closed
   document.body.classList.remove("modal-open");
 }
@@ -1043,7 +1284,7 @@ document.addEventListener("click", (e) => {
 
   modals.forEach((modal) => {
     if (!modal.classList.contains("hidden") && e.target === modal) {
-      modal.classList.add("hidden");
+      closeModal(modal.id);
     }
   });
 });
@@ -1097,9 +1338,278 @@ maintenanceImageInput?.addEventListener("change", async () => {
   }
 });
 
+profileForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const session = getSession();
+
+  if (!session?.id) {
+    profileMessage.textContent = "No hay una sesion activa.";
+    return;
+  }
+
+  const payload = Object.fromEntries(new FormData(profileForm).entries());
+
+  if (!isValidEmail(payload.email)) {
+    profileMessage.textContent = "Ingresa un email valido.";
+    return;
+  }
+
+  if (!isValidPhone(payload.telefono)) {
+    profileMessage.textContent = "Ingresa un telefono valido o deja el campo vacio.";
+    return;
+  }
+
+  profileMessage.textContent = "Guardando perfil...";
+  setButtonLoading(profileSaveButton, true, "Guardando...");
+
+  try {
+    const response = await fetchJson("/users/profile", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        ...payload,
+        user_id: session.id,
+      }),
+    });
+
+    const nextSession = syncSession(response.user);
+    fillProfileForm(nextSession);
+    profileMessage.textContent = "Perfil actualizado correctamente.";
+    setStatus("Perfil actualizado");
+  } catch (error) {
+    profileMessage.textContent = error.message;
+  } finally {
+    setButtonLoading(profileSaveButton, false, "Guardando...");
+  }
+});
+
+profileForm?.elements.profile_photo_url?.addEventListener("input", (event) => {
+  const session = getSession() || {};
+  const nextName = `${profileForm.elements.nombre.value || session.nombre || ""} ${profileForm.elements.apellido.value || session.apellido || ""}`.trim();
+  setProfileAvatar(String(event.target.value || "").trim(), nextName);
+});
+
+profileForm?.elements.nombre?.addEventListener("input", () => {
+  const nextName = `${profileForm.elements.nombre.value || ""} ${profileForm.elements.apellido.value || ""}`.trim();
+  setProfileAvatar(String(profileForm.elements.profile_photo_url.value || "").trim(), nextName);
+});
+
+profileForm?.elements.apellido?.addEventListener("input", () => {
+  const nextName = `${profileForm.elements.nombre.value || ""} ${profileForm.elements.apellido.value || ""}`.trim();
+  setProfileAvatar(String(profileForm.elements.profile_photo_url.value || "").trim(), nextName);
+});
+
+preferencesForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const session = getSession();
+
+  if (!session?.id) {
+    preferencesMessage.textContent = "No hay una sesion activa.";
+    return;
+  }
+
+  preferencesMessage.textContent = "Guardando preferencias...";
+  setButtonLoading(preferencesSaveButton, true, "Guardando...");
+
+  try {
+    const response = await fetchJson("/users/preferences", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        user_id: session.id,
+        mileage_unit: preferencesForm.elements.mileage_unit.value,
+        reminders_enabled: preferencesForm.elements.reminders_enabled.checked,
+      }),
+    });
+
+    syncSession(response.user);
+    fillPreferencesForm(response.user);
+    renderCurrentVehicleKm();
+    preferencesMessage.textContent = "Preferencias actualizadas.";
+    setStatus("Preferencias guardadas");
+  } catch (error) {
+    preferencesMessage.textContent = error.message;
+  } finally {
+    setButtonLoading(preferencesSaveButton, false, "Guardando...");
+  }
+});
+
+passwordForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const session = getSession();
+
+  if (!session?.id) {
+    passwordMessage.textContent = "No hay una sesion activa.";
+    return;
+  }
+
+  const payload = Object.fromEntries(new FormData(passwordForm).entries());
+
+  if (String(payload.new_password || "").trim() !== String(payload.confirm_password || "").trim()) {
+    passwordMessage.textContent = "La confirmacion no coincide con la nueva contrasena.";
+    return;
+  }
+
+  passwordMessage.textContent = "Actualizando contrasena...";
+  setButtonLoading(passwordSaveButton, true, "Guardando...");
+
+  try {
+    await fetchJson("/users/password", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        ...payload,
+        user_id: session.id,
+      }),
+    });
+
+    passwordForm.reset();
+    passwordMessage.textContent = "Contrasena actualizada correctamente.";
+    setStatus("Contrasena actualizada");
+  } catch (error) {
+    passwordMessage.textContent = error.message;
+  } finally {
+    setButtonLoading(passwordSaveButton, false, "Guardando...");
+  }
+});
+
+function sanitizeFileName(value) {
+  return String(value || "historial-mantenimiento")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "historial-mantenimiento";
+}
+
+async function exportMaintenanceToPdf() {
+  const session = getSession();
+  const vehicle = getSelectedVehicle();
+
+  if (!session?.id || !vehicle || !selectedVehicleId) {
+    setStatus("Selecciona un vehiculo");
+    return;
+  }
+
+  if (!window.jspdf?.jsPDF) {
+    await openUiModal({
+      title: "PDF no disponible",
+      bodyHtml: "<p>No se pudo cargar la libreria de exportacion.</p>",
+    });
+    return;
+  }
+
+  setButtonLoading(exportPdfButton, true, "Exportando...");
+
+  try {
+    const items = await fetchJson(`/maintenance?user_id=${session.id}&vehiculo_id=${selectedVehicleId}`);
+    const sortedItems = [...items].sort((a, b) => {
+      const dateDiff = new Date(a.fecha).getTime() - new Date(b.fecha).getTime();
+      if (dateDiff !== 0) return dateDiff;
+      return Number(a.id) - Number(b.id);
+    });
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: "pt", format: "a4" });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    let y = 56;
+
+    const ensureSpace = (requiredHeight = 36) => {
+      if (y + requiredHeight <= pageHeight - 54) {
+        return;
+      }
+      doc.addPage();
+      y = 56;
+    };
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(18);
+    doc.text("Historial de mantenimiento", 48, y);
+    y += 26;
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(11);
+    doc.text(`Vehiculo: ${vehicle.nombre} ${vehicle.modelo ? `- ${vehicle.modelo}` : ""}`, 48, y);
+    y += 16;
+    doc.text(`Patente: ${vehicle.patente || "Sin dato"}`, 48, y);
+    y += 16;
+    doc.text(`Kilometraje actual: ${formatDistance(vehicle.km_actual)}`, 48, y);
+    y += 16;
+    doc.text(`Total de registros: ${sortedItems.length}`, 48, y);
+    y += 24;
+
+    doc.setDrawColor(206, 214, 224);
+    doc.line(48, y, pageWidth - 48, y);
+    y += 20;
+
+    if (sortedItems.length === 0) {
+      doc.text("No hay mantenimientos cargados para este vehiculo.", 48, y);
+    }
+
+    sortedItems.forEach((item, index) => {
+      ensureSpace(96);
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.text(`${index + 1}. ${item.accion}`, 48, y);
+      y += 16;
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10.5);
+      doc.text(`Fecha: ${item.fecha.slice(0, 10)}`, 48, y);
+      y += 14;
+      doc.text(`Costo: ${formatCurrency(item.cost)}`, 48, y);
+      y += 14;
+      doc.text(`Kilometraje: ${formatDistance(item.km)}`, 48, y);
+      y += 14;
+
+      const details = doc.splitTextToSize(
+        `Taller: ${item.lugar || "Sin dato"} | Descripcion: ${item.accion}`,
+        pageWidth - 96
+      );
+      doc.text(details, 48, y);
+      y += details.length * 14 + 10;
+      doc.setDrawColor(230, 233, 239);
+      doc.line(48, y, pageWidth - 48, y);
+      y += 18;
+    });
+
+    doc.save(`${sanitizeFileName(vehicle.nombre)}-historial.pdf`);
+    setStatus("PDF exportado");
+  } catch (error) {
+    await openUiModal({
+      title: "No se pudo exportar",
+      bodyHtml: `<p>${error.message}</p>`,
+    });
+  } finally {
+    setButtonLoading(exportPdfButton, false, "Exportando...");
+  }
+}
+
+exportPdfButton?.addEventListener("click", exportMaintenanceToPdf);
+
+function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) {
+    return;
+  }
+
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/service-worker.js").catch((error) => {
+      console.error("No se pudo registrar el service worker", error);
+    });
+  });
+}
+
 
 
 (async function init() {
+  registerServiceWorker();
   await playSplashScreen();
 
   const isLoggedIn = updateSessionUI();

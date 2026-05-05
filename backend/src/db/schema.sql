@@ -1,7 +1,13 @@
 CREATE TABLE IF NOT EXISTS users (
   id SERIAL PRIMARY KEY,
   full_name TEXT NOT NULL,
+  nombre TEXT,
+  apellido TEXT,
   email TEXT UNIQUE NOT NULL,
+  telefono TEXT,
+  profile_photo_url TEXT,
+  mileage_unit TEXT NOT NULL DEFAULT 'km',
+  reminders_enabled BOOLEAN NOT NULL DEFAULT TRUE,
   password_hash TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -37,4 +43,14 @@ CREATE TABLE IF NOT EXISTS mantenimiento (
   accion TEXT NOT NULL,
   km INTEGER NOT NULL,
   cost INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS maintenance_images (
+  id SERIAL PRIMARY KEY,
+  maintenance_id INTEGER NOT NULL REFERENCES mantenimiento(id) ON DELETE CASCADE,
+  image_url TEXT,
+  image_base64 TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT maintenance_images_source_check
+    CHECK (image_url IS NOT NULL OR image_base64 IS NOT NULL)
 );

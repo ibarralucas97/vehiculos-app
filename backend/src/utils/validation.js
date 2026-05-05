@@ -10,6 +10,29 @@ function normalizeText(value) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function normalizeBoolean(value, defaultValue = true) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true") return true;
+    if (normalized === "false") return false;
+  }
+
+  return defaultValue;
+}
+
+function isValidEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
+}
+
+function isValidPhone(value) {
+  const normalized = normalizeText(value);
+  return normalized === "" || /^[0-9+\s()\-]{6,20}$/.test(normalized);
+}
+
 function parseOptionalInteger(value, fieldName, { min = 0, positiveOnly = false } = {}) {
   const normalized = String(value ?? "").trim();
 
@@ -161,8 +184,83 @@ function validatePlacePayload(payload) {
   };
 }
 
+function validateUserProfilePayload(payload) {
+  const nombre = normalizeText(payload.nombre);
+  const apellido = normalizeText(payload.apellido);
+  const email = normalizeText(payload.email).toLowerCase();
+  const telefono = normalizeText(payload.telefono);
+  const profilePhotoUrl = normalizeText(payload.profile_photo_url);
+  const errors = [];
+
+  if (!nombre) errors.push("nombre es obligatorio");
+  if (!apellido) errors.push("apellido es obligatorio");
+  if (!email || !isValidEmail(email)) errors.push("email debe ser valido");
+  if (!isValidPhone(telefono)) errors.push("telefono debe tener un formato valido");
+
+  return {
+    errors,
+    data: {
+      nombre,
+      apellido,
+      email,
+      telefono,
+      profile_photo_url: profilePhotoUrl,
+    },
+  };
+}
+
+function validateUserPreferencesPayload(payload) {
+  const mileageUnit = normalizeText(payload.mileage_unit || "km").toLowerCase();
+  const remindersEnabled = normalizeBoolean(payload.reminders_enabled, true);
+  const errors = [];
+
+  if (!["km", "millas"].includes(mileageUnit)) {
+    errors.push("mileage_unit debe ser 'km' o 'millas'");
+  }
+
+  return {
+    errors,
+    data: {
+      mileage_unit: mileageUnit,
+      reminders_enabled: remindersEnabled,
+    },
+  };
+}
+
+function validatePasswordChangePayload(payload) {
+  const currentPassword = String(payload.current_password || "").trim();
+  const newPassword = String(payload.new_password || "").trim();
+  const confirmPassword = String(payload.confirm_password || "").trim();
+  const errors = [];
+
+  if (!currentPassword) errors.push("current_password es obligatoria");
+  if (!newPassword || newPassword.length < 6) {
+    errors.push("new_password debe tener al menos 6 caracteres");
+  }
+  if (confirmPassword !== newPassword) {
+    errors.push("confirm_password debe coincidir con new_password");
+  }
+  if (currentPassword && newPassword && currentPassword === newPassword) {
+    errors.push("La nueva contrasena debe ser distinta a la actual");
+  }
+
+  return {
+    errors,
+    data: {
+      current_password: currentPassword,
+      new_password: newPassword,
+      confirm_password: confirmPassword,
+    },
+  };
+}
+
 module.exports = {
+  isValidEmail,
+  isValidPhone,
   validateMaintenancePayload,
+  validatePasswordChangePayload,
   validatePlacePayload,
+  validateUserPreferencesPayload,
+  validateUserProfilePayload,
   validateVehiclePayload,
 };

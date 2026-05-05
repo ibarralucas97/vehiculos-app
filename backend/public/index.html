@@ -3,7 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0f6c8d" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Rodado Control" />
     <title>Rodado Control</title>
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" type="image/png" href="/logo.png" />
+    <link rel="apple-touch-icon" href="/logo.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -25,31 +32,37 @@
           <img id="splash-logo-img" src="/logo.png" alt="Rodado Control" />
           <div id="splash-logo-fallback" class="splash-logo-fallback hidden" aria-hidden="true">RC</div>
         </div>
-        <h1 class="splash-title">Rodado Control</h1>
-        <p class="splash-copy">Mantené tu vehículo siempre en control</p>
-        <div class="spinner-border text-info" role="status" aria-label="Cargando"></div>
       </div>
     </div>
+
     <main class="app-shell">
       <header id="app-topbar" class="app-topbar hidden">
         <div class="topbar-left">
-          <button id="topbar-back-button" class="topbar-back-button" type="button" aria-label="Volver a mis vehículos">←</button>
+          <button
+            id="topbar-back-button"
+            class="topbar-back-button"
+            type="button"
+            aria-label="Volver a mis vehiculos"
+          >
+            ←
+          </button>
           <h1 class="app-title">Rodado Control</h1>
         </div>
         <span id="topbar-user-name" class="topbar-user-name"></span>
         <div class="topbar-menu">
           <button id="menu-toggle" class="menu-btn" type="button" aria-expanded="false">☰</button>
           <div id="menu-panel" class="menu-panel hidden">
-            <button onclick="goBackToVehicles()" type="button">🚗 Mis vehículos</button>
-            <button onclick="openPlacesModal()" type="button">📍 Lugares</button>
+            <button onclick="goBackToVehicles()" type="button">Mis vehiculos</button>
+            <button onclick="openPlacesModal()" type="button">Lugares</button>
             <hr />
-            <button id="menu-profile" type="button">👤 Mi perfil</button>
-            <button id="menu-settings" type="button">⚙️ Configuración</button>
+            <button id="menu-profile" type="button">Mi perfil</button>
+            <button id="menu-settings" type="button">Configuracion</button>
             <hr />
-            <button id="menu-logout" type="button">🚪 Cerrar sesión</button>
+            <button id="menu-logout" type="button">Cerrar sesion</button>
           </div>
         </div>
       </header>
+
       <section class="hero-card" id="welcome-screen">
         <div class="hero-copy">
           <h1 class="app-title">Rodado Control</h1>
@@ -109,145 +122,313 @@
         </aside>
       </section>
 
-<section id="vehicles-screen" class="panel hidden">
+      <section id="vehicles-screen" class="panel hidden">
+        <div class="section-head">
+          <h2>Mis vehiculos</h2>
+        </div>
 
-  <div class="section-head">
-    <h2>Mis vehículos</h2>
-  </div>
+        <div id="vehicles-grid" class="vehicles-grid"></div>
 
-  <div id="vehicles-grid" class="vehicles-grid"></div>
-
-  <button onclick="openVehiclesModal()" class="primary">
-    + Crear vehículo
-  </button>
-
-</section>
-
-      <section id="dashboard" class="hidden">
-
-<section class="panel vehicle-context-panel">
-  <div class="section-head mb-0 vehicle-context-head">
-    <div>
-      <p class="vehicle-context-label">Vehiculo actual</p>
-      <h2 id="current-vehicle-name">Sin seleccion</h2>
-    </div>
-    <div class="km-panel">
-      <p class="km-panel-label">KM actuales</p>
-      <div class="km-panel-row">
-        <strong id="current-vehicle-km">Sin dato</strong>
-        <button id="update-km-button" class="ghost" type="button">Actualizar</button>
-      </div>
-    </div>
-  </div>
-</section>
-
-        <section class="dashboard-grid">
-
-  <!-- MANTENIMIENTO -->
-<section class="panel form-panel collapsible">
-
-  <div class="section-head section-head-stack collapsible-header" onclick="toggleSection(this)">
-    <div>
-      <h2>Cargar mantenimiento</h2>
-      <p class="section-copy">Registra un servicio nuevo en pocos campos.</p>
-    </div>
-    <span class="arrow">▼</span>
-  </div>
-
-  <div class="collapsible-content">
-    <form id="maintenance-form" class="form-stack">
-      <label>
-        Fecha
-        <input type="date" name="fecha" required />
-      </label>
-      <label>
-        Lugar
-        <select name="lugar_id" id="lugar_id" required></select>
-      </label>
-      <label>
-        Accion
-        <input type="text" name="accion" required />
-      </label>
-      <div class="split-fields">
-        <label>
-          Kilometros
-          <input type="number" name="km" inputmode="numeric" pattern="[0-9]*" />
-        </label>
-        <label>
-          Costo
-          <input type="number" name="cost" inputmode="numeric" pattern="[0-9]*" />
-        </label>
-      </div>
-      <label>
-        Imagen del mantenimiento
-        <input type="file" id="maintenance-image" accept="image/*" />
-      </label>
-      <div id="maintenance-image-preview" class="image-preview hidden">
-        <img id="maintenance-image-preview-img" alt="Vista previa" />
-      </div>
-      <button id="maintenance-submit" type="submit">Guardar mantenimiento</button>
-      <p id="form-message" class="message"></p>
-    </form>
-</div>
-</section>
-
-<section class="panel history-panel collapsible">
-
-  <div class="section-head collapsible-header" onclick="toggleSection(this)">
-    <div>
-      <h2 id="history-title">Historial del vehiculo</h2>
-      <p id="history-copy" class="section-copy">
-        Aplica filtros o presiona "Ultimos registros".
-      </p>
-    </div>
-
-    <div style="display:flex; align-items:center; gap:10px;">
-      <span id="status-pill" class="pill">Sin consulta</span>
-      <span class="arrow"></span>
-    </div>
-
-  </div>
-
-  <div class="collapsible-content">
-    <form id="filters-form" class="form-stack compact history-filters">
-      <label>
-        Buscar
-        <input type="text" name="search" placeholder="vehiculo, patente, taller, accion" />
-      </label>
-      <div class="split-fields">
-        <label>
-          Desde
-          <input type="date" name="from" />
-        </label>
-        <label>
-          Hasta
-          <input type="date" name="to" />
-        </label>
-      </div>
-      <div class="split-fields">
-        <button id="filters-submit" type="submit" class="secondary">Aplicar filtros</button>
-        <button id="latest-button" class="ghost" type="button">Ultimos registros</button>
-      </div>
-    </form>
-
-    <div id="maintenance-list" class="cards">
-      <div class="empty">Aplica filtros o presiona "Ultimos registros".</div>
-    </div>
-  </div>
-
-</section>
-        </section>
+        <button onclick="openVehiclesModal()" class="primary" type="button">+ Crear vehiculo</button>
       </section>
 
-        
+      <section id="dashboard" class="hidden">
+        <section class="panel vehicle-context-panel">
+          <div class="section-head mb-0 vehicle-context-head">
+            <div>
+              <p class="vehicle-context-label">Vehiculo actual</p>
+              <h2 id="current-vehicle-name">Sin seleccion</h2>
+            </div>
+            <div class="km-panel">
+              <p class="km-panel-label">Unidad actual</p>
+              <div class="km-panel-row">
+                <strong id="current-vehicle-km">Sin dato</strong>
+                <button id="update-km-button" class="ghost" type="button">Actualizar</button>
+              </div>
+            </div>
+          </div>
+        </section>
 
+        <section class="dashboard-grid">
+          <section class="panel form-panel collapsible">
+            <div class="section-head section-head-stack collapsible-header" onclick="toggleSection(this)">
+              <div>
+                <h2>Cargar mantenimiento</h2>
+                <p class="section-copy">Registra un servicio nuevo en pocos campos.</p>
+              </div>
+              <span class="arrow">▼</span>
+            </div>
 
+            <div class="collapsible-content">
+              <form id="maintenance-form" class="form-stack">
+                <label>
+                  Fecha
+                  <input type="date" name="fecha" required />
+                </label>
+                <label>
+                  Lugar
+                  <select name="lugar_id" id="lugar_id" required></select>
+                </label>
+                <label>
+                  Accion
+                  <input type="text" name="accion" required />
+                </label>
+                <div class="split-fields">
+                  <label>
+                    Kilometros
+                    <input type="number" name="km" inputmode="numeric" pattern="[0-9]*" />
+                  </label>
+                  <label>
+                    Costo
+                    <input type="number" name="cost" inputmode="numeric" pattern="[0-9]*" />
+                  </label>
+                </div>
+                <label>
+                  Imagen del mantenimiento
+                  <input type="file" id="maintenance-image" accept="image/*" />
+                </label>
+                <div id="maintenance-image-preview" class="image-preview hidden">
+                  <img id="maintenance-image-preview-img" alt="Vista previa" />
+                </div>
+                <button id="maintenance-submit" type="submit">Guardar mantenimiento</button>
+                <p id="form-message" class="message"></p>
+              </form>
+            </div>
+          </section>
+
+          <section class="panel history-panel collapsible">
+            <div class="section-head collapsible-header" onclick="toggleSection(this)">
+              <div>
+                <h2 id="history-title">Historial del vehiculo</h2>
+                <p id="history-copy" class="section-copy">Aplica filtros o presiona "Ultimos registros".</p>
+              </div>
+
+              <div class="history-header-meta">
+                <span id="status-pill" class="pill">Sin consulta</span>
+                <span class="arrow"></span>
+              </div>
+            </div>
+
+            <div class="collapsible-content">
+              <form id="filters-form" class="form-stack compact history-filters">
+                <label>
+                  Buscar
+                  <input type="text" name="search" placeholder="vehiculo, patente, taller, accion" />
+                </label>
+                <div class="split-fields">
+                  <label>
+                    Desde
+                    <input type="date" name="from" />
+                  </label>
+                  <label>
+                    Hasta
+                    <input type="date" name="to" />
+                  </label>
+                </div>
+                <div class="split-fields">
+                  <button id="filters-submit" type="submit" class="secondary">Aplicar filtros</button>
+                  <button id="latest-button" class="ghost" type="button">Ultimos registros</button>
+                </div>
+                <button id="export-pdf-button" class="ghost" type="button">Exportar PDF</button>
+              </form>
+
+              <div id="maintenance-list" class="cards">
+                <div class="empty">Aplica filtros o presiona "Ultimos registros".</div>
+              </div>
+            </div>
+          </section>
+        </section>
+      </section>
 
       <footer class="app-footer">
         <p>Copyright Rodado Control. Desarrollado por Lucas Ibarra.</p>
       </footer>
     </main>
 
+    <div id="vehicles-modal" class="modal hidden">
+      <div class="modal-content">
+        <button class="modal-close" onclick="closeModal('vehicles-modal')" type="button">✕</button>
+
+        <h2>Vehiculos</h2>
+
+        <form id="vehicle-form" class="vehicle-form-grid">
+          <input name="nombre" placeholder="Nombre" required />
+          <input name="modelo" placeholder="Modelo" required />
+          <input name="patente" placeholder="Patente" required />
+          <input name="km_actual" type="number" inputmode="numeric" pattern="[0-9]*" placeholder="KM actual" />
+          <input
+            name="ultimo_service_km"
+            type="number"
+            inputmode="numeric"
+            pattern="[0-9]*"
+            placeholder="Ultimo service (KM)"
+          />
+          <input name="intervalo_km" type="number" inputmode="numeric" pattern="[0-9]*" placeholder="Intervalo KM" />
+          <input name="fecha_ultimo_service" type="date" placeholder="Fecha ultimo service" />
+          <input
+            name="intervalo_tiempo"
+            type="number"
+            inputmode="numeric"
+            pattern="[0-9]*"
+            placeholder="Intervalo meses"
+          />
+          <p class="helper-copy">Podes definir recordatorios por kilometros, por tiempo o por ambos.</p>
+          <button type="submit">Crear</button>
+        </form>
+
+        <div id="vehicles-list-modal"></div>
+      </div>
+    </div>
+
+    <div id="places-modal" class="modal hidden">
+      <div class="modal-content">
+        <button class="modal-close" onclick="closeModal('places-modal')" type="button">✕</button>
+
+        <h2>Lugares</h2>
+
+        <form id="place-form">
+          <input name="nombre" placeholder="Nombre" required />
+          <input name="ubicacion" placeholder="Ubicacion" />
+          <input name="contacto_nombre" placeholder="Contacto" />
+          <input name="contacto_numero" placeholder="Telefono" />
+          <button type="submit">Crear</button>
+        </form>
+
+        <div id="places-list"></div>
+      </div>
+    </div>
+
+    <div id="profile-modal" class="modal hidden">
+      <div class="modal-content modal-content-wide">
+        <button class="modal-close" onclick="closeModal('profile-modal')" type="button">✕</button>
+        <h2>Mi perfil</h2>
+        <div class="profile-layout">
+          <div class="profile-avatar-card">
+            <div id="profile-avatar-preview" class="profile-avatar-preview hidden">
+              <img id="profile-avatar-image" alt="Foto de perfil" />
+            </div>
+            <div id="profile-avatar-fallback" class="profile-avatar-fallback">RC</div>
+            <p class="section-copy">Puedes usar una URL de foto o dejar un avatar simple.</p>
+            <span id="profile-created-at" class="profile-meta-pill">Alta sin datos</span>
+          </div>
+
+          <form id="profile-form" class="form-stack">
+            <div class="split-fields">
+              <label>
+                Nombre
+                <input name="nombre" type="text" required />
+              </label>
+              <label>
+                Apellido
+                <input name="apellido" type="text" required />
+              </label>
+            </div>
+            <label>
+              Email
+              <input name="email" type="email" autocomplete="email" required />
+            </label>
+            <label>
+              Telefono
+              <input name="telefono" type="tel" placeholder="+54 9 11 5555 5555" />
+            </label>
+            <label>
+              Foto de perfil (URL)
+              <input name="profile_photo_url" type="url" placeholder="https://..." />
+            </label>
+            <div class="form-actions">
+              <button id="profile-save-button" type="submit">Guardar cambios</button>
+            </div>
+            <p id="profile-message" class="message"></p>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div id="settings-modal" class="modal hidden">
+      <div class="modal-content modal-content-wide">
+        <button class="modal-close" onclick="closeModal('settings-modal')" type="button">✕</button>
+        <h2>Configuracion</h2>
+        <div class="settings-grid">
+          <section class="settings-card">
+            <div class="section-head section-head-stack">
+              <div>
+                <h3>Preferencias</h3>
+                <p class="section-copy">Estas opciones afectan como ves la app en tu cuenta.</p>
+              </div>
+            </div>
+            <form id="preferences-form" class="form-stack">
+              <label>
+                Unidad de kilometraje
+                <select name="mileage_unit">
+                  <option value="km">Kilometros (km)</option>
+                  <option value="millas">Millas (mi)</option>
+                </select>
+              </label>
+              <label class="toggle-row">
+                <span>Recordatorios activos</span>
+                <input name="reminders_enabled" type="checkbox" checked />
+              </label>
+              <p class="inline-help">La unidad se usa para mostrar distancias. Los datos actuales se conservan.</p>
+              <button id="preferences-save-button" type="submit">Guardar preferencias</button>
+              <p id="preferences-message" class="message"></p>
+            </form>
+          </section>
+
+          <section class="settings-card">
+            <div class="section-head section-head-stack">
+              <div>
+                <h3>Cambiar contrasena</h3>
+                <p class="section-copy">Validamos tu contrasena actual antes de guardar la nueva.</p>
+              </div>
+            </div>
+            <form id="password-form" class="form-stack">
+              <label>
+                Contrasena actual
+                <input name="current_password" type="password" autocomplete="current-password" required />
+              </label>
+              <label>
+                Nueva contrasena
+                <input name="new_password" type="password" autocomplete="new-password" required />
+              </label>
+              <label>
+                Confirmar nueva contrasena
+                <input name="confirm_password" type="password" autocomplete="new-password" required />
+              </label>
+              <button id="password-save-button" type="submit">Actualizar contrasena</button>
+              <p id="password-message" class="message"></p>
+            </form>
+          </section>
+        </div>
+
+        <div class="stack-actions">
+          <button id="settings-logout-button" class="ghost" type="button">Cerrar sesion</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="ui-modal" class="modal hidden">
+      <div class="modal-content modal-content-wide">
+        <button class="modal-close" id="ui-modal-close" type="button">?</button>
+        <h2 id="ui-modal-title">Informacion</h2>
+        <div id="ui-modal-body" class="modal-body-copy"></div>
+        <div class="modal-actions">
+          <button id="ui-modal-cancel" class="ghost hidden" type="button">Cancelar</button>
+          <button id="ui-modal-confirm" type="button">Aceptar</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="app-loading" class="hidden">
+      <div class="app-loading-box">
+        <span id="app-loading-text">Procesando...</span>
+      </div>
+    </div>
+
+    <script
+      src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"
+      crossorigin="anonymous"
+      defer
+    ></script>
     <script src="/app.js" defer></script>
     <script src="/dashboard-enhancements.js" defer></script>
     <script
@@ -256,70 +437,5 @@
       crossorigin="anonymous"
       defer
     ></script>
-
-
-    <div id="vehicles-modal" class="modal hidden">
-  <div class="modal-content">
-
-    <button class="modal-close" onclick="closeModal('vehicles-modal')">✕</button>
-
-    <h2>Vehículos</h2>
-
-    <form id="vehicle-form" class="vehicle-form-grid">
-      <input name="nombre" placeholder="Nombre" required />
-      <input name="modelo" placeholder="Modelo" required />
-      <input name="patente" placeholder="Patente" required />
-      <input name="km_actual" type="number" inputmode="numeric" pattern="[0-9]*" placeholder="KM actual" />
-      <input name="ultimo_service_km" type="number" inputmode="numeric" pattern="[0-9]*" placeholder="Ultimo service (KM)" />
-      <input name="intervalo_km" type="number" inputmode="numeric" pattern="[0-9]*" placeholder="Intervalo KM" />
-      <input name="fecha_ultimo_service" type="date" placeholder="Fecha ultimo service" />
-      <input name="intervalo_tiempo" type="number" inputmode="numeric" pattern="[0-9]*" placeholder="Intervalo meses" />
-      <p class="helper-copy">Podes definir recordatorios por kilometros, por tiempo o por ambos.</p>
-      <button type="submit">Crear</button>
-    </form>
-
-    <div id="vehicles-list-modal"></div>
-
-  </div>
-</div>
-
-<div id="places-modal" class="modal hidden">
-  <div class="modal-content">
-
-    <button class="modal-close" onclick="closeModal('places-modal')">✕</button>
-
-    <h2>Lugares</h2>
-
-    <form id="place-form">
-      <input name="nombre" placeholder="Nombre" required />
-      <input name="ubicacion" placeholder="Ubicación" />
-      <input name="contacto_nombre" placeholder="Contacto" />
-      <input name="contacto_numero" placeholder="Teléfono" />
-      <button type="submit">Crear</button>
-    </form>
-
-    <div id="places-list"></div>
-
-  </div>
-</div>
-
-<div id="ui-modal" class="modal hidden">
-  <div class="modal-content modal-content-wide">
-    <button class="modal-close" id="ui-modal-close" type="button">?</button>
-    <h2 id="ui-modal-title">Informacion</h2>
-    <div id="ui-modal-body" class="modal-body-copy"></div>
-    <div class="modal-actions">
-      <button id="ui-modal-cancel" class="ghost hidden" type="button">Cancelar</button>
-      <button id="ui-modal-confirm" type="button">Aceptar</button>
-    </div>
-  </div>
-</div>
-
-<div id="app-loading" class="hidden">
-  <div class="app-loading-box">
-    <span id="app-loading-text">Procesando...</span>
-  </div>
-</div>
-
   </body>
 </html>

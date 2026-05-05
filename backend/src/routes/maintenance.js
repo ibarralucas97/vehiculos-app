@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const pool = require("../db/connection");
 const { validateMaintenancePayload } = require("../utils/validation");
+const MAX_IMAGE_BASE64_LENGTH = 2_800_000;
 
 router.post("/", async (req, res) => {
   try {
@@ -112,10 +113,20 @@ router.get("/", async (req, res) => {
         l.ubicacion,
         m.accion,
         m.km,
-        m.cost
+        m.cost,
+        mi.image_url,
+        mi.image_base64,
+        COALESCE(mi.image_url, mi.image_base64) AS image_source
       FROM mantenimiento m
       JOIN vehiculos v ON m.vehiculo_id = v.id
       JOIN lugares l ON m.lugar_id = l.id
+      LEFT JOIN LATERAL (
+        SELECT image_url, image_base64
+        FROM maintenance_images
+        WHERE maintenance_id = m.id
+        ORDER BY created_at DESC, id DESC
+        LIMIT 1
+      ) mi ON TRUE
       ${whereClause}
       ORDER BY m.fecha DESC, m.id DESC
       ${limitClause}`,
@@ -126,6 +137,108 @@ router.get("/", async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Error al obtener mantenimientos" });
+  }
+});
+
+router.post("/:id/images", async (req, res) => {
+  try {
+    const maintenanceId = Number(req.params.id);
+    const userId = Number(req.body.user_id);
+    const imageUrl = String(req.body.image_url || "").trim();
+    const imageBase64 = String(req.body.image_base64 || "").trim();
+
+    if (!maintenanceId) {
+      return res.status(400).json({ error: "maintenance_id invalido" });
+    }
+
+    if (!userId) {
+      return res.status(400).json({ error: "user_id requerido" });
+    }
+
+    if (!imageUrl && !imageBase64) {
+      return res.status(400).json({ error: "Debes enviar image_url o image_base64" });
+    }
+
+    if (imageBase64 && imageBase64.length > MAX_IMAGE_BASE64_LENGTH) {
+      return res.status(400).json({ error: "La imagen es demasiado grande para guardarla en la base de datos" });
+    }
+
+    const maintenanceResult = await pool.query(
+      "SELECT id FROM mantenimiento WHERE id = $1 AND user_id = $2",
+      [maintenanceId, userId]
+    );
+
+    if (maintenanceResult.rowCount === 0) {
+      return res.status(404).json({ error: "Mantenimiento no encontrado" });
+    }
+
+    const insertResult = await pool.query(
+      `INSERT INTO maintenance_images (maintenance_id, image_url, image_base64)
+       VALUES ($1, $2, $3)
+       RETURNING id, maintenance_id, image_url, image_base64, created_at`,
+      [maintenanceId, imageUrl || null, imageBase64 || null]
+    );
+
+    const image = insertResult.rows[0];
+
+    res.status(201).json({
+      ok: true,
+      image: {
+        id: image.id,
+        maintenanceId: image.maintenance_id,
+        imageUrl: image.image_url,
+        imageBase64: image.image_base64,
+        imageSource: image.image_url || image.image_base64,
+        createdAt: image.created_at,
+      },
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error al guardar la imagen del mantenimiento" });
+  }
+});
+
+router.get("/:id/images", async (req, res) => {
+  try {
+    const maintenanceId = Number(req.params.id);
+    const userId = Number(req.query.user_id);
+
+    if (!maintenanceId) {
+      return res.status(400).json({ error: "maintenance_id invalido" });
+    }
+
+    if (!userId) {
+      return res.status(400).json({ error: "user_id requerido" });
+    }
+
+    const result = await pool.query(
+      `SELECT
+        mi.id,
+        mi.maintenance_id,
+        mi.image_url,
+        mi.image_base64,
+        mi.created_at
+       FROM maintenance_images mi
+       JOIN mantenimiento m ON m.id = mi.maintenance_id
+       WHERE mi.maintenance_id = $1
+         AND m.user_id = $2
+       ORDER BY mi.created_at DESC, mi.id DESC`,
+      [maintenanceId, userId]
+    );
+
+    res.json(
+      result.rows.map((row) => ({
+        id: row.id,
+        maintenanceId: row.maintenance_id,
+        imageUrl: row.image_url,
+        imageBase64: row.image_base64,
+        imageSource: row.image_url || row.image_base64,
+        createdAt: row.created_at,
+      }))
+    );
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error al obtener las imagenes del mantenimiento" });
   }
 });
 

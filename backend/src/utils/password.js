@@ -24,6 +24,13 @@ async function verifyPassword(password, storedHash) {
   return crypto.timingSafeEqual(Buffer.from(candidateHash, "hex"), Buffer.from(hash, "hex"));
 }
 
+async function createPasswordHash(password) {
+  const salt = crypto.randomBytes(16).toString("hex");
+  const hash = await hashPassword(password, salt);
+  return `${salt}:${hash}`;
+}
+
 module.exports = {
+  createPasswordHash,
   verifyPassword,
 };
