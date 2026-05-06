@@ -5,6 +5,15 @@ let editingVehicleId = null;
 let editingPlaceId = null;
 const SESSION_KEY = "mygarage_session";
 const MAINTENANCE_IMAGES_KEY = "mygarage_maintenance_images";
+const MAX_NUMERIC_FIELD_VALUE = 999999999;
+const ALLOWED_MAINTENANCE_IMAGE_TYPES = new Set(["image/png", "image/jpeg"]);
+const NUMERIC_FIELD_CONFIG = {
+  km: { allowDecimal: false, label: "Kilometros" },
+  cost: { allowDecimal: false, label: "Costo" },
+  km_actual: { allowDecimal: false, label: "KM actual" },
+  ultimo_service_km: { allowDecimal: false, label: "Ultimo service (KM)" },
+  intervalo_km: { allowDecimal: false, label: "Intervalo KM" },
+};
 
 const dashboard = document.getElementById("dashboard");
 const loginForm = document.getElementById("login-form");
@@ -18,6 +27,8 @@ const passwordInput = document.getElementById("login-password");
 const togglePasswordButton = document.getElementById("toggle-password");
 
 const maintenanceList = document.getElementById("maintenance-list");
+const latestMaintenanceList = document.getElementById("latest-maintenance-list");
+const latestStatusPill = document.getElementById("latest-status-pill");
 const statusPill = document.getElementById("status-pill");
 const historyTitle = document.getElementById("history-title");
 const historyCopy = document.getElementById("history-copy");
@@ -50,6 +61,9 @@ const welcomeScreen = document.getElementById("welcome-screen");
 const topbar = document.getElementById("app-topbar");
 const topbarUserName = document.getElementById("topbar-user-name");
 const topbarBackButton = document.getElementById("topbar-back-button");
+const maintenanceSection = document.getElementById("maintenance-section");
+const latestRecordsSection = document.getElementById("latest-records-section");
+const historySection = document.getElementById("history-section");
 const profileForm = document.getElementById("profile-form");
 const profileMessage = document.getElementById("profile-message");
 const profileSaveButton = document.getElementById("profile-save-button");
@@ -64,11 +78,43 @@ const passwordForm = document.getElementById("password-form");
 const passwordMessage = document.getElementById("password-message");
 const passwordSaveButton = document.getElementById("password-save-button");
 const settingsLogoutButton = document.getElementById("settings-logout-button");
+const pullRefreshIndicator = document.getElementById("pull-refresh-indicator");
+const pullRefreshText = document.getElementById("pull-refresh-text");
+const filtersResetButton = document.getElementById("filters-reset-button");
 
 let maintenanceImageRefs = getMaintenanceImageRefs();
+let isDashboardRefreshing = false;
+let pullRefreshState = {
+  active: false,
+  ready: false,
+  startY: 0,
+};
+let latestRecordsLoaded = false;
 
 function buildFullName(user = {}) {
   return [user.nombre, user.apellido].filter(Boolean).join(" ").trim() || user.fullName || user.email || "";
+}
+
+function getUserDisplayName(user = {}) {
+  const firstName = String(user.nombre || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)[0];
+  const fallbackName = String(user.fullName || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)[0];
+  const displayName = firstName || fallbackName || user.email || "";
+
+  if (!displayName) {
+    return "";
+  }
+
+  if (typeof window !== "undefined" && window.innerWidth <= 420) {
+    return displayName.slice(0, 1).toUpperCase();
+  }
+
+  return displayName;
 }
 
 function normalizeSessionUser(user = {}) {
@@ -173,7 +219,8 @@ function updateSessionUI() {
     const fullName = buildFullName(session);
     sessionEmail.textContent = fullName ? `${fullName} - ${session.email}` : session.email;
     if (topbarUserName) {
-      topbarUserName.textContent = fullName || session.email;
+      topbarUserName.textContent = getUserDisplayName(session);
+      topbarUserName.title = fullName || session.email || "";
     }
 
     sessionCopy.textContent = "";
@@ -194,6 +241,10 @@ function updateSessionUI() {
 
   updateTopbarContext();
   return isLoggedIn;
+}
+
+function isCollapsibleSectionOpen(section) {
+  return Boolean(section && section.classList.contains("open"));
 }
 
 
@@ -466,7 +517,7 @@ async function openKmUpdateModal() {
     bodyHtml: `
       <label class="form-stack">
         <span>Ingresa el kilometraje actual del vehiculo.</span>
-        <input id="km-update-input" type="number" min="0" inputmode="numeric" pattern="[0-9]*" placeholder="KM actual" value="${existingKm}" />
+        <input id="km-update-input" type="text" inputmode="numeric" autocomplete="off" placeholder="KM actual" value="${existingKm}" />
       </label>
       <p class="section-copy">Este valor se usa como base para recordatorios y calculos futuros.</p>
       <p id="km-update-feedback" class="message"></p>
@@ -478,6 +529,7 @@ async function openKmUpdateModal() {
 
   setTimeout(() => {
     const input = document.getElementById("km-update-input");
+    attachNumericSanitizer(input, NUMERIC_FIELD_CONFIG.km_actual);
     input?.focus();
     input?.select();
   }, 0);
@@ -491,9 +543,16 @@ async function openKmUpdateModal() {
   const input = document.getElementById("km-update-input");
   const feedback = document.getElementById("km-update-feedback");
   const rawValue = String(input?.value || "").trim();
+  const errorMessage = getNumericFieldError(rawValue, NUMERIC_FIELD_CONFIG.km_actual);
+
+  if (errorMessage) {
+    if (feedback) feedback.textContent = errorMessage;
+    return;
+  }
+
   const nextKm = Number(rawValue);
 
-  if (!rawValue || !Number.isFinite(nextKm) || nextKm < 0) {
+  if (!rawValue) {
     if (feedback) feedback.textContent = "Ingresa un kilometraje valido mayor o igual a 0.";
     return;
   }
@@ -536,13 +595,13 @@ async function openKmUpdateModal() {
 }
 
 function setHistoryState(state, detail = "") {
-  historyTitle.textContent = "Historial del vehiculo";
+  historyTitle.textContent = "Historial";
 
   const states = {
     initial: {
       pill: "Sin consulta",
-      copy: 'Aplica filtros o presiona "Ultimos registros".',
-      body: '<div class="empty">Aplica filtros o presiona "Ultimos registros".</div>',
+      copy: "Busca mantenimientos por texto o rango de fechas.",
+      body: '<div class="empty">Aplica filtros para ver el historial.</div>',
     },
     loading: {
       pill: "Cargando",
@@ -574,6 +633,41 @@ function setHistoryState(state, detail = "") {
   maintenanceList.innerHTML = config.body;
 }
 
+function setLatestRecordsState(state, detail = "") {
+  if (!latestStatusPill || !latestMaintenanceList) {
+    return;
+  }
+
+  const states = {
+    initial: {
+      pill: "Sin consulta",
+      body: '<div class="empty">Abri este modulo o presiona "Actualizar ultimos registros".</div>',
+    },
+    loading: {
+      pill: "Cargando",
+      body: '<div class="empty">Cargando ultimos registros...</div>',
+    },
+    empty: {
+      pill: "Sin resultados",
+      body: '<div class="empty">No hay mantenimientos cargados para este vehiculo.</div>',
+    },
+    error: {
+      pill: "Error",
+      body: `<div class="empty">${detail || "Ocurrio un error"}</div>`,
+    },
+  };
+
+  const config = states[state];
+
+  if (!config) {
+    latestStatusPill.textContent = detail;
+    return;
+  }
+
+  latestStatusPill.textContent = config.pill;
+  latestMaintenanceList.innerHTML = config.body;
+}
+
 function optionMarkup(items, labelKey) {
   return items
     .map((item) => `<option value="${item.id}">${item[labelKey]}</option>`)
@@ -599,13 +693,14 @@ function getMaintenanceImageSource(item) {
   return item?.image_source || maintenanceImageRefs[item?.id] || "";
 }
 
-function renderMaintenance(items) {
+function renderMaintenanceCards(items, container) {
+  if (!container) return;
+
   if (items.length === 0) {
-    setHistoryState("empty");
     return;
   }
 
-  maintenanceList.innerHTML = items
+  container.innerHTML = items
     .map(
       (item) => `
         <article class="card">
@@ -631,6 +726,27 @@ function renderMaintenance(items) {
       `
     )
     .join("");
+}
+
+function renderMaintenance(items) {
+  if (items.length === 0) {
+    setHistoryState("empty");
+    return;
+  }
+
+  renderMaintenanceCards(items, maintenanceList);
+}
+
+function renderLatestMaintenance(items) {
+  if (items.length === 0) {
+    setLatestRecordsState("empty");
+    return;
+  }
+
+  renderMaintenanceCards(items, latestMaintenanceList);
+  if (latestStatusPill) {
+    latestStatusPill.textContent = `${items.length} registros`;
+  }
 }
 
 async function loadSelects() {
@@ -720,9 +836,9 @@ function selectVehicle(id) {
   updateTopbarContext();
 
   refreshAllData();
-  maintenanceList.innerHTML = '<div class="empty">Usa filtros o presiona "Últimos registros" para cargar el historial.</div>';
-  historyTitle.textContent = "Historial de vehículo";
-  historyCopy.textContent = 'Aún no hay resultados. Usa filtros o presiona "Últimos registros".';
+  latestRecordsLoaded = false;
+  setLatestRecordsState("initial");
+  setHistoryState("initial");
 }
 
 
@@ -801,14 +917,34 @@ function viewVehicle(id) {
 
 
 
-async function loadMaintenance(options = {}) {
+async function loadLatestRecords() {
   if (!selectedVehicleId) {
-    maintenanceList.innerHTML = '<div class="empty">Primero selecciona un vehículo.</div>';
-    setStatus("Selecciona un vehículo");
+    setLatestRecordsState("error", "Primero selecciona un vehiculo.");
     return;
   }
 
-  const { latestOnly = false } = options;
+  setLatestRecordsState("loading");
+
+  const session = getSession();
+  const params = new URLSearchParams({
+    user_id: String(session.id),
+    vehiculo_id: String(selectedVehicleId),
+    limit: "3",
+  });
+  const items = await fetchJson(`/maintenance?${params.toString()}`);
+
+  persistMaintenanceImages(items);
+  latestRecordsLoaded = true;
+  renderLatestMaintenance(items);
+}
+
+async function loadMaintenance() {
+  if (!selectedVehicleId) {
+    maintenanceList.innerHTML = '<div class="empty">Primero selecciona un vehiculo.</div>';
+    setStatus("Selecciona un vehiculo");
+    return;
+  }
+
   const params = new URLSearchParams();
   const formData = new FormData(filtersForm);
 
@@ -828,16 +964,12 @@ async function loadMaintenance(options = {}) {
     params.set("vehiculo_id", String(selectedVehicleId));
   }
 
-  if (latestOnly) {
-    params.set("limit", "3");
-    historyTitle.textContent = "Últimos registros";
-    historyCopy.textContent = "Se muestran los últimos 3 movimientos del vehículo seleccionado.";
-  } else if (usingFilters) {
+  if (usingFilters) {
     historyTitle.textContent = "Historial filtrado";
     historyCopy.textContent = "Resultados según los filtros aplicados al vehículo seleccionado.";
   } else {
-    historyTitle.textContent = "Historial de vehículo";
-    historyCopy.textContent = 'Aún no hay resultados. Usa filtros o presiona "Últimos registros".';
+    historyTitle.textContent = "Historial";
+    historyCopy.textContent = "Busca mantenimientos por texto o rango de fechas.";
     maintenanceList.innerHTML = '<div class="empty">No hay consulta activa.</div>';
     setStatus("Listo");
     return;
@@ -854,10 +986,234 @@ async function loadMaintenance(options = {}) {
   }
 
   renderMaintenance(items);
-  historyCopy.textContent = latestOnly
-    ? "Se muestran los ultimos 3 movimientos del vehiculo seleccionado."
-    : "Resultados segun los filtros aplicados al vehiculo seleccionado.";
+  historyCopy.textContent = "Resultados segun los filtros aplicados al vehiculo seleccionado.";
   setStatus(`${items.length} registros`);
+}
+
+function sanitizeNumericValue(rawValue, { allowDecimal = false } = {}) {
+  const normalized = String(rawValue ?? "").replace(",", ".").replace(/\s+/g, "");
+  let result = "";
+  let hasDecimalSeparator = false;
+
+  for (const character of normalized) {
+    if (/\d/.test(character)) {
+      result += character;
+      continue;
+    }
+
+    if (allowDecimal && !hasDecimalSeparator && character === ".") {
+      result += character;
+      hasDecimalSeparator = true;
+    }
+  }
+
+  if (!allowDecimal) {
+    result = result.replace(/\D/g, "");
+  }
+
+  const numericValue = Number(result);
+
+  if (result && Number.isFinite(numericValue) && numericValue > MAX_NUMERIC_FIELD_VALUE) {
+    return String(MAX_NUMERIC_FIELD_VALUE);
+  }
+
+  return result;
+}
+
+function getNumericFieldError(value, { allowDecimal = false, label = "Campo numerico" } = {}) {
+  const normalized = String(value ?? "").trim();
+
+  if (!normalized) {
+    return "";
+  }
+
+  const numericPattern = allowDecimal ? /^\d+(\.\d+)?$/ : /^\d+$/;
+
+  if (!numericPattern.test(normalized)) {
+    return allowDecimal
+      ? `${label} debe contener solo numeros validos.`
+      : `${label} debe contener solo numeros enteros.`;
+  }
+
+  const numericValue = Number(normalized);
+
+  if (!Number.isFinite(numericValue) || numericValue < 0) {
+    return `${label} debe ser mayor o igual a 0.`;
+  }
+
+  if (numericValue > MAX_NUMERIC_FIELD_VALUE) {
+    return `${label} no puede superar ${MAX_NUMERIC_FIELD_VALUE}.`;
+  }
+
+  return "";
+}
+
+function attachNumericSanitizer(input, config) {
+  if (!input) return;
+
+  const applySanitizedValue = (nextValue) => {
+    const sanitizedValue = sanitizeNumericValue(nextValue, config);
+    if (input.value !== sanitizedValue) {
+      input.value = sanitizedValue;
+    }
+    input.setCustomValidity(getNumericFieldError(input.value, config));
+  };
+
+  input.addEventListener("input", () => applySanitizedValue(input.value));
+  input.addEventListener("paste", () => {
+    window.setTimeout(() => applySanitizedValue(input.value), 0);
+  });
+  input.addEventListener("blur", () => applySanitizedValue(input.value));
+}
+
+function setupNumericFieldValidation() {
+  Object.entries(NUMERIC_FIELD_CONFIG).forEach(([fieldName, config]) => {
+    document
+      .querySelectorAll(`input[name="${fieldName}"]`)
+      .forEach((input) => attachNumericSanitizer(input, config));
+  });
+}
+
+function normalizeNumericPayloadValue(rawValue, config) {
+  const sanitizedValue = sanitizeNumericValue(rawValue, config);
+  const error = getNumericFieldError(sanitizedValue, config);
+
+  if (error) {
+    throw new Error(error);
+  }
+
+  return sanitizedValue === "" ? "" : Number(sanitizedValue);
+}
+
+function validateSelectedMaintenanceImage(file) {
+  if (!file) {
+    return { ok: true, message: "", mimeType: "" };
+  }
+
+  const normalizedMimeType = String(file.type || "").toLowerCase();
+
+  if (!ALLOWED_MAINTENANCE_IMAGE_TYPES.has(normalizedMimeType)) {
+    return {
+      ok: false,
+      message: "Solo se permiten imagenes PNG, JPG o JPEG.",
+      mimeType: "",
+    };
+  }
+
+  return { ok: true, message: "", mimeType: normalizedMimeType };
+}
+
+function setPullRefreshState(isVisible, message, isReady = false) {
+  if (!pullRefreshIndicator || !pullRefreshText) return;
+  pullRefreshIndicator.classList.toggle("is-visible", isVisible);
+  pullRefreshIndicator.classList.toggle("is-ready", isReady);
+  pullRefreshText.textContent = message;
+}
+
+async function refreshDashboardView() {
+  const session = getSession();
+
+  if (!session?.id || !selectedVehicleId || isDashboardRefreshing) {
+    return;
+  }
+
+  isDashboardRefreshing = true;
+  setPullRefreshState(true, "Actualizando datos...", true);
+
+  try {
+    await refreshAllData();
+    renderCurrentVehicleKm();
+
+    if (isCollapsibleSectionOpen(latestRecordsSection) || latestRecordsLoaded) {
+      await loadLatestRecords();
+    }
+
+    if (isCollapsibleSectionOpen(historySection) && hasActiveFilters()) {
+      await loadMaintenance();
+    }
+
+    setStatus("Datos actualizados");
+  } finally {
+    isDashboardRefreshing = false;
+    window.setTimeout(() => setPullRefreshState(false, "Desliza para actualizar", false), 320);
+  }
+}
+
+function setupPullToRefresh() {
+  if (!dashboard) return;
+
+  const threshold = 72;
+  const canStartPullToRefresh = (eventTarget) => {
+    if (!dashboard.contains(eventTarget)) {
+      return false;
+    }
+
+    if (eventTarget.closest("input, select, textarea, button, .menu-panel, .modal")) {
+      return false;
+    }
+
+    return window.scrollY <= 0;
+  };
+
+  window.addEventListener(
+    "touchstart",
+    (event) => {
+      if (
+        dashboard.classList.contains("hidden") ||
+        event.touches.length !== 1 ||
+        !canStartPullToRefresh(event.target)
+      ) {
+        pullRefreshState.active = false;
+        return;
+      }
+
+      pullRefreshState = {
+        active: true,
+        ready: false,
+        startY: event.touches[0].clientY,
+      };
+    },
+    { passive: true }
+  );
+
+  window.addEventListener(
+    "touchmove",
+    (event) => {
+      if (!pullRefreshState.active) {
+        return;
+      }
+
+      const deltaY = event.touches[0].clientY - pullRefreshState.startY;
+
+      if (deltaY <= 0) {
+        setPullRefreshState(false, "Desliza para actualizar", false);
+        return;
+      }
+
+      event.preventDefault();
+      const ready = deltaY >= threshold;
+      pullRefreshState.ready = ready;
+      setPullRefreshState(true, ready ? "Suelta para actualizar" : "Desliza para actualizar", ready);
+    },
+    { passive: false }
+  );
+
+  window.addEventListener("touchend", async () => {
+    if (!pullRefreshState.active) {
+      return;
+    }
+
+    const shouldRefresh = pullRefreshState.ready;
+    pullRefreshState.active = false;
+    pullRefreshState.ready = false;
+
+    if (!shouldRefresh) {
+      setPullRefreshState(false, "Desliza para actualizar", false);
+      return;
+    }
+
+    await refreshDashboardView();
+  });
 }
 
 async function loadDashboardData() {
@@ -865,6 +1221,7 @@ await loadSelects();
 await loadVehiclesList();
 await loadPlacesList();
 setHistoryState("initial");
+setLatestRecordsState("initial");
 }
 
 if (togglePasswordButton && passwordInput) {
@@ -939,8 +1296,15 @@ function logout() {
   if (passwordMessage) passwordMessage.textContent = "";
   setStatus("Bloqueado");
   maintenanceList.innerHTML = '<div class="empty">Selecciona un vehiculo para comenzar.</div>';
-  historyTitle.textContent = "Historial del vehiculo";
-  historyCopy.textContent = 'Aplica filtros o presiona "Ultimos registros".';
+  historyTitle.textContent = "Historial";
+  historyCopy.textContent = "Busca mantenimientos por texto o rango de fechas.";
+  if (latestMaintenanceList) {
+    latestMaintenanceList.innerHTML = '<div class="empty">Selecciona un vehiculo para ver sus ultimos registros.</div>';
+  }
+  if (latestStatusPill) {
+    latestStatusPill.textContent = "Sin consulta";
+  }
+  latestRecordsLoaded = false;
   if (currentVehicleName) currentVehicleName.textContent = "Sin seleccion";
   if (currentVehicleKm) currentVehicleKm.textContent = "Sin dato";
   if (updateKmButton) updateKmButton.disabled = true;
@@ -963,6 +1327,9 @@ vehicleForm?.addEventListener("submit", async (e) => {
   const data = Object.fromEntries(new FormData(vehicleForm).entries());
 
   try {
+    data.km_actual = normalizeNumericPayloadValue(data.km_actual, NUMERIC_FIELD_CONFIG.km_actual);
+    data.ultimo_service_km = normalizeNumericPayloadValue(data.ultimo_service_km, NUMERIC_FIELD_CONFIG.ultimo_service_km);
+    data.intervalo_km = normalizeNumericPayloadValue(data.intervalo_km, NUMERIC_FIELD_CONFIG.intervalo_km);
     showAppLoading("Guardando vehículo...");
 
     if (editingVehicleId) {
@@ -1057,14 +1424,22 @@ maintenanceForm?.addEventListener("submit", async (event) => {
 
   const formData = new FormData(maintenanceForm);
   const payload = Object.fromEntries(formData.entries());
+  const selectedImage = maintenanceImageInput?.files?.[0] || null;
+  const imageValidation = validateSelectedMaintenanceImage(selectedImage);
+
+  if (!imageValidation.ok) {
+    formMessage.textContent = imageValidation.message;
+    setButtonLoading(maintenanceSubmitButton, false, "Guardando...");
+    return;
+  }
+
   payload.vehiculo_id = selectedVehicleId;
   payload.lugar_id = Number(payload.lugar_id);
-  payload.km = Number(payload.km);
-  payload.cost = Number(payload.cost);
-  const imageRef = await fileToDataUrl(maintenanceImageInput?.files?.[0]);
-  let maintenanceFeedback = "";
 
   try {
+    payload.km = normalizeNumericPayloadValue(payload.km, NUMERIC_FIELD_CONFIG.km);
+    payload.cost = normalizeNumericPayloadValue(payload.cost, NUMERIC_FIELD_CONFIG.cost);
+    const imageRef = await fileToDataUrl(selectedImage);
     const session = getSession();
 
     const created = await fetchJson(`/maintenance`, {
@@ -1075,34 +1450,26 @@ maintenanceForm?.addEventListener("submit", async (event) => {
       body: JSON.stringify({
         ...payload,
         user_id: session.id,
+        image_base64: imageRef || "",
+        image_mime_type: imageValidation.mimeType,
       }),
     });
 
-    if (created?.id && imageRef) {
-      try {
-        const imageResponse = await fetchJson(`/maintenance/${created.id}/images`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            user_id: session.id,
-            image_base64: imageRef,
-          }),
-        });
-
-        maintenanceImageRefs[created.id] = imageResponse.image.imageSource || imageRef;
-        saveMaintenanceImageRefs();
-      } catch (imageError) {
-        maintenanceImageRefs[created.id] = imageRef;
-        saveMaintenanceImageRefs();
-        maintenanceFeedback = `Mantenimiento guardado. La imagen quedo en respaldo local: ${imageError.message}`;
-      }
+    if (created?.id && created.image?.imageSource) {
+      maintenanceImageRefs[created.id] = created.image.imageSource;
+      saveMaintenanceImageRefs();
     }
 
     maintenanceForm.reset();
     clearMaintenanceImagePreview();
-    formMessage.textContent = maintenanceFeedback || "Mantenimiento guardado correctamente.";
+    await refreshAllData();
+    await loadLatestRecords();
+    if (hasActiveFilters()) {
+      await loadMaintenance();
+    }
+    formMessage.textContent = imageRef
+      ? "Mantenimiento e imagen guardados correctamente."
+      : "Mantenimiento guardado correctamente.";
     setStatus("Mantenimiento guardado");
   } catch (error) {
     formMessage.textContent = error.message;
@@ -1116,7 +1483,7 @@ filtersForm?.addEventListener("submit", async (event) => {
   setButtonLoading(filtersSubmitButton, true, "Buscando...");
 
   try {
-    await loadMaintenance({ latestOnly: false });
+    await loadMaintenance();
   } catch (error) {
     setStatus(error.message);
   } finally {
@@ -1128,17 +1495,18 @@ filtersForm?.addEventListener("submit", async (event) => {
 updateKmButton?.addEventListener("click", openKmUpdateModal);
 
 latestButton?.addEventListener("click", async () => {
-  if (filtersForm) {
-    filtersForm.reset();
-  }
   setButtonLoading(latestButton, true, "Cargando...");
   try {
-    await loadMaintenance({ latestOnly: true });
+    await loadLatestRecords();
   } catch (error) {
-    setStatus(error.message);
+    setLatestRecordsState("error", error.message);
   } finally {
     setButtonLoading(latestButton, false, "Cargando...");
   }
+});
+
+filtersResetButton?.addEventListener("click", () => {
+  setHistoryState("initial");
 });
 
 
@@ -1277,6 +1645,7 @@ async function refreshAllData() {
   await loadSelects();          // 👈 dropdowns
   await loadVehiclesList();     // 👈 modal
   await loadPlacesList();       // 👈 modal
+  renderCurrentVehicleKm();
 }
 
 document.addEventListener("click", (e) => {
@@ -1289,9 +1658,16 @@ document.addEventListener("click", (e) => {
   });
 });
 
-function toggleSection(header) {
+function toggleSection(header, options = {}) {
   const section = header.closest(".collapsible");
+  const willOpen = !section.classList.contains("open");
   section.classList.toggle("open");
+
+  if (willOpen && options.loadOnOpen === "latest" && !latestRecordsLoaded) {
+    loadLatestRecords().catch((error) => {
+      setLatestRecordsState("error", error.message);
+    });
+  }
 }
 
 function openVehiclesModal() {
@@ -1323,7 +1699,17 @@ function clearMaintenanceImagePreview() {
 
 maintenanceImageInput?.addEventListener("change", async () => {
   try {
-    const dataUrl = await fileToDataUrl(maintenanceImageInput.files?.[0]);
+    const selectedImage = maintenanceImageInput.files?.[0];
+    const imageValidation = validateSelectedMaintenanceImage(selectedImage);
+
+    if (!imageValidation.ok) {
+      maintenanceImageInput.value = "";
+      clearMaintenanceImagePreview();
+      formMessage.textContent = imageValidation.message;
+      return;
+    }
+
+    const dataUrl = await fileToDataUrl(selectedImage);
     if (!dataUrl) {
       clearMaintenanceImagePreview();
       return;
@@ -1609,6 +1995,13 @@ function registerServiceWorker() {
 
 
 (async function init() {
+  setupNumericFieldValidation();
+  setupPullToRefresh();
+  window.addEventListener("resize", () => {
+    if (getSession()?.email) {
+      updateSessionUI();
+    }
+  });
   registerServiceWorker();
   await playSplashScreen();
 

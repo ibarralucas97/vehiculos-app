@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const pool = require("../db/connection");
-const { validateVehiclePayload } = require("../utils/validation");
+const { MAX_NUMERIC_FIELD_VALUE, validateVehiclePayload } = require("../utils/validation");
 
 router.get("/", async (req, res) => {
   try {
@@ -150,8 +150,14 @@ router.patch("/:id/km", async (req, res) => {
       return res.status(400).json({ error: "user_id requerido" });
     }
 
-    if (!Number.isFinite(kmActual) || kmActual < 0) {
-      return res.status(400).json({ error: "km_actual debe ser un numero valido mayor o igual a 0" });
+    if (
+      !Number.isInteger(kmActual) ||
+      kmActual < 0 ||
+      kmActual > MAX_NUMERIC_FIELD_VALUE
+    ) {
+      return res.status(400).json({
+        error: `km_actual debe ser un entero valido entre 0 y ${MAX_NUMERIC_FIELD_VALUE}`,
+      });
     }
 
     const currentResult = await pool.query(

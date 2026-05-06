@@ -356,12 +356,4 @@ deletePlace = async function patchedDeletePlace(id) {
   }
 };
 
-maintenanceForm?.addEventListener("submit", () => {
-  setTimeout(async () => {
-    if (formMessage.textContent.includes("correctamente") && selectedVehicleId) {
-      await loadMaintenance({ latestOnly: true });
-    }
-  }, 450);
-});
-
 clearOverview();

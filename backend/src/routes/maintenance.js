@@ -3,13 +3,75 @@ const router = express.Router();
 const pool = require("../db/connection");
 const { validateMaintenancePayload } = require("../utils/validation");
 const MAX_IMAGE_BASE64_LENGTH = 2_800_000;
+const ALLOWED_IMAGE_MIME_TYPES = new Set(["image/png", "image/jpeg"]);
+
+function parseMaintenanceImagePayload(payload = {}) {
+  const imageUrl = String(payload.image_url || "").trim();
+  const imageBase64 = String(payload.image_base64 || "").trim();
+  const imageMimeType = String(payload.image_mime_type || "").trim().toLowerCase();
+
+  if (!imageUrl && !imageBase64 && !imageMimeType) {
+    return { error: null, data: null };
+  }
+
+  if (imageUrl) {
+    return {
+      error: "Actualmente solo se admite guardar imagenes embebidas PNG o JPEG",
+      data: null,
+    };
+  }
+
+  if (!imageBase64) {
+    return { error: "Debes enviar image_base64 cuando adjuntas una imagen", data: null };
+  }
+
+  const dataUrlMatch = imageBase64.match(/^data:(image\/[a-z0-9.+-]+);base64,[a-z0-9+/=\s]+$/i);
+
+  if (!dataUrlMatch) {
+    return { error: "La imagen no tiene un formato valido", data: null };
+  }
+
+  const detectedMimeType = dataUrlMatch[1].toLowerCase();
+  const normalizedMimeType = imageMimeType || detectedMimeType;
+
+  if (normalizedMimeType !== detectedMimeType) {
+    return { error: "El tipo MIME de la imagen no coincide con el contenido enviado", data: null };
+  }
+
+  if (!ALLOWED_IMAGE_MIME_TYPES.has(normalizedMimeType)) {
+    return { error: "Solo se permiten imagenes PNG, JPG o JPEG", data: null };
+  }
+
+  if (imageBase64.length > MAX_IMAGE_BASE64_LENGTH) {
+    return {
+      error: "La imagen es demasiado grande para guardarla en la base de datos",
+      data: null,
+    };
+  }
+
+  return {
+    error: null,
+    data: {
+      image_url: null,
+      image_base64: imageBase64,
+      image_mime_type: normalizedMimeType,
+    },
+  };
+}
 
 router.post("/", async (req, res) => {
+  const client = await pool.connect();
+
   try {
     const { errors, data } = validateMaintenancePayload(req.body);
+    const imagePayload = parseMaintenanceImagePayload(req.body);
 
     if (errors.length > 0) {
       return res.status(400).json({ errors });
+    }
+
+    if (imagePayload.error) {
+      return res.status(400).json({ error: imagePayload.error });
     }
 
     const userId = Number(req.body.user_id);
@@ -18,7 +80,9 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ error: "user_id requerido" });
     }
 
-    const result = await pool.query(
+    await client.query("BEGIN");
+
+    const result = await client.query(
       `INSERT INTO mantenimiento
       (fecha, vehiculo_id, lugar_id, accion, km, cost, user_id)
       VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -34,7 +98,25 @@ router.post("/", async (req, res) => {
       ]
     );
 
-    await pool.query(
+    const createdMaintenance = result.rows[0];
+    let createdImage = null;
+
+    if (imagePayload.data) {
+      const imageResult = await client.query(
+        `INSERT INTO maintenance_images (maintenance_id, image_url, image_base64)
+         VALUES ($1, $2, $3)
+         RETURNING id, maintenance_id, image_url, image_base64, created_at`,
+        [
+          createdMaintenance.id,
+          imagePayload.data.image_url,
+          imagePayload.data.image_base64,
+        ]
+      );
+
+      createdImage = imageResult.rows[0];
+    }
+
+    await client.query(
       `UPDATE vehiculos
        SET km_actual = CASE
          WHEN km_actual IS NULL OR km_actual < $1 THEN $1
@@ -44,10 +126,31 @@ router.post("/", async (req, res) => {
       [data.km, data.vehiculo_id, userId]
     );
 
-    res.status(201).json(result.rows[0]);
+    await client.query("COMMIT");
+
+    res.status(201).json({
+      ...createdMaintenance,
+      image: createdImage
+        ? {
+            id: createdImage.id,
+            maintenanceId: createdImage.maintenance_id,
+            imageUrl: createdImage.image_url,
+            imageBase64: createdImage.image_base64,
+            imageSource: createdImage.image_url || createdImage.image_base64,
+            createdAt: createdImage.created_at,
+          }
+        : null,
+    });
   } catch (error) {
+    try {
+      await client.query("ROLLBACK");
+    } catch (_rollbackError) {
+      // Ignore rollback failures and surface the original error below.
+    }
     console.error(error);
     res.status(500).json({ error: "Error al insertar mantenimiento" });
+  } finally {
+    client.release();
   }
 });
 
@@ -144,8 +247,7 @@ router.post("/:id/images", async (req, res) => {
   try {
     const maintenanceId = Number(req.params.id);
     const userId = Number(req.body.user_id);
-    const imageUrl = String(req.body.image_url || "").trim();
-    const imageBase64 = String(req.body.image_base64 || "").trim();
+    const imagePayload = parseMaintenanceImagePayload(req.body);
 
     if (!maintenanceId) {
       return res.status(400).json({ error: "maintenance_id invalido" });
@@ -155,12 +257,8 @@ router.post("/:id/images", async (req, res) => {
       return res.status(400).json({ error: "user_id requerido" });
     }
 
-    if (!imageUrl && !imageBase64) {
-      return res.status(400).json({ error: "Debes enviar image_url o image_base64" });
-    }
-
-    if (imageBase64 && imageBase64.length > MAX_IMAGE_BASE64_LENGTH) {
-      return res.status(400).json({ error: "La imagen es demasiado grande para guardarla en la base de datos" });
+    if (imagePayload.error || !imagePayload.data) {
+      return res.status(400).json({ error: imagePayload.error || "Debes enviar una imagen valida" });
     }
 
     const maintenanceResult = await pool.query(
@@ -176,7 +274,7 @@ router.post("/:id/images", async (req, res) => {
       `INSERT INTO maintenance_images (maintenance_id, image_url, image_base64)
        VALUES ($1, $2, $3)
        RETURNING id, maintenance_id, image_url, image_base64, created_at`,
-      [maintenanceId, imageUrl || null, imageBase64 || null]
+      [maintenanceId, imagePayload.data.image_url, imagePayload.data.image_base64]
     );
 
     const image = insertResult.rows[0];

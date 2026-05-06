@@ -6,6 +6,8 @@ function isNonNegativeInteger(value) {
   return Number.isInteger(value) && value >= 0;
 }
 
+const MAX_NUMERIC_FIELD_VALUE = 999999999;
+
 function normalizeText(value) {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -33,11 +35,22 @@ function isValidPhone(value) {
   return normalized === "" || /^[0-9+\s()\-]{6,20}$/.test(normalized);
 }
 
-function parseOptionalInteger(value, fieldName, { min = 0, positiveOnly = false } = {}) {
+function parseOptionalInteger(
+  value,
+  fieldName,
+  { min = 0, positiveOnly = false, max = MAX_NUMERIC_FIELD_VALUE } = {}
+) {
   const normalized = String(value ?? "").trim();
 
   if (normalized === "") {
     return { value: null, error: null };
+  }
+
+  if (!/^\d+$/.test(normalized)) {
+    return {
+      value: null,
+      error: `${fieldName} debe contener solo numeros enteros`,
+    };
   }
 
   const parsed = Number(normalized);
@@ -49,6 +62,13 @@ function parseOptionalInteger(value, fieldName, { min = 0, positiveOnly = false 
       error: positiveOnly
         ? `${fieldName} debe ser un entero positivo`
         : `${fieldName} debe ser un entero mayor o igual a ${min}`,
+    };
+  }
+
+  if (parsed > max) {
+    return {
+      value: null,
+      error: `${fieldName} no puede superar ${max}`,
     };
   }
 
@@ -76,8 +96,8 @@ function validateMaintenancePayload(payload) {
   const accion = normalizeText(payload.accion);
   const vehiculoId = Number(payload.vehiculo_id);
   const lugarId = Number(payload.lugar_id);
-  const km = Number(payload.km);
-  const cost = Number(payload.cost);
+  const kmResult = parseOptionalInteger(payload.km, "km");
+  const costResult = parseOptionalInteger(payload.cost, "cost");
 
   const errors = [];
 
@@ -97,13 +117,8 @@ function validateMaintenancePayload(payload) {
     errors.push("accion es obligatoria");
   }
 
-  if (!isNonNegativeInteger(km)) {
-    errors.push("km debe ser un entero mayor o igual a 0");
-  }
-
-  if (!isNonNegativeInteger(cost)) {
-    errors.push("cost debe ser un entero mayor o igual a 0");
-  }
+  if (kmResult.error) errors.push(kmResult.error);
+  if (costResult.error) errors.push(costResult.error);
 
   return {
     errors,
@@ -112,8 +127,8 @@ function validateMaintenancePayload(payload) {
       vehiculo_id: vehiculoId,
       lugar_id: lugarId,
       accion,
-      km,
-      cost,
+      km: kmResult.value ?? 0,
+      cost: costResult.value ?? 0,
     },
   };
 }
@@ -255,6 +270,7 @@ function validatePasswordChangePayload(payload) {
 }
 
 module.exports = {
+  MAX_NUMERIC_FIELD_VALUE,
   isValidEmail,
   isValidPhone,
   validateMaintenancePayload,

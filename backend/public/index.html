@@ -133,6 +133,11 @@
       </section>
 
       <section id="dashboard" class="hidden">
+        <div id="pull-refresh-indicator" class="pull-refresh-indicator" aria-live="polite">
+          <span class="pull-refresh-icon">↓</span>
+          <span id="pull-refresh-text">Desliza para actualizar</span>
+        </div>
+
         <section class="panel vehicle-context-panel">
           <div class="section-head mb-0 vehicle-context-head">
             <div>
@@ -150,13 +155,13 @@
         </section>
 
         <section class="dashboard-grid">
-          <section class="panel form-panel collapsible">
+          <section id="maintenance-section" class="panel dashboard-section dashboard-section-maintenance collapsible">
             <div class="section-head section-head-stack collapsible-header" onclick="toggleSection(this)">
               <div>
                 <h2>Cargar mantenimiento</h2>
-                <p class="section-copy">Registra un servicio nuevo en pocos campos.</p>
+                <p class="section-copy">Registrá un servicio nuevo en pocos campos.</p>
               </div>
-              <span class="arrow">▼</span>
+              <span class="section-chevron arrow" aria-hidden="true">⌄</span>
             </div>
 
             <div class="collapsible-content">
@@ -176,16 +181,16 @@
                 <div class="split-fields">
                   <label>
                     Kilometros
-                    <input type="number" name="km" inputmode="numeric" pattern="[0-9]*" />
+                    <input type="text" name="km" inputmode="numeric" autocomplete="off" />
                   </label>
                   <label>
                     Costo
-                    <input type="number" name="cost" inputmode="numeric" pattern="[0-9]*" />
+                    <input type="text" name="cost" inputmode="numeric" autocomplete="off" />
                   </label>
                 </div>
                 <label>
                   Imagen del mantenimiento
-                  <input type="file" id="maintenance-image" accept="image/*" />
+                  <input type="file" id="maintenance-image" accept="image/png,image/jpeg" />
                 </label>
                 <div id="maintenance-image-preview" class="image-preview hidden">
                   <img id="maintenance-image-preview-img" alt="Vista previa" />
@@ -196,16 +201,42 @@
             </div>
           </section>
 
-          <section class="panel history-panel collapsible">
+          <section id="latest-records-section" class="panel dashboard-section dashboard-section-latest collapsible">
+            <div class="section-head collapsible-header" onclick="toggleSection(this, { loadOnOpen: 'latest' })">
+              <div class="history-header-copy">
+                <h2>Ultimos registros</h2>
+                <p class="section-copy">Se muestran los ultimos 3 mantenimientos del vehiculo seleccionado.</p>
+              </div>
+
+              <div class="history-header-meta">
+                <span id="latest-status-pill" class="pill">Sin consulta</span>
+                <span class="section-chevron arrow" aria-hidden="true">⌄</span>
+              </div>
+            </div>
+
+            <div class="collapsible-content">
+              <div class="form-stack compact history-filters">
+                <div class="history-actions">
+                  <button id="latest-button" class="ghost history-primary-action" type="button">Actualizar ultimos registros</button>
+                </div>
+              </div>
+
+              <div id="latest-maintenance-list" class="cards">
+                <div class="empty">Abri este modulo o presiona "Actualizar ultimos registros".</div>
+              </div>
+            </div>
+          </section>
+
+          <section id="history-section" class="panel dashboard-section dashboard-section-history collapsible">
             <div class="section-head collapsible-header" onclick="toggleSection(this)">
-              <div>
-                <h2 id="history-title">Historial del vehiculo</h2>
-                <p id="history-copy" class="section-copy">Aplica filtros o presiona "Ultimos registros".</p>
+              <div class="history-header-copy">
+                <h2 id="history-title">Historial</h2>
+                <p id="history-copy" class="section-copy">Busca mantenimientos por texto o rango de fechas.</p>
               </div>
 
               <div class="history-header-meta">
                 <span id="status-pill" class="pill">Sin consulta</span>
-                <span class="arrow"></span>
+                <span class="section-chevron arrow" aria-hidden="true">⌄</span>
               </div>
             </div>
 
@@ -227,13 +258,15 @@
                 </div>
                 <div class="split-fields">
                   <button id="filters-submit" type="submit" class="secondary">Aplicar filtros</button>
-                  <button id="latest-button" class="ghost" type="button">Ultimos registros</button>
+                  <button id="filters-reset-button" class="ghost" type="reset">Limpiar</button>
                 </div>
-                <button id="export-pdf-button" class="ghost" type="button">Exportar PDF</button>
+                <div class="history-secondary-actions">
+                  <button id="export-pdf-button" class="ghost" type="button">Exportar PDF</button>
+                </div>
               </form>
 
               <div id="maintenance-list" class="cards">
-                <div class="empty">Aplica filtros o presiona "Ultimos registros".</div>
+                <div class="empty">Aplica filtros para ver el historial.</div>
               </div>
             </div>
           </section>
@@ -255,15 +288,15 @@
           <input name="nombre" placeholder="Nombre" required />
           <input name="modelo" placeholder="Modelo" required />
           <input name="patente" placeholder="Patente" required />
-          <input name="km_actual" type="number" inputmode="numeric" pattern="[0-9]*" placeholder="KM actual" />
+          <input name="km_actual" type="text" inputmode="numeric" autocomplete="off" placeholder="KM actual" />
           <input
             name="ultimo_service_km"
-            type="number"
+            type="text"
             inputmode="numeric"
-            pattern="[0-9]*"
+            autocomplete="off"
             placeholder="Ultimo service (KM)"
           />
-          <input name="intervalo_km" type="number" inputmode="numeric" pattern="[0-9]*" placeholder="Intervalo KM" />
+          <input name="intervalo_km" type="text" inputmode="numeric" autocomplete="off" placeholder="Intervalo KM" />
           <input name="fecha_ultimo_service" type="date" placeholder="Fecha ultimo service" />
           <input
             name="intervalo_tiempo"
