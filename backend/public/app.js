@@ -88,8 +88,11 @@ let pullRefreshState = {
   active: false,
   ready: false,
   startY: 0,
+  startX: 0,
+  hasCapturedGesture: false,
 };
 let latestRecordsLoaded = false;
+let suppressTouchClickUntil = 0;
 
 function buildFullName(user = {}) {
   return [user.nombre, user.apellido].filter(Boolean).join(" ").trim() || user.fullName || user.email || "";
@@ -1143,6 +1146,7 @@ function setupPullToRefresh() {
   if (!dashboard) return;
 
   const threshold = 72;
+  const captureThreshold = 18;
   const canStartPullToRefresh = (eventTarget) => {
     if (!dashboard.contains(eventTarget)) {
       return false;
@@ -1171,6 +1175,8 @@ function setupPullToRefresh() {
         active: true,
         ready: false,
         startY: event.touches[0].clientY,
+        startX: event.touches[0].clientX,
+        hasCapturedGesture: false,
       };
     },
     { passive: true }
@@ -1184,12 +1190,29 @@ function setupPullToRefresh() {
       }
 
       const deltaY = event.touches[0].clientY - pullRefreshState.startY;
+      const deltaX = event.touches[0].clientX - pullRefreshState.startX;
 
-      if (deltaY <= 0) {
+      if (Math.abs(deltaX) > Math.abs(deltaY) + 8) {
+        pullRefreshState.active = false;
+        pullRefreshState.ready = false;
+        pullRefreshState.hasCapturedGesture = false;
         setPullRefreshState(false, "Desliza para actualizar", false);
         return;
       }
 
+      if (deltaY <= 0) {
+        pullRefreshState.active = false;
+        pullRefreshState.ready = false;
+        pullRefreshState.hasCapturedGesture = false;
+        setPullRefreshState(false, "Desliza para actualizar", false);
+        return;
+      }
+
+      if (deltaY < captureThreshold) {
+        return;
+      }
+
+      pullRefreshState.hasCapturedGesture = true;
       event.preventDefault();
       const ready = deltaY >= threshold;
       pullRefreshState.ready = ready;
@@ -1203,9 +1226,14 @@ function setupPullToRefresh() {
       return;
     }
 
+    if (pullRefreshState.hasCapturedGesture) {
+      suppressTouchClickUntil = Date.now() + 500;
+    }
+
     const shouldRefresh = pullRefreshState.ready;
     pullRefreshState.active = false;
     pullRefreshState.ready = false;
+    pullRefreshState.hasCapturedGesture = false;
 
     if (!shouldRefresh) {
       setPullRefreshState(false, "Desliza para actualizar", false);
@@ -1214,6 +1242,17 @@ function setupPullToRefresh() {
 
     await refreshDashboardView();
   });
+
+  document.addEventListener(
+    "click",
+    (event) => {
+      if (Date.now() <= suppressTouchClickUntil && dashboard.contains(event.target)) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    },
+    true
+  );
 }
 
 async function loadDashboardData() {
