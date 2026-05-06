@@ -94,6 +94,16 @@ let backButtonTouchState = {
   startY: 0,
   lastTouchEndAt: 0,
 };
+let debugLogEntries = [];
+let debugPanelElements = {
+  root: null,
+  body: null,
+  currentView: null,
+};
+let debugPanelMinimized = false;
+let lastDebugTouchMoveAt = 0;
+let lastDebugView = "unknown";
+const DEBUG_LOG_LIMIT = 40;
 
 function buildFullName(user = {}) {
   return [user.nombre, user.apellido].filter(Boolean).join(" ").trim() || user.fullName || user.email || "";
@@ -244,6 +254,7 @@ function updateSessionUI() {
   }
 
   updateTopbarContext();
+  updateDebugCurrentView();
   return isLoggedIn;
 }
 
@@ -279,14 +290,185 @@ function getEventLabel(target) {
 }
 
 function logNavigation(origin, destination, details = {}) {
-  console.log("[NAVIGATION]", origin, destination, {
+  const payload = {
+    source: origin,
+    target: destination,
+    currentView: getCurrentView(),
     timestamp: new Date().toISOString(),
     ...details,
-  });
+  };
+
+  console.log("[NAVIGATION]", payload);
+  debugLog(`[NAVIGATION] ${origin} -> ${destination}`, payload);
+  updateDebugCurrentView(destination);
 }
 
 function isTouchCapableDevice() {
   return window.matchMedia?.("(pointer: coarse)")?.matches || navigator.maxTouchPoints > 0;
+}
+
+function stringifyDebugValue(value) {
+  if (value === undefined) return "undefined";
+  if (value === null) return "null";
+  if (typeof value === "string") return value;
+
+  try {
+    return JSON.stringify(value);
+  } catch (_error) {
+    return String(value);
+  }
+}
+
+function formatDebugTime(date = new Date()) {
+  return date.toLocaleTimeString("es-AR", {
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
+function renderDebugEntries() {
+  if (!debugPanelElements.body) {
+    return;
+  }
+
+  debugPanelElements.body.innerHTML = debugLogEntries
+    .map((entry) => `<div class="debug-log-line">[${entry.time}] ${entry.message}</div>`)
+    .join("");
+  debugPanelElements.body.scrollTop = debugPanelElements.body.scrollHeight;
+}
+
+function updateDebugCurrentView(nextView = getCurrentView()) {
+  if (debugPanelElements.currentView) {
+    debugPanelElements.currentView.textContent = `CURRENT VIEW: ${nextView}`;
+  }
+
+  if (nextView !== lastDebugView) {
+    appendDebugEntry(`[VIEW CHANGE] ${lastDebugView} -> ${nextView}`);
+    lastDebugView = nextView;
+  }
+}
+
+function appendDebugEntry(message) {
+  const entry = {
+    time: formatDebugTime(),
+    message,
+  };
+
+  debugLogEntries.push(entry);
+  if (debugLogEntries.length > DEBUG_LOG_LIMIT) {
+    debugLogEntries = debugLogEntries.slice(-DEBUG_LOG_LIMIT);
+  }
+
+  renderDebugEntries();
+}
+
+function debugLog(message, data = null) {
+  const suffix = data ? ` ${stringifyDebugValue(data)}` : "";
+  appendDebugEntry(`${message}${suffix}`);
+}
+
+function setupDebugPanel() {
+  const panel = document.createElement("aside");
+  panel.className = "debug-panel";
+  panel.innerHTML = `
+    <button type="button" class="debug-panel-toggle" aria-expanded="true">DEBUG LOGS</button>
+    <div class="debug-panel-content">
+      <div class="debug-panel-current-view">CURRENT VIEW: ${getCurrentView()}</div>
+      <div class="debug-panel-body"></div>
+    </div>
+  `;
+
+  document.body.appendChild(panel);
+
+  debugPanelElements = {
+    root: panel,
+    body: panel.querySelector(".debug-panel-body"),
+    currentView: panel.querySelector(".debug-panel-current-view"),
+  };
+
+  const toggleButton = panel.querySelector(".debug-panel-toggle");
+  toggleButton?.addEventListener("click", () => {
+    debugPanelMinimized = !debugPanelMinimized;
+    panel.classList.toggle("is-minimized", debugPanelMinimized);
+    toggleButton.setAttribute("aria-expanded", String(!debugPanelMinimized));
+  });
+
+  window.debugLog = debugLog;
+  updateDebugCurrentView();
+  appendDebugEntry("[DEBUG] panel listo");
+}
+
+function setupDebugObservers() {
+  const touchLogger = (event) => {
+    if (event.type === "touchmove") {
+      const now = Date.now();
+      if (now - lastDebugTouchMoveAt < 180) {
+        return;
+      }
+      lastDebugTouchMoveAt = now;
+    }
+
+    const touch = event.touches?.[0] || event.changedTouches?.[0] || null;
+    debugLog(`[${event.type.toUpperCase()}]`, {
+      eventType: event.type,
+      currentView: getCurrentView(),
+      targetElement: getEventLabel(event.target),
+      currentTarget: getEventLabel(event.currentTarget),
+      x: touch ? Math.round(touch.clientX) : null,
+      y: touch ? Math.round(touch.clientY) : null,
+    });
+  };
+
+  document.addEventListener("touchstart", touchLogger, { passive: true, capture: true });
+  document.addEventListener("touchmove", touchLogger, { passive: true, capture: true });
+  document.addEventListener("touchend", touchLogger, { passive: true, capture: true });
+
+  document.addEventListener("click", (event) => {
+    debugLog("[CLICK]", {
+      eventType: event.type,
+      currentView: getCurrentView(),
+      targetElement: getEventLabel(event.target),
+      currentTarget: getEventLabel(event.currentTarget),
+      detail: event.detail,
+    });
+  }, true);
+
+  window.addEventListener("popstate", (event) => {
+    debugLog("[POPSTATE]", {
+      currentView: getCurrentView(),
+      state: event.state ?? null,
+      href: window.location.href,
+    });
+  });
+
+  window.addEventListener("hashchange", () => {
+    debugLog("[HASHCHANGE]", {
+      currentView: getCurrentView(),
+      href: window.location.href,
+    });
+  });
+
+  const originalPushState = history.pushState.bind(history);
+  history.pushState = function patchedPushState(state, unused, url) {
+    debugLog("[HISTORY PUSHSTATE]", {
+      currentView: getCurrentView(),
+      state,
+      url: url || null,
+    });
+    return originalPushState(state, unused, url);
+  };
+
+  const originalReplaceState = history.replaceState.bind(history);
+  history.replaceState = function patchedReplaceState(state, unused, url) {
+    debugLog("[HISTORY REPLACESTATE]", {
+      currentView: getCurrentView(),
+      state,
+      url: url || null,
+    });
+    return originalReplaceState(state, unused, url);
+  };
 }
 
 function persistViewState() {
@@ -938,6 +1120,10 @@ function selectVehicle(id, origin = "selectVehicle") {
 
 if (menuButton && menuPanel) {
   menuButton.addEventListener("click", (e) => {
+    debugLog("[BUTTON] menu-toggle", {
+      currentView: getCurrentView(),
+      targetElement: getEventLabel(e.target),
+    });
     e.stopPropagation();
     toggleMenu();
   });
@@ -1747,6 +1933,11 @@ document.addEventListener("click", (e) => {
 function toggleSection(header, options = {}) {
   const section = header.closest(".collapsible");
   const willOpen = !section.classList.contains("open");
+  debugLog("[CARD TOGGLE]", {
+    currentView: getCurrentView(),
+    section: section?.id || getEventLabel(section),
+    willOpen,
+  });
   section.classList.toggle("open");
 
   if (willOpen && options.loadOnOpen === "latest" && !latestRecordsLoaded) {
@@ -2082,6 +2273,8 @@ function registerServiceWorker() {
 
 (async function init() {
   setupNumericFieldValidation();
+  setupDebugPanel();
+  setupDebugObservers();
   window.addEventListener("resize", () => {
     if (getSession()?.email) {
       updateSessionUI();
@@ -2109,4 +2302,6 @@ function registerServiceWorker() {
     setStatus(error.message);
     maintenanceList.innerHTML = `<div class="empty">${error.message}</div>`;
   }
+
+  updateDebugCurrentView();
 })();

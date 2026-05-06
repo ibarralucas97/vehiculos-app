@@ -1458,3 +1458,69 @@ body.modal-open {
     font-size: 16px; /* Prevent zoom on iOS */
   }
 }
+
+
+.debug-panel {
+  position: fixed;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  z-index: 15000;
+  pointer-events: none;
+}
+
+.debug-panel-toggle,
+.debug-panel-content {
+  pointer-events: auto;
+}
+
+.debug-panel-toggle {
+  width: 100%;
+  border: 0;
+  border-radius: 14px 14px 0 0;
+  padding: 10px 12px;
+  background: rgba(7, 12, 18, 0.92);
+  color: #f6f7f9;
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-align: left;
+}
+
+.debug-panel-content {
+  max-height: 30vh;
+  overflow: auto;
+  padding: 10px 12px;
+  border-radius: 0 0 14px 14px;
+  background: rgba(7, 12, 18, 0.9);
+  color: #d7e0ea;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-top: 0;
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.debug-panel.is-minimized .debug-panel-content {
+  display: none;
+}
+
+.debug-panel.is-minimized .debug-panel-toggle {
+  border-radius: 14px;
+}
+
+.debug-panel-current-view {
+  position: sticky;
+  top: 0;
+  background: rgba(7, 12, 18, 0.94);
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  font-weight: 700;
+  color: #8fd3ff;
+}
+
+.debug-log-line {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  word-break: break-word;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 6px;
+}
