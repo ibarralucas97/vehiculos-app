@@ -23,8 +23,6 @@
 
 html {
   font-size: 16px;
-  overscroll-behavior-x: none;
-  overscroll-behavior-y: none;
 }
 
 body {
@@ -33,9 +31,6 @@ body {
   color: var(--text);
   background: linear-gradient(160deg, #f6f7f9 0%, #ece9e2 100%);
   min-height: 100vh;
-  overscroll-behavior-x: none;
-  overscroll-behavior-y: none;
-  touch-action: pan-y;
 }
 
 button,
@@ -46,12 +41,10 @@ select {
 
 .app-shell {
   width: min(1120px, calc(100% - 28px));
-  overscroll-behavior-y: contain;
   margin: 0 auto;
   padding: 18px 0 24px;
   opacity: 1;
   transition: opacity 0.45s ease;
-  touch-action: pan-y;
 }
 
 body.splash-active .app-shell {
@@ -97,6 +90,9 @@ body.splash-active .app-shell {
   font-size: 1rem;
   font-weight: 800;
   box-shadow: none;
+  position: relative;
+  z-index: 1;
+  touch-action: manipulation;
 }
 
 .topbar-back-button.is-inactive {
@@ -124,36 +120,6 @@ body.splash-active .app-shell {
   border-radius: 999px;
   background: rgba(80, 109, 132, 0.08);
   border: 1px solid rgba(80, 109, 132, 0.12);
-}
-
-.pull-refresh-indicator {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 0;
-  max-height: 0;
-  overflow: hidden;
-  color: var(--primary-deep);
-  font-size: 0.86rem;
-  font-weight: 700;
-  opacity: 0;
-  transition: max-height 0.2s ease, opacity 0.2s ease, padding 0.2s ease;
-}
-
-.pull-refresh-indicator.is-visible {
-  max-height: 56px;
-  opacity: 1;
-  padding: 6px 0 12px;
-}
-
-.pull-refresh-indicator.is-ready .pull-refresh-icon {
-  transform: rotate(180deg);
-}
-
-.pull-refresh-icon {
-  display: inline-flex;
-  transition: transform 0.2s ease;
 }
 
 .hero-card,

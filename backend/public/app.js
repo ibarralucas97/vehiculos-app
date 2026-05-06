@@ -6,8 +6,8 @@ let editingPlaceId = null;
 const SESSION_KEY = "mygarage_session";
 const MAINTENANCE_IMAGES_KEY = "mygarage_maintenance_images";
 const VIEW_STATE_KEY = "mygarage_view_state";
-const ENABLE_PULL_TO_REFRESH = false;
-const ENABLE_TOUCH_NAVIGATION = false;
+const BACK_BUTTON_MOVE_THRESHOLD = 10;
+const BACK_BUTTON_GHOST_CLICK_WINDOW_MS = 700;
 const MAX_NUMERIC_FIELD_VALUE = 999999999;
 const ALLOWED_MAINTENANCE_IMAGE_TYPES = new Set(["image/png", "image/jpeg"]);
 const NUMERIC_FIELD_CONFIG = {
@@ -81,33 +81,17 @@ const passwordForm = document.getElementById("password-form");
 const passwordMessage = document.getElementById("password-message");
 const passwordSaveButton = document.getElementById("password-save-button");
 const settingsLogoutButton = document.getElementById("settings-logout-button");
-const pullRefreshIndicator = document.getElementById("pull-refresh-indicator");
-const pullRefreshText = document.getElementById("pull-refresh-text");
 const filtersResetButton = document.getElementById("filters-reset-button");
 
 let maintenanceImageRefs = getMaintenanceImageRefs();
-let isDashboardRefreshing = false;
-let pullRefreshState = {
-  active: false,
-  ready: false,
-  startY: 0,
-  startX: 0,
-  hasCapturedGesture: false,
-};
 let latestRecordsLoaded = false;
-let suppressTouchClickUntil = 0;
-let lastDashboardTouchAt = 0;
 let backButtonTouchState = {
   active: false,
+  moved: false,
+  cancelled: false,
   startX: 0,
   startY: 0,
-  moved: false,
-};
-let dashboardTouchGuard = {
-  active: false,
-  startX: 0,
-  startY: 0,
-  moved: false,
+  lastTouchEndAt: 0,
 };
 
 function buildFullName(user = {}) {
@@ -280,32 +264,24 @@ function getCurrentView() {
   return "unknown";
 }
 
-function isDashboardDetailSurface(target) {
-  return Boolean(
-    (dashboard && dashboard.contains(target)) ||
-    (topbar && topbar.contains(target))
-  );
-}
-
-function logNavigation(origin, destination, details = "") {
-  if (details) {
-    console.log("[NAVIGATION]", origin, destination, details);
-    return;
+function getEventLabel(target) {
+  if (!(target instanceof Element)) {
+    return String(target || "unknown");
   }
 
-  console.log("[NAVIGATION]", origin, destination);
+  const id = target.id ? `#${target.id}` : "";
+  const className = typeof target.className === "string"
+    ? `.${target.className.trim().split(/\s+/).filter(Boolean).join(".")}`
+    : "";
+
+  return `${target.tagName.toLowerCase()}${id}${className}`;
 }
 
-function shouldSuppressTouchDrivenNavigation() {
-  return Date.now() <= suppressTouchClickUntil;
-}
-
-function noteDashboardTouch() {
-  lastDashboardTouchAt = Date.now();
-}
-
-function hasRecentDashboardTouch() {
-  return Date.now() - lastDashboardTouchAt <= 750;
+function logNavigation(origin, destination, details = {}) {
+  console.log("[NAVIGATION]", origin, destination, {
+    timestamp: new Date().toISOString(),
+    ...details,
+  });
 }
 
 function persistViewState() {
@@ -352,13 +328,13 @@ function restoreStoredDashboardView() {
     return false;
   }
 
-  logNavigation("restoreStoredDashboardView", "dashboard", `vehicle:${vehicleId}`);
+  logNavigation("restoreStoredDashboardView", "dashboard", { vehicleId });
   selectVehicle(vehicleId, "restoreStoredDashboardView");
   return true;
 }
 
 function goBackToVehicles(origin = "goBackToVehicles") {
-  logNavigation(origin, "vehicles");
+  logNavigation(origin, "vehicles", { selectedVehicleId });
   selectedVehicleId = null;
   persistViewState();
 
@@ -934,7 +910,7 @@ async function loadVehiclesScreen() {
 }
 
 function selectVehicle(id, origin = "selectVehicle") {
-  logNavigation(origin, "dashboard", `vehicle:${id}`);
+  logNavigation(origin, "dashboard", { vehicleId: id });
   selectedVehicleId = id;
   persistViewState();
   const vehicle = currentVehicles.find((v) => v.id === id);
@@ -970,14 +946,91 @@ document.addEventListener("click", (e) => {
   }
 });
 
+topbarBackButton?.addEventListener("touchstart", (event) => {
+  if (event.touches.length !== 1) {
+    backButtonTouchState.active = false;
+    return;
+  }
+
+  backButtonTouchState = {
+    active: true,
+    moved: false,
+    cancelled: false,
+    startX: event.touches[0].clientX,
+    startY: event.touches[0].clientY,
+    lastTouchEndAt: 0,
+  };
+}, { passive: true });
+
+topbarBackButton?.addEventListener("touchmove", (event) => {
+  if (!backButtonTouchState.active || event.touches.length !== 1) {
+    return;
+  }
+
+  const deltaX = event.touches[0].clientX - backButtonTouchState.startX;
+  const deltaY = event.touches[0].clientY - backButtonTouchState.startY;
+
+  if (Math.abs(deltaX) > BACK_BUTTON_MOVE_THRESHOLD || Math.abs(deltaY) > BACK_BUTTON_MOVE_THRESHOLD) {
+    backButtonTouchState.moved = true;
+  }
+}, { passive: true });
+
+topbarBackButton?.addEventListener("touchend", (event) => {
+  backButtonTouchState.active = false;
+  backButtonTouchState.lastTouchEndAt = Date.now();
+  logNavigation("topbarBackButton:touchend", "vehicles", {
+    ignored: true,
+    moved: backButtonTouchState.moved,
+    cancelled: backButtonTouchState.cancelled,
+    target: getEventLabel(event.target),
+    currentTarget: getEventLabel(event.currentTarget),
+  });
+}, { passive: true });
+
+topbarBackButton?.addEventListener("touchcancel", (event) => {
+  backButtonTouchState.active = false;
+  backButtonTouchState.cancelled = true;
+  backButtonTouchState.lastTouchEndAt = Date.now();
+  logNavigation("topbarBackButton:touchcancel", "vehicles", {
+    ignored: true,
+    moved: backButtonTouchState.moved,
+    cancelled: true,
+    target: getEventLabel(event.target),
+    currentTarget: getEventLabel(event.currentTarget),
+  });
+}, { passive: true });
+
 topbarBackButton?.addEventListener("click", (event) => {
-  if (!ENABLE_TOUCH_NAVIGATION && event.detail === 0) {
+  const timeSinceTouchEnd = backButtonTouchState.lastTouchEndAt
+    ? Date.now() - backButtonTouchState.lastTouchEndAt
+    : null;
+  const shouldIgnoreGhostClick = Boolean(
+    (backButtonTouchState.moved || backButtonTouchState.cancelled) &&
+      timeSinceTouchEnd !== null &&
+      timeSinceTouchEnd <= BACK_BUTTON_GHOST_CLICK_WINDOW_MS
+  );
+
+  logNavigation("topbarBackButton:click", "vehicles", {
+    ignored: shouldIgnoreGhostClick || topbarBackButton.disabled,
+    moved: backButtonTouchState.moved,
+    cancelled: backButtonTouchState.cancelled,
+    timeSinceTouchEnd,
+    eventDetail: event.detail,
+    target: getEventLabel(event.target),
+    currentTarget: getEventLabel(event.currentTarget),
+  });
+
+  if (shouldIgnoreGhostClick) {
     event.preventDefault();
     event.stopPropagation();
+    backButtonTouchState.moved = false;
+    backButtonTouchState.cancelled = false;
     return;
   }
 
   if (!topbarBackButton.disabled) {
+    backButtonTouchState.moved = false;
+    backButtonTouchState.cancelled = false;
     goBackToVehicles("topbarBackButton:click");
   }
 });
@@ -1220,218 +1273,6 @@ function validateSelectedMaintenanceImage(file) {
   }
 
   return { ok: true, message: "", mimeType: normalizedMimeType };
-}
-
-function setPullRefreshState(isVisible, message, isReady = false) {
-  if (!pullRefreshIndicator || !pullRefreshText) return;
-  pullRefreshIndicator.classList.toggle("is-visible", isVisible);
-  pullRefreshIndicator.classList.toggle("is-ready", isReady);
-  pullRefreshText.textContent = message;
-}
-
-async function refreshDashboardView() {
-  const session = getSession();
-
-  if (!session?.id || !selectedVehicleId || isDashboardRefreshing) {
-    return;
-  }
-
-  isDashboardRefreshing = true;
-  setPullRefreshState(true, "Actualizando datos...", true);
-
-  try {
-    await refreshAllData();
-    renderCurrentVehicleKm();
-
-    if (isCollapsibleSectionOpen(latestRecordsSection) || latestRecordsLoaded) {
-      await loadLatestRecords();
-    }
-
-    if (isCollapsibleSectionOpen(historySection) && hasActiveFilters()) {
-      await loadMaintenance();
-    }
-
-    setStatus("Datos actualizados");
-  } finally {
-    isDashboardRefreshing = false;
-    window.setTimeout(() => setPullRefreshState(false, "Desliza para actualizar", false), 320);
-  }
-}
-
-async function refreshCurrentView() {
-  const currentView = getCurrentView();
-
-  if (currentView === "dashboard") {
-    await refreshDashboardView();
-    return;
-  }
-
-  if (currentView === "vehicles") {
-    await loadVehiclesScreen();
-  }
-}
-
-function setupPullToRefresh() {
-  if (!dashboard) return;
-  if (!ENABLE_PULL_TO_REFRESH) {
-    setPullRefreshState(false, "Desliza para actualizar", false);
-    return;
-  }
-
-  const threshold = 72;
-  const captureThreshold = 18;
-  const genericTouchDragThreshold = 10;
-  const canStartPullToRefresh = (eventTarget) => {
-    if (!dashboard.contains(eventTarget)) {
-      return false;
-    }
-
-    if (eventTarget.closest("input, select, textarea, button, .menu-panel, .modal")) {
-      return false;
-    }
-
-    return window.scrollY <= 0;
-  };
-
-  window.addEventListener(
-    "touchstart",
-    (event) => {
-      if (dashboard.classList.contains("hidden") || event.touches.length !== 1 || !isDashboardDetailSurface(event.target)) {
-        dashboardTouchGuard.active = false;
-        return;
-      }
-
-      dashboardTouchGuard = {
-        active: true,
-        startX: event.touches[0].clientX,
-        startY: event.touches[0].clientY,
-        moved: false,
-      };
-      noteDashboardTouch();
-    },
-    { passive: true }
-  );
-
-  window.addEventListener(
-    "touchstart",
-    (event) => {
-      if (
-        dashboard.classList.contains("hidden") ||
-        event.touches.length !== 1 ||
-        !canStartPullToRefresh(event.target)
-      ) {
-        pullRefreshState.active = false;
-        return;
-      }
-
-      pullRefreshState = {
-        active: true,
-        ready: false,
-        startY: event.touches[0].clientY,
-        startX: event.touches[0].clientX,
-        hasCapturedGesture: false,
-      };
-    },
-    { passive: true }
-  );
-
-  window.addEventListener(
-    "touchmove",
-    (event) => {
-      if (!dashboardTouchGuard.active) {
-        return;
-      }
-
-      const deltaX = event.touches[0].clientX - dashboardTouchGuard.startX;
-      const deltaY = event.touches[0].clientY - dashboardTouchGuard.startY;
-
-      if (Math.abs(deltaX) >= genericTouchDragThreshold || Math.abs(deltaY) >= genericTouchDragThreshold) {
-        dashboardTouchGuard.moved = true;
-      }
-    },
-    { passive: true }
-  );
-
-  window.addEventListener(
-    "touchmove",
-    (event) => {
-      if (!pullRefreshState.active) {
-        return;
-      }
-
-      const deltaY = event.touches[0].clientY - pullRefreshState.startY;
-      const deltaX = event.touches[0].clientX - pullRefreshState.startX;
-
-      if (Math.abs(deltaX) > Math.abs(deltaY) + 8) {
-        pullRefreshState.active = false;
-        pullRefreshState.ready = false;
-        pullRefreshState.hasCapturedGesture = false;
-        setPullRefreshState(false, "Desliza para actualizar", false);
-        return;
-      }
-
-      if (deltaY <= 0) {
-        pullRefreshState.active = false;
-        pullRefreshState.ready = false;
-        pullRefreshState.hasCapturedGesture = false;
-        setPullRefreshState(false, "Desliza para actualizar", false);
-        return;
-      }
-
-      if (deltaY < captureThreshold) {
-        return;
-      }
-
-      pullRefreshState.hasCapturedGesture = true;
-      event.preventDefault();
-      const ready = deltaY >= threshold;
-      pullRefreshState.ready = ready;
-      setPullRefreshState(true, ready ? "Suelta para actualizar" : "Desliza para actualizar", ready);
-    },
-    { passive: false }
-  );
-
-  window.addEventListener("touchend", async () => {
-    if (dashboardTouchGuard.active && dashboardTouchGuard.moved) {
-      noteDashboardTouch();
-      suppressTouchClickUntil = Date.now() + 650;
-    }
-
-    dashboardTouchGuard.active = false;
-    dashboardTouchGuard.moved = false;
-
-    if (!pullRefreshState.active) {
-      return;
-    }
-
-    if (pullRefreshState.hasCapturedGesture) {
-      noteDashboardTouch();
-      suppressTouchClickUntil = Date.now() + 650;
-    }
-
-    const shouldRefresh = pullRefreshState.ready;
-    pullRefreshState.active = false;
-    pullRefreshState.ready = false;
-    pullRefreshState.hasCapturedGesture = false;
-
-    if (!shouldRefresh) {
-      setPullRefreshState(false, "Desliza para actualizar", false);
-      return;
-    }
-
-    await refreshCurrentView();
-  });
-
-  document.addEventListener(
-    "click",
-    (event) => {
-      if (Date.now() <= suppressTouchClickUntil && isDashboardDetailSurface(event.target)) {
-        event.preventDefault();
-        event.stopPropagation();
-      }
-    },
-    true
-  );
 }
 
 async function loadDashboardData() {
@@ -2215,7 +2056,6 @@ function registerServiceWorker() {
 
 (async function init() {
   setupNumericFieldValidation();
-  setupPullToRefresh();
   window.addEventListener("resize", () => {
     if (getSession()?.email) {
       updateSessionUI();
