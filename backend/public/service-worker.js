@@ -1,4 +1,4 @@
-const CACHE_NAME = "rodado-control-v5";
+const CACHE_NAME = "rodado-control-v6";
 const APP_SHELL = [
   "/",
   "/index.html",
@@ -8,6 +8,10 @@ const APP_SHELL = [
   "/manifest.json",
   "/logo.png",
   "/app-icon.png",
+  "/icon-192.png",
+  "/icon-512.png",
+  "/icon-maskable-512.png",
+  "/apple-touch-icon.png",
   "/login-logo.png",
   "/splash-vertical.png",
 ];

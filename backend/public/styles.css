@@ -23,6 +23,8 @@
 
 html {
   font-size: 16px;
+  overscroll-behavior-x: none;
+  overscroll-behavior-y: none;
 }
 
 body {
@@ -31,7 +33,9 @@ body {
   color: var(--text);
   background: linear-gradient(160deg, #f6f7f9 0%, #ece9e2 100%);
   min-height: 100vh;
-  overscroll-behavior-y: contain;
+  overscroll-behavior-x: none;
+  overscroll-behavior-y: none;
+  touch-action: pan-y;
 }
 
 button,
@@ -42,6 +46,7 @@ select {
 
 .app-shell {
   width: min(1120px, calc(100% - 28px));
+  overscroll-behavior-y: contain;
   margin: 0 auto;
   padding: 18px 0 24px;
   opacity: 1;
