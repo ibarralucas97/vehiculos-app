@@ -93,6 +93,12 @@ let pullRefreshState = {
 };
 let latestRecordsLoaded = false;
 let suppressTouchClickUntil = 0;
+let dashboardTouchGuard = {
+  active: false,
+  startX: 0,
+  startY: 0,
+  moved: false,
+};
 
 function buildFullName(user = {}) {
   return [user.nombre, user.apellido].filter(Boolean).join(" ").trim() || user.fullName || user.email || "";
@@ -248,6 +254,17 @@ function updateSessionUI() {
 
 function isCollapsibleSectionOpen(section) {
   return Boolean(section && section.classList.contains("open"));
+}
+
+function isDashboardDetailSurface(target) {
+  return Boolean(
+    (dashboard && dashboard.contains(target)) ||
+    (topbar && topbar.contains(target))
+  );
+}
+
+function shouldSuppressTouchDrivenNavigation() {
+  return Date.now() <= suppressTouchClickUntil;
 }
 
 
@@ -861,6 +878,9 @@ document.addEventListener("click", (e) => {
 });
 
 topbarBackButton?.addEventListener("click", () => {
+  if (shouldSuppressTouchDrivenNavigation()) {
+    return;
+  }
   if (!topbarBackButton.disabled) {
     goBackToVehicles();
   }
@@ -1147,6 +1167,7 @@ function setupPullToRefresh() {
 
   const threshold = 72;
   const captureThreshold = 18;
+  const genericTouchDragThreshold = 10;
   const canStartPullToRefresh = (eventTarget) => {
     if (!dashboard.contains(eventTarget)) {
       return false;
@@ -1158,6 +1179,24 @@ function setupPullToRefresh() {
 
     return window.scrollY <= 0;
   };
+
+  window.addEventListener(
+    "touchstart",
+    (event) => {
+      if (dashboard.classList.contains("hidden") || event.touches.length !== 1 || !isDashboardDetailSurface(event.target)) {
+        dashboardTouchGuard.active = false;
+        return;
+      }
+
+      dashboardTouchGuard = {
+        active: true,
+        startX: event.touches[0].clientX,
+        startY: event.touches[0].clientY,
+        moved: false,
+      };
+    },
+    { passive: true }
+  );
 
   window.addEventListener(
     "touchstart",
@@ -1178,6 +1217,23 @@ function setupPullToRefresh() {
         startX: event.touches[0].clientX,
         hasCapturedGesture: false,
       };
+    },
+    { passive: true }
+  );
+
+  window.addEventListener(
+    "touchmove",
+    (event) => {
+      if (!dashboardTouchGuard.active) {
+        return;
+      }
+
+      const deltaX = event.touches[0].clientX - dashboardTouchGuard.startX;
+      const deltaY = event.touches[0].clientY - dashboardTouchGuard.startY;
+
+      if (Math.abs(deltaX) >= genericTouchDragThreshold || Math.abs(deltaY) >= genericTouchDragThreshold) {
+        dashboardTouchGuard.moved = true;
+      }
     },
     { passive: true }
   );
@@ -1222,6 +1278,13 @@ function setupPullToRefresh() {
   );
 
   window.addEventListener("touchend", async () => {
+    if (dashboardTouchGuard.active && dashboardTouchGuard.moved) {
+      suppressTouchClickUntil = Date.now() + 500;
+    }
+
+    dashboardTouchGuard.active = false;
+    dashboardTouchGuard.moved = false;
+
     if (!pullRefreshState.active) {
       return;
     }
@@ -1246,7 +1309,7 @@ function setupPullToRefresh() {
   document.addEventListener(
     "click",
     (event) => {
-      if (Date.now() <= suppressTouchClickUntil && dashboard.contains(event.target)) {
+      if (Date.now() <= suppressTouchClickUntil && isDashboardDetailSurface(event.target)) {
         event.preventDefault();
         event.stopPropagation();
       }
