@@ -103,6 +103,16 @@ let debugPanelElements = {
 let debugPanelMinimized = false;
 let lastDebugTouchMoveAt = 0;
 let lastDebugView = "unknown";
+let activeView = "unknown";
+let touchGestureState = {
+  active: false,
+  moved: false,
+  startX: 0,
+  startY: 0,
+};
+let touchScrollResetTimer = null;
+let isTouchScrolling = false;
+const TOUCH_SCROLL_THRESHOLD = 8;
 const DEBUG_LOG_LIMIT = 40;
 
 function buildFullName(user = {}) {
@@ -216,8 +226,6 @@ function updateSessionUI() {
   const session = normalizeSessionUser(getSession() || {});
   const isLoggedIn = Boolean(session?.email);
 
-  // 👇 estado base
-  dashboard.classList.add("hidden");
   welcomeScreen?.classList.toggle("hidden", isLoggedIn);
   topbar?.classList.toggle("hidden", !isLoggedIn);
   loginForm.classList.toggle("hidden", isLoggedIn);
@@ -225,10 +233,7 @@ function updateSessionUI() {
   logoutButton.classList.add("hidden");
 
   if (isLoggedIn) {
-    // 👇 mostrar pantalla de vehículos
-    if (vehiclesScreen) {
-      vehiclesScreen.classList.remove("hidden");
-    }
+    setView("vehicles", "updateSessionUI");
 
     const fullName = buildFullName(session);
     sessionEmail.textContent = fullName ? `${fullName} - ${session.email}` : session.email;
@@ -239,12 +244,10 @@ function updateSessionUI() {
 
     sessionCopy.textContent = "";
     loginMessage.textContent = "";
-
   } else {
-    // 👇 ocultar vehículos en logout
-    if (vehiclesScreen) {
-      vehiclesScreen.classList.add("hidden");
-    }
+    activeView = "unknown";
+    dashboard?.classList.add("hidden");
+    vehiclesScreen?.classList.add("hidden");
 
     sessionEmail.textContent = "";
     if (topbarUserName) {
@@ -262,7 +265,7 @@ function isCollapsibleSectionOpen(section) {
   return Boolean(section && section.classList.contains("open"));
 }
 
-function getCurrentView() {
+function deriveCurrentViewFromDom() {
   const vehiclesScreen = document.getElementById("vehicles-screen");
 
   if (dashboard && !dashboard.classList.contains("hidden") && selectedVehicleId) {
@@ -274,6 +277,10 @@ function getCurrentView() {
   }
 
   return "unknown";
+}
+
+function getCurrentView() {
+  return activeView === "unknown" ? deriveCurrentViewFromDom() : activeView;
 }
 
 function getEventLabel(target) {
@@ -369,6 +376,78 @@ function debugLog(message, data = null) {
   appendDebugEntry(`${message}${suffix}`);
 }
 
+function clearTouchScrollState() {
+  if (touchScrollResetTimer) {
+    window.clearTimeout(touchScrollResetTimer);
+    touchScrollResetTimer = null;
+  }
+
+  isTouchScrolling = false;
+  touchGestureState.active = false;
+  touchGestureState.moved = false;
+}
+
+function scheduleTouchScrollReset() {
+  if (touchScrollResetTimer) {
+    window.clearTimeout(touchScrollResetTimer);
+  }
+
+  touchScrollResetTimer = window.setTimeout(() => {
+    clearTouchScrollState();
+    debugLog("[TOUCH SCROLL RESET]", {
+      currentView: getCurrentView(),
+    });
+  }, 160);
+}
+
+function setView(nextView, source, event = null, extra = {}) {
+  const previousView = getCurrentView();
+  const payload = {
+    source,
+    previousView,
+    nextView,
+    eventType: event?.type || null,
+    targetElement: getEventLabel(event?.target),
+    currentView: previousView,
+    isTouchScrolling,
+    timestamp: new Date().toISOString(),
+    ...extra,
+  };
+
+  debugLog("[VIEW REQUEST]", payload);
+
+  if (
+    previousView === "dashboard" &&
+    nextView === "vehicles" &&
+    isTouchScrolling &&
+    source !== "explicitBackButton"
+  ) {
+    debugLog("[BLOCKED VIEW CHANGE DURING TOUCH]", payload);
+    console.trace("[VIEW CHANGE TRACE BLOCKED]", payload);
+    return false;
+  }
+
+  if (nextView === previousView) {
+    updateDebugCurrentView(nextView);
+    return true;
+  }
+
+  console.trace("[VIEW CHANGE TRACE]", payload);
+
+  if (nextView === "dashboard") {
+    vehiclesScreen?.classList.add("hidden");
+    dashboard?.classList.remove("hidden");
+  } else if (nextView === "vehicles") {
+    dashboard?.classList.add("hidden");
+    vehiclesScreen?.classList.remove("hidden");
+  }
+
+  activeView = nextView;
+  updateTopbarContext();
+  updateDebugCurrentView(nextView);
+  return true;
+}
+
 function setupDebugPanel() {
   const panel = document.createElement("aside");
   panel.className = "debug-panel";
@@ -402,6 +481,38 @@ function setupDebugPanel() {
 
 function setupDebugObservers() {
   const touchLogger = (event) => {
+    const touch = event.touches?.[0] || event.changedTouches?.[0] || null;
+
+    if (event.type === "touchstart" && touch) {
+      touchGestureState.active = true;
+      touchGestureState.moved = false;
+      touchGestureState.startX = touch.clientX;
+      touchGestureState.startY = touch.clientY;
+      if (touchScrollResetTimer) {
+        window.clearTimeout(touchScrollResetTimer);
+        touchScrollResetTimer = null;
+      }
+      isTouchScrolling = false;
+    }
+
+    if (event.type === "touchmove" && touchGestureState.active && touch) {
+      const deltaX = touch.clientX - touchGestureState.startX;
+      const deltaY = touch.clientY - touchGestureState.startY;
+      if (Math.abs(deltaX) > TOUCH_SCROLL_THRESHOLD || Math.abs(deltaY) > TOUCH_SCROLL_THRESHOLD) {
+        touchGestureState.moved = true;
+        isTouchScrolling = true;
+      }
+    }
+
+    if (event.type === "touchend" || event.type === "touchcancel") {
+      if (touchGestureState.moved) {
+        isTouchScrolling = true;
+        scheduleTouchScrollReset();
+      } else {
+        clearTouchScrollState();
+      }
+    }
+
     if (event.type === "touchmove") {
       const now = Date.now();
       if (now - lastDebugTouchMoveAt < 180) {
@@ -410,7 +521,6 @@ function setupDebugObservers() {
       lastDebugTouchMoveAt = now;
     }
 
-    const touch = event.touches?.[0] || event.changedTouches?.[0] || null;
     debugLog(`[${event.type.toUpperCase()}]`, {
       eventType: event.type,
       currentView: getCurrentView(),
@@ -424,6 +534,7 @@ function setupDebugObservers() {
   document.addEventListener("touchstart", touchLogger, { passive: true, capture: true });
   document.addEventListener("touchmove", touchLogger, { passive: true, capture: true });
   document.addEventListener("touchend", touchLogger, { passive: true, capture: true });
+  document.addEventListener("touchcancel", touchLogger, { passive: true, capture: true });
 
   document.addEventListener("click", (event) => {
     debugLog("[CLICK]", {
@@ -525,10 +636,10 @@ function goBackToVehicles(origin = "goBackToVehicles") {
   selectedVehicleId = null;
   persistViewState();
 
-  document.getElementById("dashboard").classList.add("hidden");
-  document.getElementById("vehicles-screen").classList.remove("hidden");
+  if (!setView("vehicles", origin)) {
+    return;
+  }
   closeMenu();
-  updateTopbarContext();
 
   if (currentVehicleKm) currentVehicleKm.textContent = "Sin dato";
   if (updateKmButton) updateKmButton.disabled = true;
@@ -1106,10 +1217,10 @@ function selectVehicle(id, origin = "selectVehicle") {
   }
   renderCurrentVehicleKm();
 
-  document.getElementById("vehicles-screen").classList.add("hidden");
-  document.getElementById("dashboard").classList.remove("hidden");
+  if (!setView("dashboard", origin)) {
+    return;
+  }
   closeMenu();
-  updateTopbarContext();
 
   refreshAllData();
   latestRecordsLoaded = false;
@@ -1538,8 +1649,7 @@ loginForm?.addEventListener("submit", async (event) => {
 await loadVehiclesList();
 await loadVehiclesScreen();
 
-document.getElementById("vehicles-screen").classList.remove("hidden");
-document.getElementById("dashboard").classList.add("hidden");
+setView("vehicles", "loginSuccess");
   } catch (error) {
     clearSession();
     updateSessionUI();
@@ -2283,6 +2393,7 @@ function registerServiceWorker() {
   registerServiceWorker();
   await playSplashScreen();
 
+  activeView = deriveCurrentViewFromDom();
   const isLoggedIn = updateSessionUI();
 
   if (!isLoggedIn) {
