@@ -7,6 +7,7 @@ const SESSION_KEY = "mygarage_session";
 const MAINTENANCE_IMAGES_KEY = "mygarage_maintenance_images";
 const VIEW_STATE_KEY = "mygarage_view_state";
 const ENABLE_PULL_TO_REFRESH = false;
+const ENABLE_TOUCH_NAVIGATION = false;
 const MAX_NUMERIC_FIELD_VALUE = 999999999;
 const ALLOWED_MAINTENANCE_IMAGE_TYPES = new Set(["image/png", "image/jpeg"]);
 const NUMERIC_FIELD_CONFIG = {
@@ -286,6 +287,15 @@ function isDashboardDetailSurface(target) {
   );
 }
 
+function logNavigation(origin, destination, details = "") {
+  if (details) {
+    console.log("[NAVIGATION]", origin, destination, details);
+    return;
+  }
+
+  console.log("[NAVIGATION]", origin, destination);
+}
+
 function shouldSuppressTouchDrivenNavigation() {
   return Date.now() <= suppressTouchClickUntil;
 }
@@ -342,11 +352,13 @@ function restoreStoredDashboardView() {
     return false;
   }
 
-  selectVehicle(vehicleId);
+  logNavigation("restoreStoredDashboardView", "dashboard", `vehicle:${vehicleId}`);
+  selectVehicle(vehicleId, "restoreStoredDashboardView");
   return true;
 }
 
-function goBackToVehicles() {
+function goBackToVehicles(origin = "goBackToVehicles") {
+  logNavigation(origin, "vehicles");
   selectedVehicleId = null;
   persistViewState();
 
@@ -921,7 +933,8 @@ async function loadVehiclesScreen() {
 `).join("");
 }
 
-function selectVehicle(id) {
+function selectVehicle(id, origin = "selectVehicle") {
+  logNavigation(origin, "dashboard", `vehicle:${id}`);
   selectedVehicleId = id;
   persistViewState();
   const vehicle = currentVehicles.find((v) => v.id === id);
@@ -957,67 +970,15 @@ document.addEventListener("click", (e) => {
   }
 });
 
-topbarBackButton?.addEventListener("touchstart", (event) => {
-  if (event.touches.length !== 1) {
-    backButtonTouchState.active = false;
-    return;
-  }
-
-  backButtonTouchState = {
-    active: true,
-    startX: event.touches[0].clientX,
-    startY: event.touches[0].clientY,
-    moved: false,
-  };
-}, { passive: true });
-
-topbarBackButton?.addEventListener("touchmove", (event) => {
-  if (!backButtonTouchState.active) {
-    return;
-  }
-
-  const deltaX = event.touches[0].clientX - backButtonTouchState.startX;
-  const deltaY = event.touches[0].clientY - backButtonTouchState.startY;
-
-  if (Math.abs(deltaX) >= 10 || Math.abs(deltaY) >= 10) {
-    backButtonTouchState.moved = true;
-  }
-}, { passive: true });
-
-topbarBackButton?.addEventListener("touchend", (event) => {
-  const canNavigate =
-    backButtonTouchState.active &&
-    !backButtonTouchState.moved &&
-    !topbarBackButton.disabled &&
-    !shouldSuppressTouchDrivenNavigation();
-
-  backButtonTouchState.active = false;
-  backButtonTouchState.moved = false;
-  noteDashboardTouch();
-
-  if (!canNavigate) {
-    return;
-  }
-
-  event.preventDefault();
-  suppressTouchClickUntil = Date.now() + 650;
-  goBackToVehicles();
-});
-
-topbarBackButton?.addEventListener("touchcancel", () => {
-  backButtonTouchState.active = false;
-  backButtonTouchState.moved = false;
-});
-
 topbarBackButton?.addEventListener("click", (event) => {
-  if (hasRecentDashboardTouch() || shouldSuppressTouchDrivenNavigation()) {
+  if (!ENABLE_TOUCH_NAVIGATION && event.detail === 0) {
     event.preventDefault();
     event.stopPropagation();
     return;
   }
 
   if (!topbarBackButton.disabled) {
-    goBackToVehicles();
+    goBackToVehicles("topbarBackButton:click");
   }
 });
 

@@ -202,16 +202,16 @@ async function loadDashboardOverview() {
 }
 
 const originalSelectVehicle = selectVehicle;
-selectVehicle = function patchedSelectVehicle(id) {
-  originalSelectVehicle(id);
+selectVehicle = function patchedSelectVehicle(id, origin) {
+  originalSelectVehicle(id, origin);
   setTimeout(() => {
     loadDashboardOverview().catch(console.error);
   }, 0);
 };
 
 const originalGoBackToVehicles = goBackToVehicles;
-goBackToVehicles = function patchedGoBackToVehicles() {
-  originalGoBackToVehicles();
+goBackToVehicles = function patchedGoBackToVehicles(origin) {
+  originalGoBackToVehicles(origin);
   clearOverview();
 };
 
