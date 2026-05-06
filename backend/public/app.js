@@ -89,6 +89,7 @@ let backButtonTouchState = {
   active: false,
   moved: false,
   cancelled: false,
+  armed: false,
   startX: 0,
   startY: 0,
   lastTouchEndAt: 0,
@@ -282,6 +283,10 @@ function logNavigation(origin, destination, details = {}) {
     timestamp: new Date().toISOString(),
     ...details,
   });
+}
+
+function isTouchCapableDevice() {
+  return window.matchMedia?.("(pointer: coarse)")?.matches || navigator.maxTouchPoints > 0;
 }
 
 function persistViewState() {
@@ -949,6 +954,7 @@ document.addEventListener("click", (e) => {
 topbarBackButton?.addEventListener("touchstart", (event) => {
   if (event.touches.length !== 1) {
     backButtonTouchState.active = false;
+    backButtonTouchState.armed = false;
     return;
   }
 
@@ -956,6 +962,7 @@ topbarBackButton?.addEventListener("touchstart", (event) => {
     active: true,
     moved: false,
     cancelled: false,
+    armed: false,
     startX: event.touches[0].clientX,
     startY: event.touches[0].clientY,
     lastTouchEndAt: 0,
@@ -972,17 +979,22 @@ topbarBackButton?.addEventListener("touchmove", (event) => {
 
   if (Math.abs(deltaX) > BACK_BUTTON_MOVE_THRESHOLD || Math.abs(deltaY) > BACK_BUTTON_MOVE_THRESHOLD) {
     backButtonTouchState.moved = true;
+    backButtonTouchState.armed = false;
   }
 }, { passive: true });
 
 topbarBackButton?.addEventListener("touchend", (event) => {
   backButtonTouchState.active = false;
   backButtonTouchState.lastTouchEndAt = Date.now();
+  backButtonTouchState.armed = !backButtonTouchState.moved && !backButtonTouchState.cancelled;
   logNavigation("topbarBackButton:touchend", "vehicles", {
-    ignored: true,
+    ignored: !backButtonTouchState.armed,
     moved: backButtonTouchState.moved,
     cancelled: backButtonTouchState.cancelled,
-    target: getEventLabel(event.target),
+    armed: backButtonTouchState.armed,
+    eventType: event.type,
+    currentView: getCurrentView(),
+    targetElement: getEventLabel(event.target),
     currentTarget: getEventLabel(event.currentTarget),
   });
 }, { passive: true });
@@ -990,12 +1002,16 @@ topbarBackButton?.addEventListener("touchend", (event) => {
 topbarBackButton?.addEventListener("touchcancel", (event) => {
   backButtonTouchState.active = false;
   backButtonTouchState.cancelled = true;
+  backButtonTouchState.armed = false;
   backButtonTouchState.lastTouchEndAt = Date.now();
   logNavigation("topbarBackButton:touchcancel", "vehicles", {
     ignored: true,
     moved: backButtonTouchState.moved,
     cancelled: true,
-    target: getEventLabel(event.target),
+    armed: false,
+    eventType: event.type,
+    currentView: getCurrentView(),
+    targetElement: getEventLabel(event.target),
     currentTarget: getEventLabel(event.currentTarget),
   });
 }, { passive: true });
@@ -1004,35 +1020,45 @@ topbarBackButton?.addEventListener("click", (event) => {
   const timeSinceTouchEnd = backButtonTouchState.lastTouchEndAt
     ? Date.now() - backButtonTouchState.lastTouchEndAt
     : null;
-  const shouldIgnoreGhostClick = Boolean(
-    (backButtonTouchState.moved || backButtonTouchState.cancelled) &&
+  const isTouchDevice = isTouchCapableDevice();
+  const isArmedTouchClick = Boolean(
+    isTouchDevice &&
+      backButtonTouchState.armed &&
       timeSinceTouchEnd !== null &&
       timeSinceTouchEnd <= BACK_BUTTON_GHOST_CLICK_WINDOW_MS
   );
+  const shouldIgnoreClick = Boolean(
+    topbarBackButton.disabled ||
+      (isTouchDevice && !isArmedTouchClick)
+  );
 
   logNavigation("topbarBackButton:click", "vehicles", {
-    ignored: shouldIgnoreGhostClick || topbarBackButton.disabled,
+    ignored: shouldIgnoreClick,
     moved: backButtonTouchState.moved,
     cancelled: backButtonTouchState.cancelled,
+    armed: backButtonTouchState.armed,
+    isTouchDevice,
     timeSinceTouchEnd,
+    eventType: event.type,
     eventDetail: event.detail,
-    target: getEventLabel(event.target),
+    currentView: getCurrentView(),
+    targetElement: getEventLabel(event.target),
     currentTarget: getEventLabel(event.currentTarget),
   });
 
-  if (shouldIgnoreGhostClick) {
+  if (shouldIgnoreClick) {
     event.preventDefault();
     event.stopPropagation();
     backButtonTouchState.moved = false;
     backButtonTouchState.cancelled = false;
+    backButtonTouchState.armed = false;
     return;
   }
 
-  if (!topbarBackButton.disabled) {
-    backButtonTouchState.moved = false;
-    backButtonTouchState.cancelled = false;
-    goBackToVehicles("topbarBackButton:click");
-  }
+  backButtonTouchState.moved = false;
+  backButtonTouchState.cancelled = false;
+  backButtonTouchState.armed = false;
+  goBackToVehicles("topbarBackButton:click");
 });
 
 async function loadVehiclesList() {
