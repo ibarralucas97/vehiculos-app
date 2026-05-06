@@ -6,6 +6,7 @@ let editingPlaceId = null;
 const SESSION_KEY = "mygarage_session";
 const MAINTENANCE_IMAGES_KEY = "mygarage_maintenance_images";
 const VIEW_STATE_KEY = "mygarage_view_state";
+const ENABLE_PULL_TO_REFRESH = false;
 const MAX_NUMERIC_FIELD_VALUE = 999999999;
 const ALLOWED_MAINTENANCE_IMAGE_TYPES = new Set(["image/png", "image/jpeg"]);
 const NUMERIC_FIELD_CONFIG = {
@@ -262,6 +263,20 @@ function updateSessionUI() {
 
 function isCollapsibleSectionOpen(section) {
   return Boolean(section && section.classList.contains("open"));
+}
+
+function getCurrentView() {
+  const vehiclesScreen = document.getElementById("vehicles-screen");
+
+  if (dashboard && !dashboard.classList.contains("hidden") && selectedVehicleId) {
+    return "dashboard";
+  }
+
+  if (vehiclesScreen && !vehiclesScreen.classList.contains("hidden")) {
+    return "vehicles";
+  }
+
+  return "unknown";
 }
 
 function isDashboardDetailSurface(target) {
@@ -1282,8 +1297,25 @@ async function refreshDashboardView() {
   }
 }
 
+async function refreshCurrentView() {
+  const currentView = getCurrentView();
+
+  if (currentView === "dashboard") {
+    await refreshDashboardView();
+    return;
+  }
+
+  if (currentView === "vehicles") {
+    await loadVehiclesScreen();
+  }
+}
+
 function setupPullToRefresh() {
   if (!dashboard) return;
+  if (!ENABLE_PULL_TO_REFRESH) {
+    setPullRefreshState(false, "Desliza para actualizar", false);
+    return;
+  }
 
   const threshold = 72;
   const captureThreshold = 18;
@@ -1426,7 +1458,7 @@ function setupPullToRefresh() {
       return;
     }
 
-    await refreshDashboardView();
+    await refreshCurrentView();
   });
 
   document.addEventListener(
