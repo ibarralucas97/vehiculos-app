@@ -1,4 +1,4 @@
-const CACHE_NAME = "rodado-control-v6";
+const CACHE_NAME = "rodado-control-v8";
 const APP_SHELL = [
   "/",
   "/index.html",
@@ -58,6 +58,59 @@ self.addEventListener("fetch", (event) => {
           return networkResponse;
         })
         .catch(() => caches.match("/index.html"));
+    })
+  );
+});
+
+
+self.addEventListener("push", (event) => {
+  let payload = {};
+
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch (_error) {
+    payload = {
+      title: "Rodado Control",
+      body: event.data ? event.data.text() : "Tienes una nueva notificacion.",
+    };
+  }
+
+  const title = payload.title || "Rodado Control";
+  const options = {
+    body: payload.body || "Tienes una nueva notificacion.",
+    icon: payload.icon || "/icon-192.png",
+    badge: payload.badge || "/icon-192.png",
+    tag: payload.tag || "rodado-control",
+    renotify: Boolean(payload.renotify),
+    data: {
+      url: payload.data?.url || payload.url || "/",
+      type: payload.data?.type || "general",
+      vehicleId: payload.data?.vehicleId || null,
+      maintenanceId: payload.data?.maintenanceId || null,
+    },
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+
+  const targetUrl = new URL(event.notification.data?.url || "/", self.location.origin).href;
+
+  event.waitUntil(
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then((windowClients) => {
+      for (const client of windowClients) {
+        if ("focus" in client) {
+          return client.navigate(targetUrl).then(() => client.focus());
+        }
+      }
+
+      if (clients.openWindow) {
+        return clients.openWindow(targetUrl);
+      }
+
+      return null;
     })
   );
 });

@@ -26,6 +26,18 @@
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body class="splash-active">
+    <div class="app-utilities">
+      <button id="theme-toggle" class="theme-toggle" type="button" aria-pressed="false">Modo oscuro</button>
+    </div>
+    <div id="pwa-install-banner" class="pwa-install-banner hidden">
+      <div class="pwa-install-banner-copy">
+        <p class="pwa-install-banner-title">Instalá Rodado Control</p>
+        <p class="pwa-install-banner-text">Para recibir notificaciones y una mejor experiencia, instalá Rodado Control en tu dispositivo.</p>
+        <p class="pwa-install-banner-subtext">Desde el menú del navegador seleccioná "Agregar a inicio" o "Instalar aplicación".</p>
+      </div>
+      <button id="pwa-install-dismiss" class="ghost pwa-install-dismiss" type="button">Entendido</button>
+    </div>
+
     <div id="splash-screen" class="splash-screen">
       <div class="splash-content">
         <div class="splash-logo">
@@ -269,7 +281,11 @@
       </section>
 
       <footer class="app-footer">
-        <p>Copyright Rodado Control. Desarrollado por Lucas Ibarra.</p>
+        <div class="app-footer-card">
+          <p class="app-footer-title">Rodado Control</p>
+          <p class="app-footer-copy">Gestion simple de vehiculos y mantenimientos.</p>
+          <p class="app-footer-meta">Desarrollado por Lucas Ibarra <span id="footer-year"></span></p>
+        </div>
       </footer>
     </main>
 
@@ -397,6 +413,22 @@
                 <input name="reminders_enabled" type="checkbox" checked />
               </label>
               <p class="inline-help">La unidad se usa para mostrar distancias. Los datos actuales se conservan.</p>
+
+              <div class="notification-settings-panel">
+                <div class="notification-settings-header">
+                  <div>
+                    <h3>Notificaciones push</h3>
+                    <p class="section-copy">Reutiliza esta configuracion para enviar recordatorios reales a tus dispositivos.</p>
+                  </div>
+                </div>
+                <p id="notifications-status" class="message notification-status">Cargando estado de notificaciones...</p>
+                <p id="notifications-install-hint" class="inline-help hidden">Para recibir notificaciones y una mejor experiencia, instalá Rodado Control en tu dispositivo.</p>
+                <div class="notification-actions">
+                  <button id="notifications-toggle-button" type="button">Activar notificaciones</button>
+                  <button id="notifications-test-button" class="ghost" type="button">Enviar prueba</button>
+                </div>
+              </div>
+
               <button id="preferences-save-button" type="submit">Guardar preferencias</button>
               <p id="preferences-message" class="message"></p>
             </form>
@@ -434,9 +466,30 @@
       </div>
     </div>
 
+    <div id="maintenance-detail-modal" class="modal hidden">
+      <div class="modal-content modal-content-wide maintenance-detail-modal-content">
+        <button class="modal-close" id="maintenance-detail-close" type="button">✕</button>
+        <div class="maintenance-detail-header">
+          <div>
+            <p class="maintenance-detail-kicker">Detalle de mantenimiento</p>
+            <h2 id="maintenance-detail-title">Mantenimiento</h2>
+          </div>
+          <button id="maintenance-detail-delete" class="ghost maintenance-delete-button" type="button">Eliminar</button>
+        </div>
+        <div id="maintenance-detail-body" class="maintenance-detail-layout"></div>
+      </div>
+    </div>
+
+    <div id="maintenance-image-lightbox" class="modal hidden">
+      <div class="modal-content maintenance-lightbox-content">
+        <button class="modal-close" id="maintenance-image-lightbox-close" type="button">✕</button>
+        <img id="maintenance-image-lightbox-img" alt="Imagen ampliada del mantenimiento" />
+      </div>
+    </div>
+
     <div id="ui-modal" class="modal hidden">
       <div class="modal-content modal-content-wide">
-        <button class="modal-close" id="ui-modal-close" type="button">?</button>
+        <button class="modal-close" id="ui-modal-close" type="button">✕</button>
         <h2 id="ui-modal-title">Informacion</h2>
         <div id="ui-modal-body" class="modal-body-copy"></div>
         <div class="modal-actions">

@@ -82,9 +82,34 @@ const passwordMessage = document.getElementById("password-message");
 const passwordSaveButton = document.getElementById("password-save-button");
 const settingsLogoutButton = document.getElementById("settings-logout-button");
 const filtersResetButton = document.getElementById("filters-reset-button");
+const notificationsStatus = document.getElementById("notifications-status");
+const notificationsInstallHint = document.getElementById("notifications-install-hint");
+const notificationsToggleButton = document.getElementById("notifications-toggle-button");
+const notificationsTestButton = document.getElementById("notifications-test-button");
+const pwaInstallBanner = document.getElementById("pwa-install-banner");
+const pwaInstallDismiss = document.getElementById("pwa-install-dismiss");
+
+const THEME_PREFERENCE_KEY = "mygarage_theme";
+const LIGHT_THEME_COLOR = "#0f6c8d";
+const DARK_THEME_COLOR = "#121922";
+const PWA_INSTALL_DISMISS_KEY = "mygarage_pwa_install_dismissed";
+const themeToggleButton = document.getElementById("theme-toggle");
+const footerYear = document.getElementById("footer-year");
+const maintenanceDetailModal = document.getElementById("maintenance-detail-modal");
+const maintenanceDetailTitle = document.getElementById("maintenance-detail-title");
+const maintenanceDetailBody = document.getElementById("maintenance-detail-body");
+const maintenanceDetailClose = document.getElementById("maintenance-detail-close");
+const maintenanceDetailDelete = document.getElementById("maintenance-detail-delete");
+const maintenanceImageLightbox = document.getElementById("maintenance-image-lightbox");
+const maintenanceImageLightboxImg = document.getElementById("maintenance-image-lightbox-img");
+const maintenanceImageLightboxClose = document.getElementById("maintenance-image-lightbox-close");
+const themeColorMeta = document.querySelector('meta[name="theme-color"]');
 
 let maintenanceImageRefs = getMaintenanceImageRefs();
 let latestRecordsLoaded = false;
+let currentMaintenanceRecords = new Map();
+let notificationsServerStatus = null;
+let notificationStateLoading = false;
 let backButtonTouchState = {
   active: false,
   moved: false,
@@ -94,15 +119,6 @@ let backButtonTouchState = {
   startY: 0,
   lastTouchEndAt: 0,
 };
-let debugLogEntries = [];
-let debugPanelElements = {
-  root: null,
-  body: null,
-  currentView: null,
-};
-let debugPanelMinimized = false;
-let lastDebugTouchMoveAt = 0;
-let lastDebugView = "unknown";
 let activeView = "unknown";
 let touchGestureState = {
   active: false,
@@ -113,7 +129,6 @@ let touchGestureState = {
 let touchScrollResetTimer = null;
 let isTouchScrolling = false;
 const TOUCH_SCROLL_THRESHOLD = 8;
-const DEBUG_LOG_LIMIT = 40;
 
 function buildFullName(user = {}) {
   return [user.nombre, user.apellido].filter(Boolean).join(" ").trim() || user.fullName || user.email || "";
@@ -192,6 +207,352 @@ function saveMaintenanceImageRefs() {
   localStorage.setItem(MAINTENANCE_IMAGES_KEY, JSON.stringify(maintenanceImageRefs));
 }
 
+function getSavedTheme() {
+  try {
+    return localStorage.getItem(THEME_PREFERENCE_KEY);
+  } catch (_error) {
+    return null;
+  }
+}
+
+function getPreferredTheme() {
+  const savedTheme = getSavedTheme();
+  if (savedTheme === "dark" || savedTheme === "light") {
+    return savedTheme;
+  }
+
+  return window.matchMedia?.("(prefers-color-scheme: dark)")?.matches ? "dark" : "light";
+}
+
+function applyTheme(theme) {
+  const resolvedTheme = theme === "dark" ? "dark" : "light";
+  document.body.dataset.theme = resolvedTheme;
+
+  if (themeToggleButton) {
+    themeToggleButton.textContent = resolvedTheme === "dark" ? "Modo claro" : "Modo oscuro";
+    themeToggleButton.setAttribute("aria-pressed", String(resolvedTheme === "dark"));
+  }
+
+  if (themeColorMeta) {
+    themeColorMeta.setAttribute("content", resolvedTheme === "dark" ? DARK_THEME_COLOR : LIGHT_THEME_COLOR);
+  }
+}
+
+function persistTheme(theme) {
+  try {
+    localStorage.setItem(THEME_PREFERENCE_KEY, theme);
+  } catch (_error) {
+    // Ignore storage issues on private sessions.
+  }
+}
+
+function toggleTheme() {
+  const nextTheme = document.body.dataset.theme === "dark" ? "light" : "dark";
+  persistTheme(nextTheme);
+  applyTheme(nextTheme);
+}
+
+function syncFooterYear() {
+  if (footerYear) {
+    footerYear.textContent = String(new Date().getFullYear());
+  }
+}
+
+function isStandaloneApp() {
+  return window.matchMedia?.("(display-mode: standalone)")?.matches || window.navigator.standalone === true;
+}
+
+function isMobileDevice() {
+  return window.matchMedia?.("(pointer: coarse)")?.matches || window.innerWidth <= 900;
+}
+
+function setNotificationStatus(message, tone = "warning") {
+  if (!notificationsStatus) return;
+  notificationsStatus.textContent = message;
+  notificationsStatus.classList.remove("is-success", "is-warning", "is-error");
+
+  if (tone === "success") notificationsStatus.classList.add("is-success");
+  if (tone === "warning") notificationsStatus.classList.add("is-warning");
+  if (tone === "error") notificationsStatus.classList.add("is-error");
+}
+
+function shouldShowPwaInstallBanner() {
+  if (!pwaInstallBanner) return false;
+
+  const dismissed = (() => {
+    try {
+      return localStorage.getItem(PWA_INSTALL_DISMISS_KEY) === "1";
+    } catch (_error) {
+      return false;
+    }
+  })();
+
+  return isMobileDevice() && !isStandaloneApp() && !dismissed;
+}
+
+function updatePwaInstallBanner() {
+  if (!pwaInstallBanner) return;
+  pwaInstallBanner.classList.toggle("hidden", !shouldShowPwaInstallBanner());
+}
+
+function dismissPwaInstallBanner() {
+  try {
+    localStorage.setItem(PWA_INSTALL_DISMISS_KEY, "1");
+  } catch (_error) {
+    // Ignore storage issues.
+  }
+  updatePwaInstallBanner();
+}
+
+function isPushSupportedInBrowser() {
+  return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+}
+
+function base64UrlToUint8Array(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const normalized = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = atob(normalized);
+  return Uint8Array.from(rawData, (char) => char.charCodeAt(0));
+}
+
+function buildDeviceInfo() {
+  return {
+    userAgent: navigator.userAgent,
+    platform: navigator.platform,
+    language: navigator.language,
+    viewport: `${window.innerWidth}x${window.innerHeight}`,
+    standalone: isStandaloneApp(),
+    source: "settings",
+  };
+}
+
+async function fetchNotificationServerStatus() {
+  const session = getSession();
+
+  if (!session?.id) {
+    return null;
+  }
+
+  const status = await fetchJson(`/notifications/status?user_id=${session.id}`);
+  notificationsServerStatus = status;
+  return status;
+}
+
+async function getCurrentPushSubscription() {
+  const registration = await navigator.serviceWorker.ready;
+  return registration.pushManager.getSubscription();
+}
+
+async function refreshNotificationControls() {
+  if (!notificationsStatus || !notificationsToggleButton || !notificationsTestButton) {
+    return;
+  }
+
+  const session = getSession();
+  if (!session?.id) {
+    return;
+  }
+
+  if (notificationStateLoading) {
+    return;
+  }
+
+  notificationStateLoading = true;
+
+  try {
+    notificationsToggleButton.disabled = true;
+    notificationsTestButton.disabled = true;
+    notificationsInstallHint?.classList.add("hidden");
+
+    if (!isPushSupportedInBrowser()) {
+      setNotificationStatus("Este navegador no soporta notificaciones push reales.", "error");
+      return;
+    }
+
+    const status = await fetchNotificationServerStatus();
+    const subscription = await getCurrentPushSubscription();
+    const hasSubscription = Boolean(subscription) && Number(status?.subscriptionCount || 0) > 0;
+    const permission = Notification.permission;
+    const remindersPaused = session.remindersEnabled === false;
+
+    if (!status?.pushConfigured) {
+      setNotificationStatus("El servidor todavia no tiene push configurado.", "error");
+      return;
+    }
+
+    if (permission === "denied") {
+      setNotificationStatus("Permiso denegado. Habilitalo desde la configuracion del navegador.", "error");
+    } else if (hasSubscription) {
+      setNotificationStatus(
+        remindersPaused
+          ? "Notificaciones activadas. Los recordatorios automaticos estan pausados en tu configuracion."
+          : "Notificaciones activadas.",
+        remindersPaused ? "warning" : "success"
+      );
+    } else if (permission === "granted") {
+      setNotificationStatus("Permiso concedido. Falta activar la suscripcion push.", "warning");
+    } else {
+      setNotificationStatus("Activa las notificaciones para recibir recordatorios reales.", "warning");
+    }
+
+    if (isMobileDevice() && !isStandaloneApp()) {
+      notificationsInstallHint?.classList.remove("hidden");
+    }
+
+    notificationsToggleButton.textContent = hasSubscription ? "Desactivar notificaciones" : "Activar notificaciones";
+    notificationsToggleButton.disabled = false;
+    notificationsTestButton.disabled = !hasSubscription;
+  } catch (error) {
+    setNotificationStatus(error.message, "error");
+  } finally {
+    notificationStateLoading = false;
+  }
+}
+
+async function enablePushNotifications() {
+  const session = getSession();
+
+  if (!session?.id) {
+    throw new Error("No hay una sesion activa.");
+  }
+
+  const status = notificationsServerStatus || (await fetchNotificationServerStatus());
+
+  if (!status?.pushConfigured || !status?.vapidPublicKey) {
+    throw new Error("El servidor no tiene push configurado.");
+  }
+
+  const permission = await Notification.requestPermission();
+
+  if (permission !== "granted") {
+    throw new Error("No se concedio el permiso para mostrar notificaciones.");
+  }
+
+  const registration = await navigator.serviceWorker.ready;
+  let subscription = await registration.pushManager.getSubscription();
+
+  if (!subscription) {
+    subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: base64UrlToUint8Array(status.vapidPublicKey),
+    });
+  }
+
+  await fetchJson("/notifications/subscribe", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      user_id: session.id,
+      subscription: subscription.toJSON(),
+      device_info: buildDeviceInfo(),
+    }),
+  });
+}
+
+async function disablePushNotifications() {
+  const session = getSession();
+
+  if (!session?.id) {
+    throw new Error("No hay una sesion activa.");
+  }
+
+  const registration = await navigator.serviceWorker.ready;
+  const subscription = await registration.pushManager.getSubscription();
+
+  if (subscription?.endpoint) {
+    await fetchJson("/notifications/subscribe", {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        user_id: session.id,
+        endpoint: subscription.endpoint,
+      }),
+    });
+
+    await subscription.unsubscribe().catch(() => {});
+  }
+}
+
+async function handleNotificationToggle() {
+  setButtonLoading(notificationsToggleButton, true, "Procesando...");
+
+  try {
+    const subscription = isPushSupportedInBrowser() ? await getCurrentPushSubscription() : null;
+
+    if (subscription && Number(notificationsServerStatus?.subscriptionCount || 0) > 0) {
+      await disablePushNotifications();
+    } else {
+      await enablePushNotifications();
+    }
+
+    await refreshNotificationControls();
+  } catch (error) {
+    setNotificationStatus(error.message, "error");
+  } finally {
+    setButtonLoading(notificationsToggleButton, false, "Procesando...");
+  }
+}
+
+async function sendPushTestNotification() {
+  const session = getSession();
+
+  if (!session?.id) {
+    throw new Error("No hay una sesion activa.");
+  }
+
+  setButtonLoading(notificationsTestButton, true, "Enviando...");
+
+  try {
+    await fetchJson("/notifications/test", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        user_id: session.id,
+      }),
+    });
+
+    setNotificationStatus("Notificacion de prueba enviada.", "success");
+  } catch (error) {
+    setNotificationStatus(error.message, "error");
+  } finally {
+    setButtonLoading(notificationsTestButton, false, "Enviando...");
+  }
+}
+
+function applyNotificationIntentFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const targetView = params.get("view");
+  const vehicleId = Number(params.get("vehicleId") || 0);
+  const hasIntent = targetView || vehicleId;
+
+  if (!hasIntent) {
+    return;
+  }
+
+  if (targetView === "dashboard" && vehicleId) {
+    try {
+      sessionStorage.setItem(
+        VIEW_STATE_KEY,
+        JSON.stringify({
+          view: "dashboard",
+          vehicleId,
+        })
+      );
+    } catch (_error) {
+      // Ignore storage issues.
+    }
+  }
+
+  const cleanUrl = `${window.location.pathname}${window.location.hash || ""}`;
+  history.replaceState({}, document.title, cleanUrl);
+}
+
 function syncSession(user) {
   if (!user) return null;
   saveSession(user);
@@ -200,7 +561,7 @@ function syncSession(user) {
 }
 
 function setButtonLoading(button, isLoading, loadingText = "Guardando...") {
-  if (!button) return; // 👈 salva todo
+  if (!button) return; // ðŸ‘ˆ salva todo
 
   if (isLoading) {
     button.dataset.originalText = button.textContent;
@@ -245,21 +606,11 @@ function updateSessionUI() {
     loginMessage.textContent = "";
 
     if (currentView === "dashboard") {
-      if (hasCurrentVehicle) {
-        debugLog("[SESSION UI] dashboard activo, no se navega", {
-          currentView,
-          selectedVehicleId,
-          reason: "sessionUiOnlyNoNavigation",
-        });
-      } else {
+      if (!hasCurrentVehicle) {
         setView("vehicles", "updateSessionUI", null, { reason: "noCurrentVehicle" });
       }
     } else if (currentView === "vehicles") {
-      debugLog("[SESSION UI] sessionUiOnlyNoNavigation", {
-        currentView,
-        selectedVehicleId,
-        reason: "sessionUiOnlyNoNavigation",
-      });
+      // UI only: no navigation needed.
     } else if (currentView === "unknown" || currentView === "login") {
       setView("vehicles", "updateSessionUI", null, { reason: "initialSessionView" });
     } else {
@@ -320,84 +671,22 @@ function getEventLabel(target) {
 }
 
 function logNavigation(origin, destination, details = {}) {
-  const payload = {
+  return {
     source: origin,
     target: destination,
     currentView: getCurrentView(),
     timestamp: new Date().toISOString(),
     ...details,
   };
-
-  console.log("[NAVIGATION]", payload);
-  debugLog(`[NAVIGATION] ${origin} -> ${destination}`, payload);
-  updateDebugCurrentView(destination);
 }
 
 function isTouchCapableDevice() {
   return window.matchMedia?.("(pointer: coarse)")?.matches || navigator.maxTouchPoints > 0;
 }
 
-function stringifyDebugValue(value) {
-  if (value === undefined) return "undefined";
-  if (value === null) return "null";
-  if (typeof value === "string") return value;
+function updateDebugCurrentView() {}
 
-  try {
-    return JSON.stringify(value);
-  } catch (_error) {
-    return String(value);
-  }
-}
-
-function formatDebugTime(date = new Date()) {
-  return date.toLocaleTimeString("es-AR", {
-    hour12: false,
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-}
-
-function renderDebugEntries() {
-  if (!debugPanelElements.body) {
-    return;
-  }
-
-  debugPanelElements.body.innerHTML = debugLogEntries
-    .map((entry) => `<div class="debug-log-line">[${entry.time}] ${entry.message}</div>`)
-    .join("");
-  debugPanelElements.body.scrollTop = debugPanelElements.body.scrollHeight;
-}
-
-function updateDebugCurrentView(nextView = getCurrentView()) {
-  if (debugPanelElements.currentView) {
-    debugPanelElements.currentView.textContent = `CURRENT VIEW: ${nextView}`;
-  }
-
-  if (nextView !== lastDebugView) {
-    appendDebugEntry(`[VIEW CHANGE] ${lastDebugView} -> ${nextView}`);
-    lastDebugView = nextView;
-  }
-}
-
-function appendDebugEntry(message) {
-  const entry = {
-    time: formatDebugTime(),
-    message,
-  };
-
-  debugLogEntries.push(entry);
-  if (debugLogEntries.length > DEBUG_LOG_LIMIT) {
-    debugLogEntries = debugLogEntries.slice(-DEBUG_LOG_LIMIT);
-  }
-
-  renderDebugEntries();
-}
-
-function debugLog(message, data = null) {
-  const suffix = data ? ` ${stringifyDebugValue(data)}` : "";
-  appendDebugEntry(`${message}${suffix}`);
-}
+function debugLog() {}
 
 function clearTouchScrollState() {
   if (touchScrollResetTimer) {
@@ -417,27 +706,11 @@ function scheduleTouchScrollReset() {
 
   touchScrollResetTimer = window.setTimeout(() => {
     clearTouchScrollState();
-    debugLog("[TOUCH SCROLL RESET]", {
-      currentView: getCurrentView(),
-    });
   }, 160);
 }
 
 function setView(nextView, source, event = null, extra = {}) {
   const previousView = getCurrentView();
-  const payload = {
-    source,
-    previousView,
-    nextView,
-    eventType: event?.type || null,
-    targetElement: getEventLabel(event?.target),
-    currentView: previousView,
-    isTouchScrolling,
-    timestamp: new Date().toISOString(),
-    ...extra,
-  };
-
-  debugLog("[VIEW REQUEST]", payload);
 
   if (
     previousView === "dashboard" &&
@@ -445,17 +718,12 @@ function setView(nextView, source, event = null, extra = {}) {
     isTouchScrolling &&
     source !== "explicitBackButton"
   ) {
-    debugLog("[BLOCKED VIEW CHANGE DURING TOUCH]", payload);
-    console.trace("[VIEW CHANGE TRACE BLOCKED]", payload);
     return false;
   }
 
   if (nextView === previousView) {
-    updateDebugCurrentView(nextView);
     return true;
   }
-
-  console.trace("[VIEW CHANGE TRACE]", payload);
 
   if (nextView === "dashboard") {
     welcomeScreen?.classList.add("hidden");
@@ -472,51 +740,13 @@ function setView(nextView, source, event = null, extra = {}) {
   }
 
   activeView = nextView;
-  debugLog("[VIEW CHANGE]", {
-    source,
-    previousView,
-    nextView,
-    timestamp: new Date().toISOString(),
-    ...extra,
-  });
   updateTopbarContext();
   updateDebugCurrentView(nextView);
   return true;
 }
 
-function setupDebugPanel() {
-  const panel = document.createElement("aside");
-  panel.className = "debug-panel";
-  panel.innerHTML = `
-    <button type="button" class="debug-panel-toggle" aria-expanded="true">DEBUG LOGS</button>
-    <div class="debug-panel-content">
-      <div class="debug-panel-current-view">CURRENT VIEW: ${getCurrentView()}</div>
-      <div class="debug-panel-body"></div>
-    </div>
-  `;
-
-  document.body.appendChild(panel);
-
-  debugPanelElements = {
-    root: panel,
-    body: panel.querySelector(".debug-panel-body"),
-    currentView: panel.querySelector(".debug-panel-current-view"),
-  };
-
-  const toggleButton = panel.querySelector(".debug-panel-toggle");
-  toggleButton?.addEventListener("click", () => {
-    debugPanelMinimized = !debugPanelMinimized;
-    panel.classList.toggle("is-minimized", debugPanelMinimized);
-    toggleButton.setAttribute("aria-expanded", String(!debugPanelMinimized));
-  });
-
-  window.debugLog = debugLog;
-  updateDebugCurrentView();
-  appendDebugEntry("[DEBUG] panel listo");
-}
-
-function setupDebugObservers() {
-  const touchLogger = (event) => {
+function setupTouchScrollTracking() {
+  const trackTouchScroll = (event) => {
     const touch = event.touches?.[0] || event.changedTouches?.[0] || null;
 
     if (event.type === "touchstart" && touch) {
@@ -548,74 +778,12 @@ function setupDebugObservers() {
         clearTouchScrollState();
       }
     }
-
-    if (event.type === "touchmove") {
-      const now = Date.now();
-      if (now - lastDebugTouchMoveAt < 180) {
-        return;
-      }
-      lastDebugTouchMoveAt = now;
-    }
-
-    debugLog(`[${event.type.toUpperCase()}]`, {
-      eventType: event.type,
-      currentView: getCurrentView(),
-      targetElement: getEventLabel(event.target),
-      currentTarget: getEventLabel(event.currentTarget),
-      x: touch ? Math.round(touch.clientX) : null,
-      y: touch ? Math.round(touch.clientY) : null,
-    });
   };
 
-  document.addEventListener("touchstart", touchLogger, { passive: true, capture: true });
-  document.addEventListener("touchmove", touchLogger, { passive: true, capture: true });
-  document.addEventListener("touchend", touchLogger, { passive: true, capture: true });
-  document.addEventListener("touchcancel", touchLogger, { passive: true, capture: true });
-
-  document.addEventListener("click", (event) => {
-    debugLog("[CLICK]", {
-      eventType: event.type,
-      currentView: getCurrentView(),
-      targetElement: getEventLabel(event.target),
-      currentTarget: getEventLabel(event.currentTarget),
-      detail: event.detail,
-    });
-  }, true);
-
-  window.addEventListener("popstate", (event) => {
-    debugLog("[POPSTATE]", {
-      currentView: getCurrentView(),
-      state: event.state ?? null,
-      href: window.location.href,
-    });
-  });
-
-  window.addEventListener("hashchange", () => {
-    debugLog("[HASHCHANGE]", {
-      currentView: getCurrentView(),
-      href: window.location.href,
-    });
-  });
-
-  const originalPushState = history.pushState.bind(history);
-  history.pushState = function patchedPushState(state, unused, url) {
-    debugLog("[HISTORY PUSHSTATE]", {
-      currentView: getCurrentView(),
-      state,
-      url: url || null,
-    });
-    return originalPushState(state, unused, url);
-  };
-
-  const originalReplaceState = history.replaceState.bind(history);
-  history.replaceState = function patchedReplaceState(state, unused, url) {
-    debugLog("[HISTORY REPLACESTATE]", {
-      currentView: getCurrentView(),
-      state,
-      url: url || null,
-    });
-    return originalReplaceState(state, unused, url);
-  };
+  document.addEventListener("touchstart", trackTouchScroll, { passive: true, capture: true });
+  document.addEventListener("touchmove", trackTouchScroll, { passive: true, capture: true });
+  document.addEventListener("touchend", trackTouchScroll, { passive: true, capture: true });
+  document.addEventListener("touchcancel", trackTouchScroll, { passive: true, capture: true });
 }
 
 function persistViewState() {
@@ -726,6 +894,7 @@ async function openSettingsModal() {
   try {
     const profile = await fetchCurrentProfile();
     fillPreferencesForm(profile);
+    await refreshNotificationControls();
     if (preferencesMessage) preferencesMessage.textContent = "";
   } catch (error) {
     if (preferencesMessage) preferencesMessage.textContent = error.message;
@@ -1110,11 +1279,142 @@ function persistMaintenanceImages(items) {
   }
 }
 
+function cacheMaintenanceItems(items = []) {
+  items.forEach((item) => {
+    if (!item?.id) return;
+    currentMaintenanceRecords.set(Number(item.id), {
+      ...currentMaintenanceRecords.get(Number(item.id)),
+      ...item,
+      image_source: getMaintenanceImageSource(item),
+    });
+  });
+}
+
+function removeCachedMaintenance(id) {
+  currentMaintenanceRecords.delete(Number(id));
+  delete maintenanceImageRefs[id];
+  saveMaintenanceImageRefs();
+}
+
 function getMaintenanceImageSource(item) {
   return item?.image_source || maintenanceImageRefs[item?.id] || "";
 }
 
+function getMaintenanceRecord(id) {
+  return currentMaintenanceRecords.get(Number(id)) || null;
+}
+
+function formatMaintenanceDate(value) {
+  if (!value) return "Sin fecha";
+  return new Date(`${value}T00:00:00`).toLocaleDateString("es-AR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function buildMaintenanceDetailMarkup(item) {
+  const session = normalizeSessionUser(getSession() || {});
+  const imageSource = getMaintenanceImageSource(item);
+  const userLabel = buildFullName(session) || session.email || "Sin dato";
+  const observations = item.observaciones || item.observacion || "Sin observaciones";
+
+  return `
+    <div class="maintenance-detail-grid">
+      <div class="maintenance-detail-item"><strong>Tipo</strong><span>${item.accion || "Sin dato"}</span></div>
+      <div class="maintenance-detail-item"><strong>Fecha</strong><span>${formatMaintenanceDate(item.fecha)}</span></div>
+      <div class="maintenance-detail-item"><strong>Kilometraje</strong><span>${formatDistance(item.km)}</span></div>
+      <div class="maintenance-detail-item"><strong>Costo</strong><span>${formatCurrency(item.cost)}</span></div>
+      <div class="maintenance-detail-item"><strong>Vehiculo</strong><span>${item.vehiculo || "Sin dato"}${item.modelo ? ` - ${item.modelo}` : ""}</span></div>
+      <div class="maintenance-detail-item"><strong>Patente</strong><span>${item.patente || "Sin dato"}</span></div>
+      <div class="maintenance-detail-item"><strong>Taller / lugar</strong><span>${item.lugar || "Sin dato"}</span></div>
+      <div class="maintenance-detail-item"><strong>Usuario</strong><span>${userLabel}</span></div>
+      <div class="maintenance-detail-item"><strong>Descripcion</strong><span>${item.accion || "Sin dato"}</span></div>
+      <div class="maintenance-detail-item"><strong>Observaciones</strong><span>${observations}</span></div>
+    </div>
+    <div class="maintenance-detail-media">
+      ${
+        imageSource
+          ? `
+            <button type="button" class="maintenance-image-button" onclick="openMaintenanceImageLightboxById(${Number(item.id)})">
+              <img src="${imageSource}" alt="Imagen del mantenimiento ${item.accion || ""}" />
+            </button>
+            <p class="maintenance-image-caption">Toca la imagen para ampliarla.</p>
+          `
+          : '<div class="empty">Sin imagen adjunta</div>'
+      }
+    </div>
+  `;
+}
+
+function openMaintenanceDetail(id) {
+  const item = getMaintenanceRecord(id);
+  if (!item || !maintenanceDetailModal || !maintenanceDetailBody) return;
+
+  maintenanceDetailTitle.textContent = item.accion || "Detalle de mantenimiento";
+  maintenanceDetailBody.innerHTML = buildMaintenanceDetailMarkup(item);
+  if (maintenanceDetailDelete) {
+    maintenanceDetailDelete.dataset.maintenanceId = String(item.id);
+  }
+  openModal("maintenance-detail-modal");
+}
+
+function closeMaintenanceDetail() {
+  closeModal("maintenance-detail-modal");
+  if (maintenanceDetailBody) {
+    maintenanceDetailBody.innerHTML = "";
+  }
+  if (maintenanceDetailDelete) {
+    delete maintenanceDetailDelete.dataset.maintenanceId;
+  }
+}
+
+function openMaintenanceImageLightboxById(id) {
+  const item = getMaintenanceRecord(id);
+  const imageSource = getMaintenanceImageSource(item);
+  if (!imageSource || !maintenanceImageLightboxImg) return;
+
+  maintenanceImageLightboxImg.src = imageSource;
+  openModal("maintenance-image-lightbox");
+}
+
+function closeMaintenanceImageLightbox() {
+  if (maintenanceImageLightboxImg) {
+    maintenanceImageLightboxImg.removeAttribute("src");
+  }
+  closeModal("maintenance-image-lightbox");
+}
+
+async function refreshMaintenanceViewsAfterMutation() {
+  latestRecordsLoaded = false;
+
+  if (selectedVehicleId) {
+    try {
+      await loadLatestRecords();
+    } catch (error) {
+      setLatestRecordsState("error", error.message);
+    }
+  } else {
+    setLatestRecordsState("initial");
+  }
+
+  if (hasActiveFilters()) {
+    try {
+      await loadMaintenance();
+    } catch (error) {
+      setHistoryState("error", error.message);
+    }
+  } else {
+    setHistoryState("initial");
+  }
+
+  if (typeof loadDashboardOverview === "function" && selectedVehicleId) {
+    await loadDashboardOverview();
+  }
+}
+
 function renderMaintenanceCards(items, container) {
+  cacheMaintenanceItems(items);
   if (!container) return;
 
   if (items.length === 0) {
@@ -1142,6 +1442,10 @@ function renderMaintenanceCards(items, container) {
             <span>Unidad: ${formatDistance(item.km)}</span>
             <span>Taller: ${item.lugar}</span>
             <span>Patente: ${item.patente}</span>
+          </div>
+          <div class="maintenance-card-actions">
+            <button class="ghost maintenance-card-button" type="button" onclick="openMaintenanceDetail(${Number(item.id)})">Ver detalle</button>
+            <button class="ghost maintenance-card-button danger" type="button" onclick="deleteMaintenance(${Number(item.id)})">Eliminar</button>
           </div>
         </article>
       `
@@ -1197,7 +1501,7 @@ async function loadPlacesList() {
 
   const places = await fetchJson(`/places?user_id=${session.id}`);
 
-  // 🔥 guardamos en memoria
+  // ðŸ”¥ guardamos en memoria
   currentPlaces = places;
 
   const container = document.getElementById("places-list");
@@ -1211,9 +1515,9 @@ async function loadPlacesList() {
       </div>
 
       <div class="item-actions">
-        <button onclick="viewPlace(${p.id})" title="Ver">👁</button>
-        <button onclick="editPlace(${p.id})" title="Editar">✏️</button>
-        <button onclick="deletePlace(${p.id})" title="Eliminar">🗑</button>
+        <button onclick="viewPlace(${p.id})" title="Ver">ðŸ‘</button>
+        <button onclick="editPlace(${p.id})" title="Editar">âœï¸</button>
+        <button onclick="deletePlace(${p.id})" title="Eliminar">ðŸ—‘</button>
       </div>
 
     </div>
@@ -1231,7 +1535,7 @@ async function loadVehiclesScreen() {
   const container = document.getElementById("vehicles-grid");
 
   if (vehicles.length === 0) {
-    container.innerHTML = "<p>No tenés vehículos aún</p>";
+    container.innerHTML = "<p>No tenÃ©s vehÃ­culos aÃºn</p>";
     return;
   }
 
@@ -1412,9 +1716,9 @@ async function loadVehiclesList() {
       </div>
 
       <div class="item-actions">
-        <button onclick="viewVehicle(${v.id})" title="Ver">👁</button>
-        <button onclick="editVehicle(${v.id})" title="Editar">✏️</button>
-        <button onclick="deleteVehicle(${v.id})" title="Eliminar">🗑</button>
+        <button onclick="viewVehicle(${v.id})" title="Ver">ðŸ‘</button>
+        <button onclick="editVehicle(${v.id})" title="Editar">âœï¸</button>
+        <button onclick="deleteVehicle(${v.id})" title="Eliminar">ðŸ—‘</button>
       </div>
 
     </div>
@@ -1497,7 +1801,7 @@ async function loadMaintenance() {
 
   if (usingFilters) {
     historyTitle.textContent = "Historial filtrado";
-    historyCopy.textContent = "Resultados según los filtros aplicados al vehículo seleccionado.";
+    historyCopy.textContent = "Resultados segÃºn los filtros aplicados al vehÃ­culo seleccionado.";
   } else {
     historyTitle.textContent = "Historial";
     historyCopy.textContent = "Busca mantenimientos por texto o rango de fechas.";
@@ -1681,7 +1985,7 @@ loginForm?.addEventListener("submit", async (event) => {
     syncSession(response.user);
     loginMessage.textContent = "";
 
-// 👇 NUEVO FLUJO
+// ðŸ‘‡ NUEVO FLUJO
 await loadVehiclesList();
 await loadVehiclesScreen();
 
@@ -1748,7 +2052,7 @@ vehicleForm?.addEventListener("submit", async (e) => {
     data.km_actual = normalizeNumericPayloadValue(data.km_actual, NUMERIC_FIELD_CONFIG.km_actual);
     data.ultimo_service_km = normalizeNumericPayloadValue(data.ultimo_service_km, NUMERIC_FIELD_CONFIG.ultimo_service_km);
     data.intervalo_km = normalizeNumericPayloadValue(data.intervalo_km, NUMERIC_FIELD_CONFIG.intervalo_km);
-    showAppLoading("Guardando vehículo...");
+    showAppLoading("Guardando vehÃ­culo...");
 
     if (editingVehicleId) {
       await fetchJson(`/vehicles/${editingVehicleId}`, {
@@ -1775,7 +2079,7 @@ vehicleForm?.addEventListener("submit", async (e) => {
 
     vehicleForm.reset();
     await refreshAllData();
-await loadVehiclesScreen(); // 👈 CLAVE
+await loadVehiclesScreen(); // ðŸ‘ˆ CLAVE
 closeModal("vehicles-modal");
 
   } catch (err) {
@@ -1833,7 +2137,7 @@ maintenanceForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
 
   if (!selectedVehicleId) {
-    formMessage.textContent = "Primero selecciona un vehículo.";
+    formMessage.textContent = "Primero selecciona un vehÃ­culo.";
     return;
   }
 
@@ -1928,6 +2232,46 @@ filtersResetButton?.addEventListener("click", () => {
 });
 
 
+async function deleteMaintenance(id) {
+  const session = getSession();
+  const confirmed = typeof openUiModal === "function"
+    ? await openUiModal({
+        title: "Â¿Eliminar este mantenimiento?",
+        bodyHtml: "<p>Esta accion no se puede deshacer.</p>",
+        confirmLabel: "Eliminar",
+        cancelLabel: "Cancelar",
+        showCancel: true,
+        destructive: true,
+      })
+    : true;
+
+  if (!confirmed) return;
+
+  try {
+    showAppLoading("Eliminando mantenimiento...");
+
+    await fetchJson(`/maintenance/${id}?user_id=${session.id}`, {
+      method: "DELETE",
+    });
+
+    removeCachedMaintenance(id);
+    closeMaintenanceDetail();
+    closeMaintenanceImageLightbox();
+    await refreshMaintenanceViewsAfterMutation();
+    setStatus("Mantenimiento eliminado");
+  } catch (error) {
+    if (typeof openUiModal === "function") {
+      await openUiModal({
+        title: "No se pudo eliminar",
+        bodyHtml: `<p>${error.message}</p>`,
+      });
+    }
+    throw error;
+  } finally {
+    hideAppLoading();
+  }
+}
+
 async function deleteVehicle(id) {
   const session = getSession();
 
@@ -1960,22 +2304,48 @@ async function deleteVehicle(id) {
   }
 }
 
+function syncModalBodyState() {
+  const hasVisibleModal = Array.from(document.querySelectorAll(".modal")).some((modal) => !modal.classList.contains("hidden"));
+  document.body.classList.toggle("modal-open", hasVisibleModal);
+}
+
 function openModal(id) {
   const modal = document.getElementById(id);
   if (!modal) return;
   modal.classList.remove("hidden");
-  // Prevent body scroll when modal is open
-  document.body.classList.add("modal-open");
+  syncModalBodyState();
 }
 
 function closeModal(id) {
   const modal = document.getElementById(id);
   if (!modal) return;
   modal.classList.add("hidden");
-  // Restore body scroll when modal is closed
-  document.body.classList.remove("modal-open");
+  syncModalBodyState();
 }
 
+maintenanceDetailClose?.addEventListener("click", closeMaintenanceDetail);
+maintenanceDetailDelete?.addEventListener("click", async () => {
+  const maintenanceId = Number(maintenanceDetailDelete.dataset.maintenanceId);
+  if (!maintenanceId) return;
+  try {
+    await deleteMaintenance(maintenanceId);
+  } catch (_error) {
+    // Error modal already shown above.
+  }
+});
+maintenanceImageLightboxClose?.addEventListener("click", closeMaintenanceImageLightbox);
+themeToggleButton?.addEventListener("click", toggleTheme);
+notificationsToggleButton?.addEventListener("click", () => {
+  handleNotificationToggle().catch((error) => {
+    setNotificationStatus(error.message, "error");
+  });
+});
+notificationsTestButton?.addEventListener("click", () => {
+  sendPushTestNotification().catch((error) => {
+    setNotificationStatus(error.message, "error");
+  });
+});
+pwaInstallDismiss?.addEventListener("click", dismissPwaInstallBanner);
 
 function viewPlace(id) {
   const place = currentPlaces.find((p) => p.id === id);
@@ -2060,9 +2430,9 @@ function hideAppLoading() {
 
 
 async function refreshAllData() {
-  await loadSelects();          // 👈 dropdowns
-  await loadVehiclesList();     // 👈 modal
-  await loadPlacesList();       // 👈 modal
+  await loadSelects();          // ðŸ‘ˆ dropdowns
+  await loadVehiclesList();     // ðŸ‘ˆ modal
+  await loadPlacesList();       // ðŸ‘ˆ modal
   renderCurrentVehicleKm();
 }
 
@@ -2079,11 +2449,6 @@ document.addEventListener("click", (e) => {
 function toggleSection(header, options = {}) {
   const section = header.closest(".collapsible");
   const willOpen = !section.classList.contains("open");
-  debugLog("[CARD TOGGLE]", {
-    currentView: getCurrentView(),
-    section: section?.id || getEventLabel(section),
-    willOpen,
-  });
   section.classList.toggle("open");
 
   if (willOpen && options.loadOnOpen === "latest" && !latestRecordsLoaded) {
@@ -2238,6 +2603,7 @@ preferencesForm?.addEventListener("submit", async (event) => {
     syncSession(response.user);
     fillPreferencesForm(response.user);
     renderCurrentVehicleKm();
+    await refreshNotificationControls();
     preferencesMessage.textContent = "Preferencias actualizadas.";
     setStatus("Preferencias guardadas");
   } catch (error) {
@@ -2419,9 +2785,13 @@ function registerServiceWorker() {
 
 (async function init() {
   setupNumericFieldValidation();
-  setupDebugPanel();
-  setupDebugObservers();
+  setupTouchScrollTracking();
+  applyTheme(getPreferredTheme());
+  syncFooterYear();
+  applyNotificationIntentFromUrl();
+  updatePwaInstallBanner();
   window.addEventListener("resize", () => {
+    updatePwaInstallBanner();
     if (getSession()?.email) {
       updateSessionUI();
     }
@@ -2452,3 +2822,4 @@ function registerServiceWorker() {
 
   updateDebugCurrentView();
 })();
+

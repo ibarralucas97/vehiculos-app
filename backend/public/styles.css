@@ -6,6 +6,7 @@
   --text: #1f2a3d;
   --muted: #697386;
   --line: #d9d5cd;
+  --border: #d9d5cd;
   --primary: #506d84;
   --primary-deep: #384c5d;
   --secondary: #8ea48c;
@@ -31,6 +32,8 @@ body {
   color: var(--text);
   background: linear-gradient(160deg, #f6f7f9 0%, #ece9e2 100%);
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 button,
@@ -45,6 +48,10 @@ select {
   padding: 18px 0 24px;
   opacity: 1;
   transition: opacity 0.45s ease;
+  min-height: 100vh;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
 }
 
 body.splash-active .app-shell {
@@ -1460,67 +1467,416 @@ body.modal-open {
 }
 
 
-.debug-panel {
-  position: fixed;
-  left: 10px;
-  right: 10px;
-  bottom: 10px;
-  z-index: 15000;
-  pointer-events: none;
+
+.app-utilities {
+  width: min(1120px, calc(100% - 28px));
+  margin: 0 auto;
+  padding-top: 14px;
+  display: flex;
+  justify-content: flex-end;
 }
 
-.debug-panel-toggle,
-.debug-panel-content {
-  pointer-events: auto;
+.theme-toggle {
+  width: auto;
+  min-height: 42px;
+  padding: 10px 14px;
+  border: 1px solid rgba(80, 109, 132, 0.18);
+  border-radius: 999px;
+  background: rgba(252, 251, 248, 0.92);
+  color: var(--primary-deep);
+  font-weight: 700;
+  box-shadow: 0 12px 28px rgba(31, 42, 61, 0.08);
 }
 
-.debug-panel-toggle {
-  width: 100%;
-  border: 0;
-  border-radius: 14px 14px 0 0;
-  padding: 10px 12px;
-  background: rgba(7, 12, 18, 0.92);
-  color: #f6f7f9;
-  font-size: 0.82rem;
+.theme-toggle:hover {
+  transform: translateY(-1px);
+}
+
+.app-footer {
+  margin-top: auto;
+  padding: 28px 0 8px;
+}
+
+.app-footer-card {
+  border: 1px solid rgba(80, 109, 132, 0.14);
+  border-radius: 22px;
+  padding: 18px 20px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(244, 239, 230, 0.92));
+  box-shadow: 0 14px 28px rgba(31, 42, 61, 0.06);
+  text-align: center;
+}
+
+.app-footer-title {
+  margin: 0 0 6px;
+  font-size: 0.95rem;
   font-weight: 800;
-  text-align: left;
+  color: var(--primary-deep);
 }
 
-.debug-panel-content {
-  max-height: 30vh;
-  overflow: auto;
-  padding: 10px 12px;
-  border-radius: 0 0 14px 14px;
-  background: rgba(7, 12, 18, 0.9);
-  color: #d7e0ea;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-top: 0;
-  font-size: 0.72rem;
-  line-height: 1.35;
+.app-footer-copy,
+.app-footer-meta {
+  margin: 0;
+  font-size: 0.83rem;
+  color: var(--muted);
 }
 
-.debug-panel.is-minimized .debug-panel-content {
-  display: none;
+.app-footer-meta {
+  margin-top: 6px;
 }
 
-.debug-panel.is-minimized .debug-panel-toggle {
+.maintenance-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.maintenance-card-button {
+  width: auto;
+  min-height: 40px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  box-shadow: none !important;
+}
+
+.maintenance-card-button.ghost {
+  background: rgba(80, 109, 132, 0.06);
+}
+
+.maintenance-card-button.danger {
+  color: #9b3d3d;
+  border-color: rgba(155, 61, 61, 0.22);
+}
+
+.maintenance-detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.maintenance-detail-kicker {
+  margin: 0 0 6px;
+  font-size: 0.76rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--primary);
+}
+
+.maintenance-delete-button {
+  width: auto;
+  min-height: 40px;
+  white-space: nowrap;
+  color: #9b3d3d;
+  border-color: rgba(155, 61, 61, 0.24);
+}
+
+.maintenance-detail-layout {
+  display: grid;
+  gap: 18px;
+}
+
+.maintenance-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.maintenance-detail-item {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.65);
+}
+
+.maintenance-detail-item strong {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.85rem;
+  color: var(--primary-deep);
+}
+
+.maintenance-detail-media {
+  display: grid;
+  gap: 12px;
+}
+
+.maintenance-image-button {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.maintenance-image-button img {
+  width: 100%;
+  max-height: 280px;
+  object-fit: cover;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+}
+
+.maintenance-image-caption {
+  margin: 0;
+  font-size: 0.84rem;
+  color: var(--muted);
+  text-align: center;
+}
+
+.maintenance-lightbox-content {
+  max-width: min(92vw, 900px);
+  width: auto;
+  padding: 18px;
+  background: rgba(10, 15, 20, 0.96);
+}
+
+.maintenance-lightbox-content img {
+  display: block;
+  max-width: 100%;
+  max-height: 78vh;
+  width: auto;
+  height: auto;
+  object-fit: contain;
   border-radius: 14px;
 }
 
-.debug-panel-current-view {
-  position: sticky;
-  top: 0;
-  background: rgba(7, 12, 18, 0.94);
-  padding-bottom: 8px;
-  margin-bottom: 8px;
-  font-weight: 700;
-  color: #8fd3ff;
+body[data-theme="dark"] {
+  --bg: #121922;
+  --surface: #1b2531;
+  --surface-alt: #202c39;
+  --surface-soft: #1f2b37;
+  --text: #e8edf3;
+  --muted: #a4b0bf;
+  --line: #324152;
+  --border: #324152;
+  --primary: #8bb8d4;
+  --primary-deep: #dce7f2;
+  --secondary: #8fb39e;
+  --secondary-deep: #c2d8cb;
+  --accent: #d7b98a;
+  --shadow: 0 22px 42px rgba(2, 6, 12, 0.38);
+  color-scheme: dark;
+  background: linear-gradient(160deg, #121922 0%, #0f141b 100%);
 }
 
-.debug-log-line {
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-  word-break: break-word;
-  padding-bottom: 6px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  margin-bottom: 6px;
+body[data-theme="dark"] .app-topbar,
+body[data-theme="dark"] .hero-card,
+body[data-theme="dark"] .panel,
+body[data-theme="dark"] .login-card,
+body[data-theme="dark"] .session-box,
+body[data-theme="dark"] .card,
+body[data-theme="dark"] .modal-content,
+body[data-theme="dark"] .app-loading-box,
+body[data-theme="dark"] .profile-avatar-card,
+body[data-theme="dark"] .settings-card,
+body[data-theme="dark"] .maintenance-detail-item,
+body[data-theme="dark"] .app-footer-card {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+body[data-theme="dark"] .dashboard-section,
+body[data-theme="dark"] .dashboard-section-maintenance,
+body[data-theme="dark"] .dashboard-section-latest,
+body[data-theme="dark"] .dashboard-section-history,
+body[data-theme="dark"] .vehicle-context-panel,
+body[data-theme="dark"] .km-panel,
+body[data-theme="dark"] .empty,
+body[data-theme="dark"] .card-meta span,
+body[data-theme="dark"] .reminder-meta span,
+body[data-theme="dark"] .profile-meta-pill,
+body[data-theme="dark"] .image-preview {
+  background: var(--surface-alt);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+body[data-theme="dark"] input,
+body[data-theme="dark"] select,
+body[data-theme="dark"] .field-toggle,
+body[data-theme="dark"] .topbar-back-button,
+body[data-theme="dark"] .menu-btn {
+  background: #1b2531;
+  color: var(--text);
+  border-color: var(--border);
+}
+
+body[data-theme="dark"] .topbar-user-name {
+  background: rgba(139, 184, 212, 0.12);
+  border-color: rgba(139, 184, 212, 0.18);
+  color: var(--primary-deep);
+}
+
+body[data-theme="dark"] .menu-panel,
+body[data-theme="dark"] .menu-panel::before {
+  background: #1b2531;
+}
+
+body[data-theme="dark"] .theme-toggle {
+  background: rgba(27, 37, 49, 0.92);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+body[data-theme="dark"] .hero-title,
+body[data-theme="dark"] .item-info span,
+body[data-theme="dark"] .vehicle-context-label,
+body[data-theme="dark"] .message,
+body[data-theme="dark"] .section-copy,
+body[data-theme="dark"] .app-footer-copy,
+body[data-theme="dark"] .app-footer-meta,
+body[data-theme="dark"] .maintenance-image-caption {
+  color: var(--muted);
+}
+
+body[data-theme="dark"] .modal {
+  background: rgba(1, 5, 10, 0.72);
+}
+
+body[data-theme="dark"] .maintenance-lightbox-content {
+  background: rgba(7, 10, 15, 0.98);
+}
+
+body[data-theme="dark"] .item-actions button:hover,
+body[data-theme="dark"] .modal-close:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+@media (max-width: 640px) {
+  .app-utilities {
+    width: min(100% - 16px, 1120px);
+    padding-top: 10px;
+  }
+
+  .theme-toggle {
+    min-height: 38px;
+    padding: 8px 12px;
+    font-size: 0.9rem;
+  }
+
+  .maintenance-detail-header,
+  .maintenance-detail-grid {
+    grid-template-columns: 1fr;
+    flex-direction: column;
+  }
+
+  .maintenance-delete-button,
+  .maintenance-card-button {
+    width: 100%;
+  }
+}
+
+
+.pwa-install-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 auto 14px;
+  padding: 16px 18px;
+  border: 1px solid rgba(80, 109, 132, 0.16);
+  border-radius: 20px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(244, 239, 230, 0.94));
+  box-shadow: 0 14px 28px rgba(31, 42, 61, 0.07);
+}
+
+.pwa-install-banner-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.pwa-install-banner-title {
+  margin: 0;
+  font-size: 0.96rem;
+  font-weight: 800;
+  color: var(--primary-deep);
+}
+
+.pwa-install-banner-text,
+.pwa-install-banner-subtext {
+  margin: 0;
+  font-size: 0.84rem;
+  color: var(--muted);
+}
+
+.pwa-install-dismiss {
+  width: auto;
+  min-width: 120px;
+  min-height: 42px;
+}
+
+.notification-settings-panel {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(80, 109, 132, 0.12);
+  background: rgba(80, 109, 132, 0.04);
+}
+
+.notification-settings-header h3 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+}
+
+.notification-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.notification-actions button {
+  width: auto;
+  min-width: 180px;
+}
+
+.notification-status {
+  margin: 0;
+  min-height: 0;
+}
+
+.notification-status.is-success {
+  color: #2f6d46;
+}
+
+.notification-status.is-warning {
+  color: #8a6121;
+}
+
+.notification-status.is-error {
+  color: #9b3d3d;
+}
+
+body[data-theme="dark"] .pwa-install-banner,
+body[data-theme="dark"] .notification-settings-panel {
+  background: var(--surface-alt);
+  border-color: var(--border);
+}
+
+body[data-theme="dark"] .notification-status.is-success {
+  color: #91d6aa;
+}
+
+body[data-theme="dark"] .notification-status.is-warning {
+  color: #e4c07a;
+}
+
+body[data-theme="dark"] .notification-status.is-error {
+  color: #ef9a9a;
+}
+
+@media (max-width: 768px) {
+  .pwa-install-banner {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .notification-actions button,
+  .pwa-install-dismiss {
+    width: 100%;
+    min-width: 0;
+  }
 }

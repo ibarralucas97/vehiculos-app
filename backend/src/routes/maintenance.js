@@ -2,6 +2,8 @@ const express = require("express");
 const router = express.Router();
 const pool = require("../db/connection");
 const { validateMaintenancePayload } = require("../utils/validation");
+const { buildNotificationPayload, sendPushToUser } = require("../utils/pushNotifications");
+const { buildNotificationIntentUrl } = require("../utils/pushReminders");
 const MAX_IMAGE_BASE64_LENGTH = 2_800_000;
 const ALLOWED_IMAGE_MIME_TYPES = new Set(["image/png", "image/jpeg"]);
 
@@ -127,6 +129,27 @@ router.post("/", async (req, res) => {
     );
 
     await client.query("COMMIT");
+
+    sendPushToUser(pool, {
+      userId,
+      notification: buildNotificationPayload({
+        title: "Nuevo mantenimiento registrado",
+        body: `Se registro ${data.accion} para el vehiculo seleccionado.`,
+        type: "maintenance-created",
+        tag: `maintenance-created-${createdMaintenance.id}`,
+        url: buildNotificationIntentUrl({
+          vehicleId: data.vehiculo_id,
+          maintenanceId: createdMaintenance.id,
+          view: "dashboard",
+        }),
+        data: {
+          maintenanceId: createdMaintenance.id,
+          vehicleId: data.vehiculo_id,
+        },
+      }),
+    }).catch((pushError) => {
+      console.error("No se pudo enviar la notificacion de mantenimiento", pushError);
+    });
 
     res.status(201).json({
       ...createdMaintenance,
@@ -337,6 +360,39 @@ router.get("/:id/images", async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Error al obtener las imagenes del mantenimiento" });
+  }
+});
+
+
+router.delete("/:id", async (req, res) => {
+  try {
+    const maintenanceId = Number(req.params.id);
+    const userId = Number(req.query.user_id || req.body?.user_id);
+
+    if (!maintenanceId) {
+      return res.status(400).json({ error: "maintenance_id invalido" });
+    }
+
+    if (!userId) {
+      return res.status(400).json({ error: "user_id requerido" });
+    }
+
+    const result = await pool.query(
+      `DELETE FROM mantenimiento
+       WHERE id = $1
+         AND user_id = $2
+       RETURNING id`,
+      [maintenanceId, userId]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Mantenimiento no encontrado" });
+    }
+
+    res.json({ ok: true, id: result.rows[0].id });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error al eliminar el mantenimiento" });
   }
 });
 

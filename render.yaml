@@ -12,3 +12,11 @@ services:
         value: production
       - key: DATABASE_URL
         sync: false
+      - key: PUSH_VAPID_SUBJECT
+        sync: false
+      - key: PUSH_VAPID_PUBLIC_KEY
+        sync: false
+      - key: PUSH_VAPID_PRIVATE_KEY
+        sync: false
+      - key: NOTIFICATIONS_CRON_TOKEN
+        sync: false
