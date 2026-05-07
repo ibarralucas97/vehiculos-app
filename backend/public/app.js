@@ -217,7 +217,7 @@ const vehiclesScreen = document.getElementById("vehicles-screen");
 
 function updateTopbarContext() {
   if (!topbarBackButton) return;
-  const inVehicleDetail = !dashboard.classList.contains("hidden");
+  const inVehicleDetail = getCurrentView() === "dashboard";
   topbarBackButton.disabled = !inVehicleDetail;
   topbarBackButton.classList.toggle("is-inactive", !inVehicleDetail);
 }
@@ -225,16 +225,15 @@ function updateTopbarContext() {
 function updateSessionUI() {
   const session = normalizeSessionUser(getSession() || {});
   const isLoggedIn = Boolean(session?.email);
+  const currentView = getCurrentView();
+  const hasCurrentVehicle = Boolean(selectedVehicleId) && (currentVehicles.length === 0 || Boolean(getSelectedVehicle()));
 
-  welcomeScreen?.classList.toggle("hidden", isLoggedIn);
   topbar?.classList.toggle("hidden", !isLoggedIn);
   loginForm.classList.toggle("hidden", isLoggedIn);
   sessionBox.classList.toggle("hidden", !isLoggedIn);
   logoutButton.classList.add("hidden");
 
   if (isLoggedIn) {
-    setView("vehicles", "updateSessionUI");
-
     const fullName = buildFullName(session);
     sessionEmail.textContent = fullName ? `${fullName} - ${session.email}` : session.email;
     if (topbarUserName) {
@@ -244,20 +243,40 @@ function updateSessionUI() {
 
     sessionCopy.textContent = "";
     loginMessage.textContent = "";
-  } else {
-    activeView = "unknown";
-    dashboard?.classList.add("hidden");
-    vehiclesScreen?.classList.add("hidden");
 
+    if (currentView === "dashboard") {
+      if (hasCurrentVehicle) {
+        debugLog("[SESSION UI] dashboard activo, no se navega", {
+          currentView,
+          selectedVehicleId,
+          reason: "sessionUiOnlyNoNavigation",
+        });
+      } else {
+        setView("vehicles", "updateSessionUI", null, { reason: "noCurrentVehicle" });
+      }
+    } else if (currentView === "vehicles") {
+      debugLog("[SESSION UI] sessionUiOnlyNoNavigation", {
+        currentView,
+        selectedVehicleId,
+        reason: "sessionUiOnlyNoNavigation",
+      });
+    } else if (currentView === "unknown" || currentView === "login") {
+      setView("vehicles", "updateSessionUI", null, { reason: "initialSessionView" });
+    } else {
+      setView("vehicles", "updateSessionUI", null, { reason: "invalidView" });
+    }
+  } else {
     sessionEmail.textContent = "";
     if (topbarUserName) {
       topbarUserName.textContent = "";
+      topbarUserName.title = "";
     }
     sessionCopy.textContent = "Ingresa para continuar.";
+    setView("login", "updateSessionUI", null, { reason: "noSession" });
   }
 
   updateTopbarContext();
-  updateDebugCurrentView();
+  updateDebugCurrentView(getCurrentView());
   return isLoggedIn;
 }
 
@@ -274,6 +293,10 @@ function deriveCurrentViewFromDom() {
 
   if (vehiclesScreen && !vehiclesScreen.classList.contains("hidden")) {
     return "vehicles";
+  }
+
+  if (welcomeScreen && !welcomeScreen.classList.contains("hidden")) {
+    return "login";
   }
 
   return "unknown";
@@ -435,14 +458,27 @@ function setView(nextView, source, event = null, extra = {}) {
   console.trace("[VIEW CHANGE TRACE]", payload);
 
   if (nextView === "dashboard") {
+    welcomeScreen?.classList.add("hidden");
     vehiclesScreen?.classList.add("hidden");
     dashboard?.classList.remove("hidden");
   } else if (nextView === "vehicles") {
+    welcomeScreen?.classList.add("hidden");
     dashboard?.classList.add("hidden");
     vehiclesScreen?.classList.remove("hidden");
+  } else if (nextView === "login") {
+    dashboard?.classList.add("hidden");
+    vehiclesScreen?.classList.add("hidden");
+    welcomeScreen?.classList.remove("hidden");
   }
 
   activeView = nextView;
+  debugLog("[VIEW CHANGE]", {
+    source,
+    previousView,
+    nextView,
+    timestamp: new Date().toISOString(),
+    ...extra,
+  });
   updateTopbarContext();
   updateDebugCurrentView(nextView);
   return true;
