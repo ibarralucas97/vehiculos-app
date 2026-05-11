@@ -2,6 +2,15 @@ const express = require("express");
 const router = express.Router();
 const pool = require("../db/connection");
 const { validatePlacePayload } = require("../utils/validation");
+const { logActivity } = require("../utils/activityLog");
+
+async function recordActivity(details) {
+  try {
+    await logActivity(pool, details);
+  } catch (error) {
+    console.error("No se pudo registrar la actividad", error);
+  }
+}
 
 // =====================
 // GET /places
@@ -69,6 +78,16 @@ if (Number(count.rows[0].count) >= 30) {
       ]
     );
 
+    await recordActivity({
+      userId,
+      action: "place.create",
+      entityType: "place",
+      entityId: result.rows[0].id,
+      title: "Lugar creado",
+      description: `Creaste el lugar "${result.rows[0].nombre}".`,
+      metadata: { ubicacion: result.rows[0].ubicacion },
+    });
+
     res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error(error);
@@ -98,6 +117,20 @@ router.put("/:id", async (req, res) => {
       [nombre, ubicacion, contacto_nombre, contacto_numero, id, userId]
     );
 
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Lugar no encontrado" });
+    }
+
+    await recordActivity({
+      userId,
+      action: "place.update",
+      entityType: "place",
+      entityId: result.rows[0].id,
+      title: "Lugar actualizado",
+      description: `Actualizaste el lugar "${result.rows[0].nombre}".`,
+      metadata: { ubicacion: result.rows[0].ubicacion },
+    });
+
     res.json(result.rows[0]);
   } catch (error) {
     console.error(error);
@@ -118,13 +151,22 @@ router.delete("/:id", async (req, res) => {
     }
 
     const result = await pool.query(
-      "DELETE FROM lugares WHERE id = $1 AND user_id = $2 RETURNING id",
+      "DELETE FROM lugares WHERE id = $1 AND user_id = $2 RETURNING id, nombre",
       [id, userId]
     );
 
     if (result.rowCount === 0) {
       return res.status(404).json({ error: "Lugar no encontrado" });
     }
+
+    await recordActivity({
+      userId,
+      action: "place.delete",
+      entityType: "place",
+      entityId: result.rows[0].id,
+      title: "Lugar eliminado",
+      description: `Eliminaste el lugar "${result.rows[0].nombre}".`,
+    });
 
     res.json({ ok: true });
   } catch (error) {

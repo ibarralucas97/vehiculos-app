@@ -18,6 +18,30 @@ const NUMERIC_FIELD_CONFIG = {
   intervalo_km: { allowDecimal: false, label: "Intervalo KM" },
 };
 
+const VEHICLE_TYPE_OPTIONS = [
+  { value: "moto", label: "Moto", icon: "vehicleMoto" },
+  { value: "auto", label: "Auto", icon: "vehicleAuto" },
+  { value: "camioneta", label: "Camioneta", icon: "vehicleCamioneta" },
+  { value: "camion", label: "Camion", icon: "vehicleCamion" },
+  { value: "bicicleta", label: "Bicicleta", icon: "vehicleBicicleta" },
+  { value: "colectivo", label: "Colectivo", icon: "vehicleColectivo" },
+  { value: "otro", label: "Otro", icon: "vehicleOtro" },
+];
+
+const VEHICLE_COLOR_OPTIONS = [
+  { value: "rojo", label: "Rojo", hex: "#d55c55" },
+  { value: "azul", label: "Azul", hex: "#1f9ae0" },
+  { value: "gris", label: "Gris", hex: "#7b8794" },
+  { value: "negro", label: "Negro", hex: "#1f2937" },
+  { value: "verde", label: "Verde", hex: "#239b72" },
+  { value: "neutro", label: "Neutro", hex: "#8fa4b4" },
+];
+
+const VEHICLE_TYPE_MAP = Object.fromEntries(VEHICLE_TYPE_OPTIONS.map((item) => [item.value, item]));
+const VEHICLE_COLOR_MAP = Object.fromEntries(VEHICLE_COLOR_OPTIONS.map((item) => [item.value, item]));
+const DEFAULT_VEHICLE_TYPE = "otro";
+const DEFAULT_VEHICLE_COLOR = "neutro";
+
 const dashboard = document.getElementById("dashboard");
 const loginForm = document.getElementById("login-form");
 const loginMessage = document.getElementById("login-message");
@@ -42,6 +66,10 @@ const filtersForm = document.getElementById("filters-form");
 const formMessage = document.getElementById("form-message");
 const vehicleFormMessage = document.getElementById("vehicle-form-message");
 const placeFormMessage = document.getElementById("place-form-message");
+const vehicleTypeInput = document.getElementById("vehicle_type");
+const vehicleColorInput = document.getElementById("vehicle_color");
+const vehicleTypeOptions = document.getElementById("vehicle-type-options");
+const vehicleColorOptions = document.getElementById("vehicle-color-options");
 const filtersSubmitButton = document.getElementById("filters-submit");
 const latestButton = document.getElementById("latest-button");
 const exportPdfButton = document.getElementById("export-pdf-button");
@@ -55,6 +83,7 @@ const menuPanel = document.getElementById("menu-panel");
 const menuLogoutButton = document.getElementById("menu-logout");
 const menuProfileButton = document.getElementById("menu-profile");
 const menuSettingsButton = document.getElementById("menu-settings");
+const menuActivityButton = document.getElementById("menu-activity");
 const currentVehicleName = document.getElementById("current-vehicle-name");
 const currentVehicleKm = document.getElementById("current-vehicle-km");
 const updateKmButton = document.getElementById("update-km-button");
@@ -66,6 +95,7 @@ const splashLogoImg = document.getElementById("splash-logo-img");
 const splashLogoFallback = document.getElementById("splash-logo-fallback");
 const welcomeScreen = document.getElementById("welcome-screen");
 const topbar = document.getElementById("app-topbar");
+const topbarTitleAction = document.getElementById("topbar-title-action");
 const topbarUserName = document.getElementById("topbar-user-name");
 const topbarBackButton = document.getElementById("topbar-back-button");
 const maintenanceSection = document.getElementById("maintenance-section");
@@ -92,6 +122,7 @@ const notificationsToggleButton = document.getElementById("notifications-toggle-
 const notificationsTestButton = document.getElementById("notifications-test-button");
 const pwaInstallBanner = document.getElementById("pwa-install-banner");
 const pwaInstallDismiss = document.getElementById("pwa-install-dismiss");
+const toastStack = document.getElementById("toast-stack");
 
 const THEME_PREFERENCE_KEY = "mygarage_theme";
 const LIGHT_THEME_COLOR = "#0f6c8d";
@@ -110,6 +141,17 @@ const maintenanceDetailDelete = document.getElementById("maintenance-detail-dele
 const maintenanceImageLightbox = document.getElementById("maintenance-image-lightbox");
 const maintenanceImageLightboxImg = document.getElementById("maintenance-image-lightbox-img");
 const maintenanceImageLightboxClose = document.getElementById("maintenance-image-lightbox-close");
+const activityList = document.getElementById("activity-list");
+const settingsPushState = document.getElementById("settings-push-state");
+const settingsPushCopy = document.getElementById("settings-push-copy");
+const settingsPermissionState = document.getElementById("settings-permission-state");
+const settingsPermissionCopy = document.getElementById("settings-permission-copy");
+const settingsInstallState = document.getElementById("settings-install-state");
+const settingsInstallCopy = document.getElementById("settings-install-copy");
+const settingsSyncState = document.getElementById("settings-sync-state");
+const settingsSyncCopy = document.getElementById("settings-sync-copy");
+const settingsReminderFrequency = document.getElementById("settings-reminder-frequency");
+const settingsReminderKm = document.getElementById("settings-reminder-km");
 const themeColorMeta = document.querySelector('meta[name="theme-color"]');
 
 let maintenanceImageRefs = getMaintenanceImageRefs();
@@ -117,6 +159,8 @@ let latestRecordsLoaded = false;
 let currentMaintenanceRecords = new Map();
 let notificationsServerStatus = null;
 let notificationStateLoading = false;
+let notificationsLastSyncAt = null;
+let toastId = 0;
 let backButtonTouchState = {
   active: false,
   moved: false,
@@ -168,6 +212,107 @@ const ICONS = {
       <path d="M9.5 3.5h5L15 7H9l.5-3.5Z" />
       <path d="M7.5 7l1 13h7l1-13" />
       <path d="M10 10.5v6M14 10.5v6" />
+    </svg>
+  `,
+  refresh: `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M20 11a8 8 0 1 0 1.3 4.4" />
+      <path d="M20 4v6h-6" />
+    </svg>
+  `,
+  vehicle: `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M5 15l1.5-5h11L19 15" />
+      <path d="M4 15h16" />
+      <circle cx="7.5" cy="17.5" r="1.5" />
+      <circle cx="16.5" cy="17.5" r="1.5" />
+    </svg>
+  `,
+  place: `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 21s6-5.7 6-11a6 6 0 1 0-12 0c0 5.3 6 11 6 11Z" />
+      <circle cx="12" cy="10" r="2.2" />
+    </svg>
+  `,
+  maintenance: `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M14.5 5.5a3 3 0 0 0 4 4l-9 9-4 1 1-4 9-9Z" />
+      <path d="M13 7l4 4" />
+    </svg>
+  `,
+  history: `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M3 12a9 9 0 1 0 3-6.7" />
+      <path d="M3 4v5h5" />
+      <path d="M12 7v5l3 2" />
+    </svg>
+  `,
+  activity: `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 19h16" />
+      <path d="M7 15l3-4 3 3 4-6" />
+      <circle cx="7" cy="15" r="1" />
+      <circle cx="10" cy="11" r="1" />
+      <circle cx="13" cy="14" r="1" />
+      <circle cx="17" cy="8" r="1" />
+    </svg>
+  `,
+  vehicleMoto: `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="6.2" cy="16.8" r="2.4" />
+      <circle cx="17.8" cy="16.8" r="2.4" />
+      <path d="M7.8 16.8h4.4l2.3-5.3h2.7l1.8 2.1" />
+      <path d="M10 10.8h3.2l1.2 1.6" />
+      <path d="M12.6 16.8l-1.9-4h-2.4" />
+    </svg>
+  `,
+  vehicleAuto: `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M5 15l1.6-4.8h10.8L19 15" />
+      <path d="M4.2 15h15.6" />
+      <path d="M8 10.2h8" />
+      <circle cx="7.5" cy="17.2" r="1.6" />
+      <circle cx="16.5" cy="17.2" r="1.6" />
+    </svg>
+  `,
+  vehicleCamioneta: `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M3.8 14.5h11.5V9.5H9.5L7.8 12H3.8Z" />
+      <path d="M15.3 11.2h3.3l1.6 2.3v1h-4.9" />
+      <circle cx="7.1" cy="17.1" r="1.7" />
+      <circle cx="17.4" cy="17.1" r="1.7" />
+    </svg>
+  `,
+  vehicleCamion: `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M3.5 8.8h11.8v6.3H3.5Z" />
+      <path d="M15.3 11h3.1l2.1 2.7v1.4h-5.2" />
+      <circle cx="7.3" cy="17.2" r="1.8" />
+      <circle cx="17.5" cy="17.2" r="1.8" />
+    </svg>
+  `,
+  vehicleBicicleta: `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="6.4" cy="16.8" r="2.5" />
+      <circle cx="17.7" cy="16.8" r="2.5" />
+      <path d="M8.7 9.6h3l2.4 7.2" />
+      <path d="M10.2 16.8h3.5l3.2-4.4" />
+      <path d="M12.2 9.6l2.2 2.6h3" />
+    </svg>
+  `,
+  vehicleColectivo: `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M5 6.5h14v8.5H5Z" />
+      <path d="M7.2 9.2h2.8M11 9.2h2.8M14.8 9.2h2.2" />
+      <circle cx="8" cy="17.3" r="1.5" />
+      <circle cx="16" cy="17.3" r="1.5" />
+    </svg>
+  `,
+  vehicleOtro: `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 3.8l7.2 4.1v8.2L12 20.2 4.8 16.1V7.9Z" />
+      <path d="M12 8.4v4.5" />
+      <circle cx="12" cy="15.9" r="0.8" />
     </svg>
   `,
 };
@@ -268,6 +413,381 @@ function getPreferredTheme() {
 
 function buildIconMarkup(name) {
   return ICONS[name] || "";
+}
+
+
+function normalizeVehicleType(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return VEHICLE_TYPE_MAP[normalized] ? normalized : DEFAULT_VEHICLE_TYPE;
+}
+
+function normalizeVehicleColor(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return VEHICLE_COLOR_MAP[normalized] ? normalized : DEFAULT_VEHICLE_COLOR;
+}
+
+function normalizeVehicleRecord(vehicle = {}) {
+  return {
+    ...vehicle,
+    vehicle_type: normalizeVehicleType(vehicle.vehicle_type),
+    vehicle_color: normalizeVehicleColor(vehicle.vehicle_color),
+  };
+}
+
+function getVehicleTypeConfig(value) {
+  return VEHICLE_TYPE_MAP[normalizeVehicleType(value)] || VEHICLE_TYPE_MAP[DEFAULT_VEHICLE_TYPE];
+}
+
+function getVehicleColorConfig(value) {
+  return VEHICLE_COLOR_MAP[normalizeVehicleColor(value)] || VEHICLE_COLOR_MAP[DEFAULT_VEHICLE_COLOR];
+}
+
+function renderVehicleVisualSelectors() {
+  if (vehicleTypeOptions) {
+    vehicleTypeOptions.innerHTML = VEHICLE_TYPE_OPTIONS.map((item) => `
+      <button
+        type="button"
+        class="vehicle-type-chip"
+        data-vehicle-type-option="${item.value}"
+        aria-pressed="false"
+      >
+        <span class="vehicle-type-chip-icon" aria-hidden="true">${buildIconMarkup(item.icon)}</span>
+        <span>${item.label}</span>
+      </button>
+    `).join("");
+  }
+
+  if (vehicleColorOptions) {
+    vehicleColorOptions.innerHTML = VEHICLE_COLOR_OPTIONS.map((item) => `
+      <button
+        type="button"
+        class="vehicle-color-chip"
+        data-vehicle-color-option="${item.value}"
+        aria-pressed="false"
+        title="${item.label}"
+      >
+        <span class="vehicle-color-chip-swatch" style="--vehicle-color:${item.hex}"></span>
+        <span>${item.label}</span>
+      </button>
+    `).join("");
+  }
+
+  syncVehicleVisualSelectors();
+}
+
+function syncVehicleVisualSelectors() {
+  const selectedType = normalizeVehicleType(vehicleTypeInput?.value);
+  const selectedColor = normalizeVehicleColor(vehicleColorInput?.value);
+
+  vehicleTypeOptions?.querySelectorAll("[data-vehicle-type-option]").forEach((button) => {
+    const isActive = button.getAttribute("data-vehicle-type-option") === selectedType;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-pressed", String(isActive));
+  });
+
+  vehicleColorOptions?.querySelectorAll("[data-vehicle-color-option]").forEach((button) => {
+    const isActive = button.getAttribute("data-vehicle-color-option") === selectedColor;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-pressed", String(isActive));
+  });
+}
+
+function buildVehicleIdentityMarkup(vehicle = {}) {
+  const typeConfig = getVehicleTypeConfig(vehicle.vehicle_type);
+  const colorConfig = getVehicleColorConfig(vehicle.vehicle_color);
+  const modelLabel = vehicle.modelo ? escapeHtml(vehicle.modelo) : "Sin modelo";
+  const plateLabel = vehicle.patente ? escapeHtml(vehicle.patente) : "Sin patente";
+
+  return `
+    <div class="vehicle-card-shell" style="--vehicle-color:${colorConfig.hex}">
+      <div class="vehicle-card-head">
+        <div class="vehicle-card-icon" aria-hidden="true">${buildIconMarkup(typeConfig.icon)}</div>
+        <div class="vehicle-card-copy">
+          <span class="vehicle-card-type">${typeConfig.label}</span>
+          <strong>${escapeHtml(vehicle.nombre || "Vehiculo")}</strong>
+          <span>${modelLabel}</span>
+        </div>
+      </div>
+      <div class="vehicle-card-meta">
+        <span class="vehicle-card-color-badge">${colorConfig.label}</span>
+        <span class="vehicle-card-plate">${plateLabel}</span>
+      </div>
+    </div>
+  `;
+}
+
+function buildVehicleListSummaryMarkup(vehicle = {}) {
+  const typeConfig = getVehicleTypeConfig(vehicle.vehicle_type);
+  const colorConfig = getVehicleColorConfig(vehicle.vehicle_color);
+  return `
+    <div class="vehicle-list-summary">
+      <span class="vehicle-list-summary-icon" style="--vehicle-color:${colorConfig.hex}" aria-hidden="true">${buildIconMarkup(typeConfig.icon)}</span>
+      <div class="vehicle-list-summary-copy">
+        <strong>${escapeHtml(vehicle.nombre || "Vehiculo")}</strong>
+        <span>${typeConfig.label} · ${escapeHtml(vehicle.patente || "Sin patente")}</span>
+      </div>
+      <span class="vehicle-list-summary-color">${colorConfig.label}</span>
+    </div>
+  `;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function buildEmptyStateMarkup({ icon = "activity", title = "Sin datos", body = "", actionLabel = "", action = "" } = {}) {
+  return `
+    <div class="empty-state">
+      <div class="empty-state-icon" aria-hidden="true">${buildIconMarkup(icon)}</div>
+      <div class="empty-state-copy">
+        <h3>${escapeHtml(title)}</h3>
+        <p>${escapeHtml(body)}</p>
+      </div>
+      ${
+        actionLabel && action
+          ? `<button class="ghost empty-state-action" type="button" onclick="${action}">${escapeHtml(actionLabel)}</button>`
+          : ""
+      }
+    </div>
+  `;
+}
+
+function formatDateTimeLabel(value) {
+  if (!value) return "Sin fecha";
+  return new Date(value).toLocaleString("es-AR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function dismissToast(id) {
+  const toast = document.querySelector(`[data-toast-id="${id}"]`);
+  if (!toast) return;
+  toast.classList.add("is-leaving");
+  window.setTimeout(() => toast.remove(), 220);
+}
+
+function showToast(message, { tone = "info", duration = 2600 } = {}) {
+  if (!toastStack) return;
+  toastId += 1;
+  const id = String(toastId);
+  const toast = document.createElement("div");
+  toast.className = `toast toast-${tone}`;
+  toast.dataset.toastId = id;
+  toast.innerHTML = `
+    <div class="toast-copy">
+      <strong>${escapeHtml(
+        tone === "success"
+          ? "Listo"
+          : tone === "error"
+            ? "Error"
+            : tone === "warning"
+              ? "Atencion"
+              : "Informacion"
+      )}</strong>
+      <span>${escapeHtml(message)}</span>
+    </div>
+    <button class="toast-close" type="button" aria-label="Cerrar notificacion">${buildIconMarkup("delete")}</button>
+  `;
+  toast.querySelector(".toast-close")?.addEventListener("click", () => dismissToast(id));
+  toastStack.prepend(toast);
+  window.setTimeout(() => dismissToast(id), duration);
+}
+
+function isModalOpen(id) {
+  const modal = document.getElementById(id);
+  return Boolean(modal && !modal.classList.contains("hidden"));
+}
+
+function syncSelectedVehicleContext() {
+  const vehicle = getSelectedVehicle();
+  if (!vehicle) {
+    if (currentVehicleName) currentVehicleName.textContent = "Sin seleccion";
+    if (currentVehicleKm) currentVehicleKm.textContent = "Sin dato";
+    return;
+  }
+
+  if (currentVehicleName) {
+    currentVehicleName.textContent = `${vehicle.nombre}${vehicle.modelo ? ` - ${vehicle.modelo}` : ""}`;
+  }
+  renderCurrentVehicleKm();
+}
+
+function openMaintenanceComposer() {
+  if (maintenanceSection && !maintenanceSection.classList.contains("open")) {
+    maintenanceSection.classList.add("open");
+  }
+  maintenanceForm?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function renderReminderSettingsSummary(session = getSession(), status = notificationsServerStatus) {
+  const permission = typeof Notification !== "undefined" ? Notification.permission : "unsupported";
+  const permissionLabel = permission === "granted"
+    ? "Permitido"
+    : permission === "denied"
+      ? "Denegado"
+      : permission === "default"
+        ? "Pendiente"
+        : "No compatible";
+  const pushLabel = !isPushSupportedInBrowser()
+    ? "No compatible"
+    : !status?.pushConfigured
+      ? "Servidor incompleto"
+      : Number(status?.subscriptionCount || 0) > 0
+        ? "Activo"
+        : "Disponible";
+  const installLabel = isStandaloneApp() ? "Instalada" : isMobileDevice() ? "Recomendada" : "Opcional";
+
+  if (settingsPushState) settingsPushState.textContent = pushLabel;
+  if (settingsPushCopy) {
+    settingsPushCopy.textContent = Number(status?.subscriptionCount || 0) > 0
+      ? `${status.subscriptionCount} dispositivo(s) suscripto(s).`
+      : "Activa push y usa Enviar prueba para validarlo.";
+  }
+
+  if (settingsPermissionState) settingsPermissionState.textContent = permissionLabel;
+  if (settingsPermissionCopy) {
+    settingsPermissionCopy.textContent = permission === "denied"
+      ? "Rehabilitalo desde la configuracion del navegador."
+      : "Lo consulta Rodado Control al abrir esta seccion.";
+  }
+
+  if (settingsInstallState) settingsInstallState.textContent = installLabel;
+  if (settingsInstallCopy) {
+    settingsInstallCopy.textContent = isStandaloneApp()
+      ? "La app ya esta instalada en este dispositivo."
+      : "Instalar la PWA mejora estabilidad y notificaciones.";
+  }
+
+  if (settingsSyncState) settingsSyncState.textContent = notificationsLastSyncAt ? formatDateTimeLabel(notificationsLastSyncAt) : "Sin datos";
+  if (settingsSyncCopy) settingsSyncCopy.textContent = status ? "Estado consultado al backend correctamente." : "Se completara al refrescar notificaciones.";
+
+  if (settingsReminderFrequency) {
+    settingsReminderFrequency.textContent = "La frecuencia y kilometraje de avisos se define por vehiculo usando Intervalo KM e Intervalo meses.";
+  }
+
+  if (settingsReminderKm) {
+    settingsReminderKm.textContent = session?.remindersEnabled === false
+      ? "Los recordatorios automaticos estan pausados en tu configuracion."
+      : "Actualiza el kilometraje desde el Dashboard para mejorar la precision de los avisos.";
+  }
+}
+
+async function loadActivityHistory() {
+  const session = getSession();
+  if (!activityList || !session?.id) return;
+
+  activityList.innerHTML = buildEmptyStateMarkup({
+    icon: "activity",
+    title: "Cargando actividad",
+    body: "Estamos consultando las acciones recientes de tu cuenta.",
+  });
+
+  const items = await fetchJson(`/activity?user_id=${session.id}&limit=40`);
+
+  if (!Array.isArray(items) || items.length === 0) {
+    activityList.innerHTML = buildEmptyStateMarkup({
+      icon: "activity",
+      title: "Todavia no hay actividad",
+      body: "Cuando crees, edites o elimines datos, veras el registro aqui.",
+    });
+    return;
+  }
+
+  activityList.innerHTML = items.map((item) => `
+    <article class="activity-item">
+      <div class="activity-item-dot" aria-hidden="true"></div>
+      <div class="activity-item-body">
+        <p class="activity-item-title">${escapeHtml(item.description || item.title || "Actividad registrada")}</p>
+        <p class="activity-item-meta">${escapeHtml(item.actorName || "Usuario")} · ${escapeHtml(formatDateTimeLabel(item.createdAt))}</p>
+      </div>
+    </article>
+  `).join("");
+}
+
+async function openActivityModal() {
+  closeMenu();
+  openModal("activity-modal");
+  try {
+    await loadActivityHistory();
+  } catch (error) {
+    if (activityList) {
+      activityList.innerHTML = buildEmptyStateMarkup({
+        icon: "activity",
+        title: "No se pudo cargar la actividad",
+        body: error.message,
+      });
+    }
+  }
+}
+
+async function refreshCurrentContext({ silent = false } = {}) {
+  const session = getSession();
+  if (!session?.id) return;
+
+  topbarTitleAction?.classList.add("is-refreshing");
+
+  try {
+    if (getCurrentView() === "vehicles") {
+      await loadVehiclesScreen();
+      if (isModalOpen("vehicles-modal")) {
+        await loadVehiclesList();
+      }
+    }
+
+    if (getCurrentView() === "dashboard") {
+      await refreshAllData();
+      syncSelectedVehicleContext();
+
+      if (typeof loadDashboardOverview === "function") {
+        await loadDashboardOverview();
+      }
+
+      if (isCollapsibleSectionOpen(latestRecordsSection) || latestRecordsLoaded) {
+        await loadLatestRecords();
+      }
+
+      if (isCollapsibleSectionOpen(historySection) && hasActiveFilters()) {
+        await loadMaintenance();
+      }
+    }
+
+    if (isModalOpen("places-modal")) {
+      await loadPlacesList();
+    }
+
+    if (isModalOpen("settings-modal")) {
+      const profile = await fetchCurrentProfile();
+      fillPreferencesForm(profile);
+      await refreshNotificationControls();
+      renderReminderSettingsSummary(profile, notificationsServerStatus);
+    }
+
+    if (isModalOpen("profile-modal")) {
+      const profile = await fetchCurrentProfile();
+      fillProfileForm(profile);
+    }
+
+    if (isModalOpen("activity-modal")) {
+      await loadActivityHistory();
+    }
+
+    if (!silent) {
+      showToast("Datos actualizados", { tone: "success" });
+    }
+  } catch (error) {
+    showToast(error.message, { tone: "error", duration: 3400 });
+  } finally {
+    window.setTimeout(() => topbarTitleAction?.classList.remove("is-refreshing"), 320);
+  }
 }
 
 function updateThemeMenuButton(theme = document.body.dataset.theme) {
@@ -403,6 +923,7 @@ async function fetchNotificationServerStatus() {
 
   const status = await fetchJson(`/notifications/status?user_id=${session.id}`);
   notificationsServerStatus = status;
+  notificationsLastSyncAt = new Date().toISOString();
   return status;
 }
 
@@ -470,6 +991,7 @@ async function refreshNotificationControls() {
     notificationsToggleButton.textContent = hasSubscription ? "Desactivar notificaciones" : "Activar notificaciones";
     notificationsToggleButton.disabled = false;
     notificationsTestButton.disabled = !hasSubscription;
+    renderReminderSettingsSummary(session, status);
   } catch (error) {
     setNotificationStatus(error.message, "error");
   } finally {
@@ -644,6 +1166,13 @@ function setButtonLoading(button, isLoading, loadingText = "Guardando...") {
 function resetVehicleFormState() {
   editingVehicleId = null;
   vehicleForm?.reset();
+  if (vehicleTypeInput) {
+    vehicleTypeInput.value = DEFAULT_VEHICLE_TYPE;
+  }
+  if (vehicleColorInput) {
+    vehicleColorInput.value = DEFAULT_VEHICLE_COLOR;
+  }
+  syncVehicleVisualSelectors();
   if (vehicleSaveButton) {
     vehicleSaveButton.textContent = "Crear";
   }
@@ -985,6 +1514,7 @@ async function openSettingsModal() {
     const profile = await fetchCurrentProfile();
     fillPreferencesForm(profile);
     await refreshNotificationControls();
+    renderReminderSettingsSummary(profile, notificationsServerStatus);
     if (preferencesMessage) preferencesMessage.textContent = "";
   } catch (error) {
     if (preferencesMessage) preferencesMessage.textContent = error.message;
@@ -1289,10 +1819,12 @@ async function openKmUpdateModal() {
     currentVehicles = currentVehicles.map((item) => (item.id === updatedVehicle.id ? { ...item, ...updatedVehicle } : item));
     renderCurrentVehicleKm();
     await refreshAllData();
+    syncSelectedVehicleContext();
     if (typeof loadDashboardOverview === "function") {
       await loadDashboardOverview();
     }
     setStatus("KM actualizado");
+    showToast("Kilometraje actualizado correctamente", { tone: "success" });
   } catch (error) {
     await openUiModal({
       title: "No se pudo actualizar",
@@ -1310,22 +1842,38 @@ function setHistoryState(state, detail = "") {
     initial: {
       pill: "Sin consulta",
       copy: "Busca mantenimientos por texto o rango de fechas.",
-      body: '<div class="empty">Aplica filtros para ver el historial.</div>',
+      body: buildEmptyStateMarkup({
+        icon: "history",
+        title: "Todavia no hay una consulta",
+        body: "Aplica filtros para buscar mantenimientos del vehiculo seleccionado.",
+      }),
     },
     loading: {
       pill: "Cargando",
       copy: "Cargando historial...",
-      body: '<div class="empty">Cargando historial...</div>',
+      body: buildEmptyStateMarkup({
+        icon: "history",
+        title: "Cargando historial",
+        body: "Estamos buscando los mantenimientos que coinciden con tu consulta.",
+      }),
     },
     empty: {
       pill: "Sin resultados",
       copy: "No se encontraron registros",
-      body: '<div class="empty">No se encontraron registros</div>',
+      body: buildEmptyStateMarkup({
+        icon: "history",
+        title: "Sin resultados",
+        body: "No encontramos mantenimientos con esos filtros. Prueba otro texto o rango de fechas.",
+      }),
     },
     error: {
       pill: "Error",
       copy: detail || "Ocurrio un error",
-      body: `<div class="empty">${detail || "Ocurrio un error"}</div>`,
+      body: buildEmptyStateMarkup({
+        icon: "history",
+        title: "No se pudo cargar el historial",
+        body: detail || "Ocurrio un error",
+      }),
     },
   };
 
@@ -1350,19 +1898,37 @@ function setLatestRecordsState(state, detail = "") {
   const states = {
     initial: {
       pill: "Sin consulta",
-      body: '<div class="empty">Abri este modulo o presiona "Actualizar ultimos registros".</div>',
+      body: buildEmptyStateMarkup({
+        icon: "maintenance",
+        title: "Todavia no se consultaron registros",
+        body: "Abre este modulo o toca actualizar para traer los ultimos mantenimientos.",
+      }),
     },
     loading: {
       pill: "Cargando",
-      body: '<div class="empty">Cargando ultimos registros...</div>',
+      body: buildEmptyStateMarkup({
+        icon: "maintenance",
+        title: "Cargando ultimos registros",
+        body: "Estamos trayendo los mantenimientos mas recientes del vehiculo seleccionado.",
+      }),
     },
     empty: {
       pill: "Sin resultados",
-      body: '<div class="empty">No hay mantenimientos cargados para este vehiculo.</div>',
+      body: buildEmptyStateMarkup({
+        icon: "maintenance",
+        title: "No hay mantenimientos todavia",
+        body: "Crea tu primer mantenimiento para empezar a ver este resumen.",
+        actionLabel: "Cargar mantenimiento",
+        action: "openMaintenanceComposer()",
+      }),
     },
     error: {
       pill: "Error",
-      body: `<div class="empty">${detail || "Ocurrio un error"}</div>`,
+      body: buildEmptyStateMarkup({
+        icon: "maintenance",
+        title: "No se pudieron cargar los registros",
+        body: detail || "Ocurrio un error",
+      }),
     },
   };
 
@@ -1639,6 +2205,17 @@ async function loadPlacesList() {
 
   const container = document.getElementById("places-list");
 
+  if (places.length === 0) {
+    container.innerHTML = buildEmptyStateMarkup({
+      icon: "place",
+      title: "No hay lugares registrados",
+      body: "Agrega talleres o ubicaciones frecuentes para ahorrar tiempo al cargar mantenimientos.",
+      actionLabel: "Crear lugar",
+      action: "openPlacesModal()",
+    });
+    return;
+  }
+
   container.innerHTML = places.map(p => `
     <div class="item-row">
       
@@ -1663,21 +2240,26 @@ async function loadPlacesList() {
 async function loadVehiclesScreen() {
   const session = getSession();
 
-  const vehicles = await fetchJson(`/vehicles?user_id=${session.id}`);
+  const vehicles = (await fetchJson(`/vehicles?user_id=${session.id}`)).map(normalizeVehicleRecord);
   currentVehicles = vehicles;
 
   const container = document.getElementById("vehicles-grid");
 
   if (vehicles.length === 0) {
-    container.innerHTML = "<p>No tenes vehiculos aun</p>";
+    container.innerHTML = buildEmptyStateMarkup({
+      icon: "vehicle",
+      title: "Todavia no hay vehiculos",
+      body: "Crea tu primer vehiculo para empezar a registrar kilometraje y mantenimientos.",
+      actionLabel: "Crear vehiculo",
+      action: "openVehiclesModal()",
+    });
     return;
   }
 
-  container.innerHTML = vehicles.map(v => `
-  <div class="vehicle-card card border-0 shadow-sm" onclick="selectVehicle(${v.id})">
-    <strong>${v.nombre}</strong>
-    <span>${v.modelo || ""}</span>
-  </div>
+  container.innerHTML = vehicles.map((v) => `
+  <button class="vehicle-card card border-0 shadow-sm" type="button" onclick="selectVehicle(${v.id})">
+    ${buildVehicleIdentityMarkup(v)}
+  </button>
 `).join("");
 }
 
@@ -1687,7 +2269,8 @@ function selectVehicle(id, origin = "selectVehicle") {
   persistViewState();
   const vehicle = currentVehicles.find((v) => v.id === id);
   if (currentVehicleName) {
-    currentVehicleName.textContent = vehicle ? `${vehicle.nombre} ${vehicle.modelo ? `- ${vehicle.modelo}` : ""}` : `ID ${id}`;
+    const typeLabel = vehicle ? getVehicleTypeConfig(vehicle.vehicle_type).label : "Vehiculo";
+    currentVehicleName.textContent = vehicle ? `${typeLabel} · ${vehicle.nombre}${vehicle.modelo ? ` - ${vehicle.modelo}` : ""}` : `ID ${id}`;
   }
   renderCurrentVehicleKm();
 
@@ -1835,18 +2418,27 @@ topbarBackButton?.addEventListener("click", (event) => {
 async function loadVehiclesList() {
   const session = getSession();
 
-  const vehicles = await fetchJson(`/vehicles?user_id=${session.id}`);
+  const vehicles = (await fetchJson(`/vehicles?user_id=${session.id}`)).map(normalizeVehicleRecord);
 
   currentVehicles = vehicles;
 
   const container = document.getElementById("vehicles-list-modal");
 
-  container.innerHTML = vehicles.map(v => `
+  if (vehicles.length === 0) {
+    container.innerHTML = buildEmptyStateMarkup({
+      icon: "vehicle",
+      title: "Todavia no hay vehiculos",
+      body: "Crea tu primer vehiculo y personalizalo con un tipo y color.",
+      actionLabel: "Crear vehiculo",
+      action: "openVehiclesModal()",
+    });
+    return;
+  }
+
+  container.innerHTML = vehicles.map((v) => `
     <div class="item-row">
-      
-      <div class="item-info">
-        <strong>${v.nombre}</strong>
-        <span>${v.patente || ""}</span>
+      <div class="item-info item-info-vehicle">
+        ${buildVehicleListSummaryMarkup(v)}
       </div>
 
       <div class="item-actions">
@@ -1866,6 +2458,9 @@ function editVehicle(id) {
   document.querySelector("#vehicle-form [name=nombre]").value = vehicle.nombre;
   document.querySelector("#vehicle-form [name=modelo]").value = vehicle.modelo;
   document.querySelector("#vehicle-form [name=patente]").value = vehicle.patente;
+  document.querySelector("#vehicle-form [name=vehicle_type]").value = normalizeVehicleType(vehicle.vehicle_type);
+  document.querySelector("#vehicle-form [name=vehicle_color]").value = normalizeVehicleColor(vehicle.vehicle_color);
+  syncVehicleVisualSelectors();
   document.querySelector("#vehicle-form [name=km_actual]").value = vehicle.km_actual ?? "";
   document.querySelector("#vehicle-form [name=ultimo_service_km]").value = vehicle.ultimo_service_km ?? "";
   document.querySelector("#vehicle-form [name=intervalo_km]").value = vehicle.intervalo_km ?? "";
@@ -1890,7 +2485,7 @@ function viewVehicle(id) {
   if (typeof openUiModal === "function") {
     openUiModal({
       title: "Detalle del vehiculo",
-      bodyHtml: `<div class="vehicle-detail-grid"><div><strong>Nombre:</strong> ${v.nombre}</div><div><strong>Modelo:</strong> ${v.modelo}</div><div><strong>Patente:</strong> ${v.patente}</div></div>`,
+      bodyHtml: `<div class="vehicle-detail-grid"><div><strong>Nombre:</strong> ${v.nombre}</div><div><strong>Modelo:</strong> ${v.modelo}</div><div><strong>Patente:</strong> ${v.patente}</div><div><strong>Tipo:</strong> ${getVehicleTypeConfig(v.vehicle_type).label}</div><div><strong>Color:</strong> ${getVehicleColorConfig(v.vehicle_color).label}</div></div>`,
     });
   }
 }
@@ -2185,6 +2780,19 @@ menuLogoutButton?.addEventListener("click", logout);
 settingsLogoutButton?.addEventListener("click", logout);
 menuProfileButton?.addEventListener("click", openProfileModal);
 menuSettingsButton?.addEventListener("click", openSettingsModal);
+menuActivityButton?.addEventListener("click", openActivityModal);
+vehicleTypeOptions?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-vehicle-type-option]");
+  if (!button || !vehicleTypeInput) return;
+  vehicleTypeInput.value = button.getAttribute("data-vehicle-type-option") || DEFAULT_VEHICLE_TYPE;
+  syncVehicleVisualSelectors();
+});
+vehicleColorOptions?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-vehicle-color-option]");
+  if (!button || !vehicleColorInput) return;
+  vehicleColorInput.value = button.getAttribute("data-vehicle-color-option") || DEFAULT_VEHICLE_COLOR;
+  syncVehicleVisualSelectors();
+});
 
 vehicleForm?.addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -2198,6 +2806,8 @@ vehicleForm?.addEventListener("submit", async (e) => {
   }
 
   try {
+    data.vehicle_type = normalizeVehicleType(data.vehicle_type);
+    data.vehicle_color = normalizeVehicleColor(data.vehicle_color);
     data.km_actual = normalizeNumericPayloadValue(data.km_actual, NUMERIC_FIELD_CONFIG.km_actual);
     data.ultimo_service_km = normalizeNumericPayloadValue(data.ultimo_service_km, NUMERIC_FIELD_CONFIG.ultimo_service_km);
     data.intervalo_km = normalizeNumericPayloadValue(data.intervalo_km, NUMERIC_FIELD_CONFIG.intervalo_km);
@@ -2229,6 +2839,7 @@ vehicleForm?.addEventListener("submit", async (e) => {
     resetVehicleFormState();
     closeModal("vehicles-modal");
     setStatus(isEditing ? "Vehiculo actualizado" : "Vehiculo creado");
+    showToast(isEditing ? "Vehiculo actualizado correctamente" : "Vehiculo creado correctamente", { tone: "success" });
   } catch (err) {
     console.error(err);
     if (vehicleFormMessage) {
@@ -2280,6 +2891,7 @@ placeForm?.addEventListener("submit", async (e) => {
     resetPlaceFormState();
     closeModal("places-modal");
     setStatus(isEditing ? "Lugar actualizado" : "Lugar creado");
+    showToast(isEditing ? "Lugar actualizado correctamente" : "Lugar creado correctamente", { tone: "success" });
   } catch (err) {
     console.error(err);
     if (placeFormMessage) {
@@ -2351,6 +2963,7 @@ maintenanceForm?.addEventListener("submit", async (event) => {
       ? "Mantenimiento e imagen guardados correctamente."
       : "Mantenimiento guardado correctamente.";
     setStatus("Mantenimiento guardado");
+    showToast(imageRef ? "Mantenimiento e imagen guardados" : "Mantenimiento guardado", { tone: "success" });
   } catch (error) {
     formMessage.textContent = error.message;
   } finally {
@@ -2417,6 +3030,7 @@ async function deleteMaintenance(id) {
     closeMaintenanceImageLightbox();
     await refreshMaintenanceViewsAfterMutation();
     setStatus("Mantenimiento eliminado");
+    showToast("Mantenimiento eliminado correctamente", { tone: "success" });
   } catch (error) {
     if (typeof openUiModal === "function") {
       await openUiModal({
@@ -2454,6 +3068,8 @@ async function deleteVehicle(id) {
     });
 
     await refreshAllData();
+    await loadVehiclesScreen();
+    showToast("Vehiculo eliminado correctamente", { tone: "success" });
 
   } catch (err) {
     console.error(err);
@@ -2494,13 +3110,19 @@ maintenanceDetailDelete?.addEventListener("click", async () => {
 maintenanceImageLightboxClose?.addEventListener("click", closeMaintenanceImageLightbox);
 themeMenuButton?.addEventListener("click", toggleTheme);
 notificationsToggleButton?.addEventListener("click", () => {
-  handleNotificationToggle().catch((error) => {
+  handleNotificationToggle().then(() => {
+    showToast("Estado de notificaciones actualizado", { tone: "info" });
+  }).catch((error) => {
     setNotificationStatus(error.message, "error");
+    showToast(error.message, { tone: "error", duration: 3400 });
   });
 });
 notificationsTestButton?.addEventListener("click", () => {
-  sendPushTestNotification().catch((error) => {
+  sendPushTestNotification().then(() => {
+    showToast("Notificacion de prueba enviada", { tone: "success" });
+  }).catch((error) => {
     setNotificationStatus(error.message, "error");
+    showToast(error.message, { tone: "error", duration: 3400 });
   });
 });
 pwaInstallDismiss?.addEventListener("click", dismissPwaInstallBanner);
@@ -2572,6 +3194,7 @@ async function deletePlace(id) {
     });
 
     await refreshAllData();
+    showToast("Lugar eliminado correctamente", { tone: "success" });
 
   } catch (err) {
     console.error(err);
@@ -2770,8 +3393,10 @@ preferencesForm?.addEventListener("submit", async (event) => {
     fillPreferencesForm(response.user);
     renderCurrentVehicleKm();
     await refreshNotificationControls();
+    renderReminderSettingsSummary(response.user, notificationsServerStatus);
     preferencesMessage.textContent = "Preferencias actualizadas.";
     setStatus("Preferencias guardadas");
+    showToast("Preferencias actualizadas", { tone: "success" });
   } catch (error) {
     preferencesMessage.textContent = error.message;
   } finally {
@@ -2813,6 +3438,7 @@ passwordForm?.addEventListener("submit", async (event) => {
     passwordForm.reset();
     passwordMessage.textContent = "Contrasena actualizada correctamente.";
     setStatus("Contrasena actualizada");
+    showToast("Contrasena actualizada", { tone: "success" });
   } catch (error) {
     passwordMessage.textContent = error.message;
   } finally {
@@ -2934,6 +3560,15 @@ async function exportMaintenanceToPdf() {
 }
 
 exportPdfButton?.addEventListener("click", exportMaintenanceToPdf);
+topbarTitleAction?.addEventListener("click", () => {
+  refreshCurrentContext().catch(console.error);
+});
+topbarTitleAction?.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    refreshCurrentContext().catch(console.error);
+  }
+});
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) {
@@ -2951,6 +3586,7 @@ function registerServiceWorker() {
 
 (async function init() {
   setupNumericFieldValidation();
+  renderVehicleVisualSelectors();
   setupTouchScrollTracking();
   applyTheme(getPreferredTheme());
   syncFooterYear();

@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS vehiculos (
   nombre TEXT NOT NULL,
   modelo TEXT NOT NULL,
   patente TEXT UNIQUE NOT NULL,
+  vehicle_type TEXT NOT NULL DEFAULT 'otro',
+  vehicle_color TEXT NOT NULL DEFAULT 'neutro',
   km_actual INTEGER,
   ultimo_service_km INTEGER,
   intervalo_km INTEGER,
@@ -83,3 +85,19 @@ CREATE TABLE IF NOT EXISTS push_notification_events (
 
 CREATE INDEX IF NOT EXISTS idx_push_notification_events_user_id
   ON push_notification_events (user_id, created_at DESC);
+
+
+CREATE TABLE IF NOT EXISTS activity_logs (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  entity_type TEXT NOT NULL,
+  entity_id INTEGER,
+  action TEXT NOT NULL,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL,
+  metadata JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_activity_logs_user_created_at
+  ON activity_logs (user_id, created_at DESC);

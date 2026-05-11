@@ -4,6 +4,7 @@ const pool = require("../db/connection");
 const { validateMaintenancePayload } = require("../utils/validation");
 const { buildNotificationPayload, sendPushToUser } = require("../utils/pushNotifications");
 const { buildNotificationIntentUrl } = require("../utils/pushReminders");
+const { logActivity } = require("../utils/activityLog");
 const MAX_IMAGE_BASE64_LENGTH = 2_800_000;
 const ALLOWED_IMAGE_MIME_TYPES = new Set(["image/png", "image/jpeg"]);
 
@@ -127,6 +128,18 @@ router.post("/", async (req, res) => {
        WHERE id = $2 AND user_id = $3`,
       [data.km, data.vehiculo_id, userId]
     );
+
+    await logActivity(client, {
+      userId,
+      action: "maintenance.create",
+      entityType: "maintenance",
+      entityId: createdMaintenance.id,
+      title: "Mantenimiento creado",
+      description: `Registraste "${data.accion}" para el vehiculo seleccionado.`,
+      metadata: { vehiculo_id: data.vehiculo_id, lugar_id: data.lugar_id },
+    }).catch((error) => {
+      console.error("No se pudo registrar la actividad", error);
+    });
 
     await client.query("COMMIT");
 
@@ -381,13 +394,25 @@ router.delete("/:id", async (req, res) => {
       `DELETE FROM mantenimiento
        WHERE id = $1
          AND user_id = $2
-       RETURNING id`,
+       RETURNING id, accion, vehiculo_id, lugar_id`,
       [maintenanceId, userId]
     );
 
     if (result.rowCount === 0) {
       return res.status(404).json({ error: "Mantenimiento no encontrado" });
     }
+
+    await logActivity(pool, {
+      userId,
+      action: "maintenance.delete",
+      entityType: "maintenance",
+      entityId: result.rows[0].id,
+      title: "Mantenimiento eliminado",
+      description: `Eliminaste el mantenimiento "${result.rows[0].accion}".`,
+      metadata: { vehiculo_id: result.rows[0].vehiculo_id, lugar_id: result.rows[0].lugar_id },
+    }).catch((error) => {
+      console.error("No se pudo registrar la actividad", error);
+    });
 
     res.json({ ok: true, id: result.rows[0].id });
   } catch (error) {

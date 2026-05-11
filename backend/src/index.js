@@ -11,6 +11,7 @@ const userRoutes = require("./routes/users");
 const vehicleRoutes = require("./routes/vehicles");
 const placeRoutes = require("./routes/places");
 const notificationRoutes = require("./routes/notifications");
+const activityRoutes = require("./routes/activity");
 
 const app = express();
 
@@ -38,6 +39,7 @@ app.use("/users", userRoutes);
 app.use("/vehicles", vehicleRoutes);
 app.use("/places", placeRoutes);
 app.use("/notifications", notificationRoutes);
+app.use("/activity", activityRoutes);
 
 app.listen(config.port, () => {
   console.log(`Servidor corriendo en puerto ${config.port}`);

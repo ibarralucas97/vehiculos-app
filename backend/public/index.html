@@ -55,7 +55,7 @@
           >
             ←
           </button>
-          <h1 class="app-title">Rodado Control</h1>
+          <h1 id="topbar-title-action" class="app-title app-title-action" role="button" tabindex="0" aria-label="Actualizar datos visibles">Rodado Control</h1>
         </div>
         <span id="topbar-user-name" class="topbar-user-name"></span>
         <div class="topbar-menu">
@@ -66,6 +66,7 @@
             <hr />
             <button id="menu-profile" type="button">Mi perfil</button>
             <button id="menu-settings" type="button">Configuracion</button>
+            <button id="menu-activity" type="button">Actividad</button>
             <button id="menu-theme-toggle" class="menu-theme-button" type="button" aria-pressed="false" aria-label="Cambiar tema">
               <span class="menu-button-icon" aria-hidden="true"></span>
               <span class="menu-button-label">Modo oscuro</span>
@@ -302,6 +303,16 @@
           <input name="nombre" placeholder="Nombre" required />
           <input name="modelo" placeholder="Modelo" required />
           <input name="patente" placeholder="Patente" required />
+          <div class="vehicle-visual-field">
+            <span class="vehicle-visual-label">Tipo</span>
+            <input id="vehicle_type" name="vehicle_type" type="hidden" value="otro" />
+            <div id="vehicle-type-options" class="vehicle-type-options"></div>
+          </div>
+          <div class="vehicle-visual-field">
+            <span class="vehicle-visual-label">Color</span>
+            <input id="vehicle_color" name="vehicle_color" type="hidden" value="neutro" />
+            <div id="vehicle-color-options" class="vehicle-color-options"></div>
+          </div>
           <input name="km_actual" type="text" inputmode="numeric" autocomplete="off" placeholder="KM actual" />
           <input
             name="ultimo_service_km"
@@ -438,6 +449,32 @@
                   <button id="notifications-toggle-button" type="button">Activar notificaciones</button>
                   <button id="notifications-test-button" class="ghost" type="button">Enviar prueba</button>
                 </div>
+                <div class="settings-overview-grid">
+                  <article class="settings-overview-card">
+                    <span class="settings-overview-label">Estado push</span>
+                    <strong id="settings-push-state">Pendiente</strong>
+                    <p id="settings-push-copy" class="inline-help">Aun no sincronizado.</p>
+                  </article>
+                  <article class="settings-overview-card">
+                    <span class="settings-overview-label">Permiso</span>
+                    <strong id="settings-permission-state">Pendiente</strong>
+                    <p id="settings-permission-copy" class="inline-help">Revisaremos el navegador al abrir esta seccion.</p>
+                  </article>
+                  <article class="settings-overview-card">
+                    <span class="settings-overview-label">Instalacion</span>
+                    <strong id="settings-install-state">Pendiente</strong>
+                    <p id="settings-install-copy" class="inline-help">La PWA mejora estabilidad y notificaciones.</p>
+                  </article>
+                  <article class="settings-overview-card">
+                    <span class="settings-overview-label">Ultima sincronizacion</span>
+                    <strong id="settings-sync-state">Sin datos</strong>
+                    <p id="settings-sync-copy" class="inline-help">Se actualiza al consultar estado push.</p>
+                  </article>
+                </div>
+                <div class="settings-reminder-copy">
+                  <p id="settings-reminder-frequency" class="inline-help">La frecuencia y kilometraje de avisos se define por vehiculo en Intervalo KM e Intervalo meses.</p>
+                  <p id="settings-reminder-km" class="inline-help">La actualizacion de kilometraje se hace desde el Dashboard, usando el boton "Actualizar".</p>
+                </div>
               </div>
 
               <button id="preferences-save-button" type="submit">Guardar preferencias</button>
@@ -474,6 +511,18 @@
         <div class="stack-actions">
           <button id="settings-logout-button" class="ghost" type="button">Cerrar sesion</button>
         </div>
+      </div>
+    </div>
+
+
+    <div id="activity-modal" class="modal hidden">
+      <div class="modal-content modal-content-wide activity-modal-content">
+        <button class="modal-close" onclick="closeModal('activity-modal')" type="button" aria-label="Cerrar"><span class="sr-only">Cerrar</span><svg viewBox="0 0 24 24" aria-hidden="true">
+  <path d="M6 6L18 18M18 6L6 18" />
+</svg></button>
+        <h2>Historial de actividad</h2>
+        <p class="section-copy">Acciones importantes recientes de tu cuenta.</p>
+        <div id="activity-list" class="activity-list"></div>
       </div>
     </div>
 
@@ -515,6 +564,9 @@
         </div>
       </div>
     </div>
+
+
+    <div id="toast-stack" class="toast-stack" aria-live="polite" aria-atomic="false"></div>
 
     <div id="app-loading" class="hidden">
       <div class="app-loading-box">

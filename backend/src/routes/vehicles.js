@@ -2,6 +2,15 @@ const express = require("express");
 const router = express.Router();
 const pool = require("../db/connection");
 const { MAX_NUMERIC_FIELD_VALUE, validateVehiclePayload } = require("../utils/validation");
+const { logActivity } = require("../utils/activityLog");
+
+async function recordActivity(details) {
+  try {
+    await logActivity(pool, details);
+  } catch (error) {
+    console.error("No se pudo registrar la actividad", error);
+  }
+}
 
 router.get("/", async (req, res) => {
   try {
@@ -17,6 +26,8 @@ router.get("/", async (req, res) => {
         nombre,
         modelo,
         patente,
+        vehicle_type,
+        vehicle_color,
         km_actual,
         ultimo_service_km,
         intervalo_km,
@@ -60,6 +71,8 @@ router.post("/", async (req, res) => {
         nombre,
         modelo,
         patente,
+        vehicle_type,
+        vehicle_color,
         user_id,
         km_actual,
         ultimo_service_km,
@@ -67,12 +80,14 @@ router.post("/", async (req, res) => {
         fecha_ultimo_service,
         intervalo_tiempo
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       RETURNING *`,
       [
         data.nombre,
         data.modelo,
         data.patente,
+        data.vehicle_type,
+        data.vehicle_color,
         userId,
         data.km_actual,
         data.ultimo_service_km,
@@ -81,6 +96,16 @@ router.post("/", async (req, res) => {
         data.intervalo_tiempo,
       ]
     );
+
+    await recordActivity({
+      userId,
+      action: "vehicle.create",
+      entityType: "vehicle",
+      entityId: result.rows[0].id,
+      title: "Vehiculo creado",
+      description: `Creaste el vehiculo "${result.rows[0].nombre}" (${result.rows[0].patente}).`,
+      metadata: { patente: result.rows[0].patente },
+    });
 
     res.status(201).json(result.rows[0]);
   } catch (error) {
@@ -108,17 +133,21 @@ router.put("/:id", async (req, res) => {
        SET nombre = $1,
            modelo = $2,
            patente = $3,
-           km_actual = $4,
-           ultimo_service_km = $5,
-           intervalo_km = $6,
-           fecha_ultimo_service = $7,
-           intervalo_tiempo = $8
-       WHERE id = $9 AND user_id = $10
+           vehicle_type = $4,
+           vehicle_color = $5,
+           km_actual = $6,
+           ultimo_service_km = $7,
+           intervalo_km = $8,
+           fecha_ultimo_service = $9,
+           intervalo_tiempo = $10
+       WHERE id = $11 AND user_id = $12
        RETURNING *`,
       [
         data.nombre,
         data.modelo,
         data.patente,
+        data.vehicle_type,
+        data.vehicle_color,
         data.km_actual,
         data.ultimo_service_km,
         data.intervalo_km,
@@ -132,6 +161,16 @@ router.put("/:id", async (req, res) => {
     if (result.rowCount === 0) {
       return res.status(404).json({ error: "Vehiculo no encontrado" });
     }
+
+    await recordActivity({
+      userId,
+      action: "vehicle.update",
+      entityType: "vehicle",
+      entityId: result.rows[0].id,
+      title: "Vehiculo actualizado",
+      description: `Actualizaste el vehiculo "${result.rows[0].nombre}" (${result.rows[0].patente}).`,
+      metadata: { patente: result.rows[0].patente },
+    });
 
     res.json(result.rows[0]);
   } catch (error) {
@@ -179,9 +218,19 @@ router.patch("/:id/km", async (req, res) => {
       `UPDATE vehiculos
        SET km_actual = $1
        WHERE id = $2 AND user_id = $3
-       RETURNING id, nombre, modelo, patente, km_actual, ultimo_service_km, intervalo_km, fecha_ultimo_service, intervalo_tiempo`,
+       RETURNING id, nombre, modelo, patente, vehicle_type, vehicle_color, km_actual, ultimo_service_km, intervalo_km, fecha_ultimo_service, intervalo_tiempo`,
       [kmActual, id, userId]
     );
+
+    await recordActivity({
+      userId,
+      action: "vehicle.km.update",
+      entityType: "vehicle",
+      entityId: result.rows[0].id,
+      title: "Kilometraje actualizado",
+      description: `Actualizaste el kilometraje de "${result.rows[0].nombre}" a ${result.rows[0].km_actual}.`,
+      metadata: { km_actual: result.rows[0].km_actual },
+    });
 
     res.json(result.rows[0]);
   } catch (error) {
@@ -200,13 +249,23 @@ router.delete("/:id", async (req, res) => {
     }
 
     const result = await pool.query(
-      "DELETE FROM vehiculos WHERE id = $1 AND user_id = $2 RETURNING id",
+      "DELETE FROM vehiculos WHERE id = $1 AND user_id = $2 RETURNING id, nombre, patente",
       [id, userId]
     );
 
     if (result.rowCount === 0) {
       return res.status(404).json({ error: "Vehiculo no encontrado" });
     }
+
+    await recordActivity({
+      userId,
+      action: "vehicle.delete",
+      entityType: "vehicle",
+      entityId: result.rows[0].id,
+      title: "Vehiculo eliminado",
+      description: `Eliminaste el vehiculo "${result.rows[0].nombre}" (${result.rows[0].patente}).`,
+      metadata: { patente: result.rows[0].patente },
+    });
 
     res.json({ ok: true });
   } catch (error) {

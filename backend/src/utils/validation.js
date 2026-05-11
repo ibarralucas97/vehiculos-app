@@ -7,6 +7,8 @@ function isNonNegativeInteger(value) {
 }
 
 const MAX_NUMERIC_FIELD_VALUE = 999999999;
+const ALLOWED_VEHICLE_TYPES = new Set(["moto", "auto", "camioneta", "camion", "bicicleta", "colectivo", "otro"]);
+const ALLOWED_VEHICLE_COLORS = new Set(["rojo", "azul", "gris", "negro", "verde", "neutro"]);
 
 function normalizeText(value) {
   return typeof value === "string" ? value.trim() : "";
@@ -137,6 +139,8 @@ function validateVehiclePayload(payload) {
   const nombre = normalizeText(payload.nombre);
   const modelo = normalizeText(payload.modelo);
   const patente = normalizeText(payload.patente).toUpperCase();
+  const vehicleType = normalizeText(payload.vehicle_type || "otro").toLowerCase() || "otro";
+  const vehicleColor = normalizeText(payload.vehicle_color || "neutro").toLowerCase() || "neutro";
 
   const kmActual = parseOptionalInteger(payload.km_actual, "km_actual");
   const ultimoServiceKm = parseOptionalInteger(payload.ultimo_service_km, "ultimo_service_km");
@@ -149,6 +153,8 @@ function validateVehiclePayload(payload) {
   if (!nombre) errors.push("nombre es obligatorio");
   if (!modelo) errors.push("modelo es obligatorio");
   if (!patente) errors.push("patente es obligatoria");
+  if (!ALLOWED_VEHICLE_TYPES.has(vehicleType)) errors.push("vehicle_type no es valido");
+  if (!ALLOWED_VEHICLE_COLORS.has(vehicleColor)) errors.push("vehicle_color no es valido");
 
   [kmActual, ultimoServiceKm, intervaloKm, fechaUltimoService, intervaloTiempo].forEach((result) => {
     if (result.error) {
@@ -170,6 +176,8 @@ function validateVehiclePayload(payload) {
       nombre,
       modelo,
       patente,
+      vehicle_type: vehicleType,
+      vehicle_color: vehicleColor,
       km_actual: kmActual.value,
       ultimo_service_km: ultimoServiceKm.value,
       intervalo_km: intervaloKm.value,
