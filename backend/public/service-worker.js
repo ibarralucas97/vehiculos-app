@@ -1,4 +1,4 @@
-const CACHE_NAME = "rodado-control-v8";
+const CACHE_NAME = "rodado-control-v10";
 const APP_SHELL = [
   "/",
   "/index.html",
@@ -36,8 +36,36 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
+const API_PREFIXES = [
+  "/auth",
+  "/vehicles",
+  "/places",
+  "/maintenance",
+  "/notifications",
+  "/dashboard",
+  "/users",
+  "/api",
+];
+
+function isApiRequest(requestUrl) {
+  const pathname = new URL(requestUrl).pathname;
+  return API_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+}
+
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") {
+    return;
+  }
+
+  if (isApiRequest(event.request.url)) {
+    event.respondWith(
+      fetch(event.request, { cache: "no-store" }).catch(() =>
+        new Response(JSON.stringify({ error: "Sin conexion" }), {
+          status: 503,
+          headers: { "Content-Type": "application/json" },
+        })
+      )
+    );
     return;
   }
 

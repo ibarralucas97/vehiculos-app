@@ -40,10 +40,14 @@ const vehicleForm = document.getElementById("vehicle-form");
 const placeForm = document.getElementById("place-form");
 const filtersForm = document.getElementById("filters-form");
 const formMessage = document.getElementById("form-message");
+const vehicleFormMessage = document.getElementById("vehicle-form-message");
+const placeFormMessage = document.getElementById("place-form-message");
 const filtersSubmitButton = document.getElementById("filters-submit");
 const latestButton = document.getElementById("latest-button");
 const exportPdfButton = document.getElementById("export-pdf-button");
 const maintenanceSubmitButton = document.getElementById("maintenance-submit");
+const vehicleSaveButton = document.getElementById("vehicle-save-button");
+const placeSaveButton = document.getElementById("place-save-button");
 const vehicleSelect = document.getElementById("vehiculo_id");
 const placeSelect = document.getElementById("lugar_id");
 const menuButton = document.getElementById("menu-toggle");
@@ -637,6 +641,28 @@ function setButtonLoading(button, isLoading, loadingText = "Guardando...") {
   }
 }
 
+function resetVehicleFormState() {
+  editingVehicleId = null;
+  vehicleForm?.reset();
+  if (vehicleSaveButton) {
+    vehicleSaveButton.textContent = "Crear";
+  }
+  if (vehicleFormMessage) {
+    vehicleFormMessage.textContent = "";
+  }
+}
+
+function resetPlaceFormState() {
+  editingPlaceId = null;
+  placeForm?.reset();
+  if (placeSaveButton) {
+    placeSaveButton.textContent = "Crear";
+  }
+  if (placeFormMessage) {
+    placeFormMessage.textContent = "";
+  }
+}
+
 
 const vehiclesScreen = document.getElementById("vehicles-screen");
 
@@ -1010,12 +1036,41 @@ function toggleMenu() {
 }
 
 
-async function fetchJson(url, options) {
-  const response = await fetch(url, options);
-  const data = await response.json();
+async function fetchJson(url, options = {}) {
+  const method = String(options?.method || "GET").toUpperCase();
+  const requestOptions = {
+    ...options,
+    headers: {
+      Accept: "application/json",
+      ...(options.headers || {}),
+    },
+  };
+
+  let requestUrl = url;
+
+  if (method === "GET") {
+    requestOptions.cache = "no-store";
+    const separator = String(url).includes("?") ? "&" : "?";
+    requestUrl = `${url}${separator}_ts=${Date.now()}`;
+  }
+
+  const response = await fetch(requestUrl, requestOptions);
+  const rawBody = await response.text();
+  let data = {};
+
+  if (rawBody) {
+    try {
+      data = JSON.parse(rawBody);
+    } catch (_error) {
+      data = { error: rawBody };
+    }
+  }
 
   if (!response.ok) {
-    const message = data.errors ? data.errors.join(", ") : data.error || "Ocurrio un error";
+    console.error("[API ERROR]", method, requestUrl, response.status, data);
+    const message = Array.isArray(data?.errors)
+      ? data.errors.join(", ")
+      : data?.error || `Error ${response.status}` || "Ocurrio un error";
     throw new Error(message);
   }
 
@@ -1609,6 +1664,7 @@ async function loadVehiclesScreen() {
   const session = getSession();
 
   const vehicles = await fetchJson(`/vehicles?user_id=${session.id}`);
+  currentVehicles = vehicles;
 
   const container = document.getElementById("vehicles-grid");
 
@@ -1810,10 +1866,21 @@ function editVehicle(id) {
   document.querySelector("#vehicle-form [name=nombre]").value = vehicle.nombre;
   document.querySelector("#vehicle-form [name=modelo]").value = vehicle.modelo;
   document.querySelector("#vehicle-form [name=patente]").value = vehicle.patente;
+  document.querySelector("#vehicle-form [name=km_actual]").value = vehicle.km_actual ?? "";
+  document.querySelector("#vehicle-form [name=ultimo_service_km]").value = vehicle.ultimo_service_km ?? "";
+  document.querySelector("#vehicle-form [name=intervalo_km]").value = vehicle.intervalo_km ?? "";
+  document.querySelector("#vehicle-form [name=fecha_ultimo_service]").value = vehicle.fecha_ultimo_service ? String(vehicle.fecha_ultimo_service).slice(0, 10) : "";
+  document.querySelector("#vehicle-form [name=intervalo_tiempo]").value = vehicle.intervalo_tiempo ?? "";
 
   editingVehicleId = id;
 
-  document.querySelector("#vehicle-form button").textContent = "Guardar";
+  if (vehicleSaveButton) {
+    vehicleSaveButton.textContent = "Guardar";
+  }
+  if (vehicleFormMessage) {
+    vehicleFormMessage.textContent = "Editando vehiculo seleccionado.";
+  }
+  openModal("vehicles-modal");
 }
 
 function viewVehicle(id) {
@@ -2124,14 +2191,20 @@ vehicleForm?.addEventListener("submit", async (e) => {
 
   const session = getSession();
   const data = Object.fromEntries(new FormData(vehicleForm).entries());
+  const isEditing = Boolean(editingVehicleId);
+
+  if (vehicleFormMessage) {
+    vehicleFormMessage.textContent = isEditing ? "Guardando cambios del vehiculo..." : "Creando vehiculo...";
+  }
 
   try {
     data.km_actual = normalizeNumericPayloadValue(data.km_actual, NUMERIC_FIELD_CONFIG.km_actual);
     data.ultimo_service_km = normalizeNumericPayloadValue(data.ultimo_service_km, NUMERIC_FIELD_CONFIG.ultimo_service_km);
     data.intervalo_km = normalizeNumericPayloadValue(data.intervalo_km, NUMERIC_FIELD_CONFIG.intervalo_km);
-    showAppLoading("Guardando vehiculo...");
+    showAppLoading(isEditing ? "Actualizando vehiculo..." : "Guardando vehiculo...");
+    setButtonLoading(vehicleSaveButton, true, isEditing ? "Guardando..." : "Creando...");
 
-    if (editingVehicleId) {
+    if (isEditing) {
       await fetchJson(`/vehicles/${editingVehicleId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -2140,9 +2213,6 @@ vehicleForm?.addEventListener("submit", async (e) => {
           user_id: session.id,
         }),
       });
-
-      editingVehicleId = null;
-      vehicleForm.querySelector("button").textContent = "Crear";
     } else {
       await fetchJson(`/vehicles`, {
         method: "POST",
@@ -2154,14 +2224,18 @@ vehicleForm?.addEventListener("submit", async (e) => {
       });
     }
 
-    vehicleForm.reset();
     await refreshAllData();
-await loadVehiclesScreen();
-closeModal("vehicles-modal");
-
+    await loadVehiclesScreen();
+    resetVehicleFormState();
+    closeModal("vehicles-modal");
+    setStatus(isEditing ? "Vehiculo actualizado" : "Vehiculo creado");
   } catch (err) {
     console.error(err);
+    if (vehicleFormMessage) {
+      vehicleFormMessage.textContent = err.message || "No se pudo guardar el vehiculo.";
+    }
   } finally {
+    setButtonLoading(vehicleSaveButton, false, isEditing ? "Guardando..." : "Creando...");
     hideAppLoading();
   }
 });
@@ -2172,11 +2246,17 @@ placeForm?.addEventListener("submit", async (e) => {
 
   const session = getSession();
   const data = Object.fromEntries(new FormData(placeForm).entries());
+  const isEditing = Boolean(editingPlaceId);
+
+  if (placeFormMessage) {
+    placeFormMessage.textContent = isEditing ? "Guardando cambios del lugar..." : "Creando lugar...";
+  }
 
   try {
-    showAppLoading("Guardando lugar...");
+    showAppLoading(isEditing ? "Actualizando lugar..." : "Guardando lugar...");
+    setButtonLoading(placeSaveButton, true, isEditing ? "Guardando..." : "Creando...");
 
-    if (editingPlaceId) {
+    if (isEditing) {
       await fetchJson(`/places/${editingPlaceId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -2185,9 +2265,6 @@ placeForm?.addEventListener("submit", async (e) => {
           user_id: session.id,
         }),
       });
-
-      editingPlaceId = null;
-      placeForm.querySelector("button").textContent = "Crear";
     } else {
       await fetchJson(`/places`, {
         method: "POST",
@@ -2199,13 +2276,17 @@ placeForm?.addEventListener("submit", async (e) => {
       });
     }
 
-    placeForm.reset();
     await refreshAllData();
-closeModal("places-modal");
-
+    resetPlaceFormState();
+    closeModal("places-modal");
+    setStatus(isEditing ? "Lugar actualizado" : "Lugar creado");
   } catch (err) {
     console.error(err);
+    if (placeFormMessage) {
+      placeFormMessage.textContent = err.message || "No se pudo guardar el lugar.";
+    }
   } finally {
+    setButtonLoading(placeSaveButton, false, isEditing ? "Guardando..." : "Creando...");
     hideAppLoading();
   }
 });
@@ -2451,14 +2532,20 @@ function editPlace(id) {
   const place = currentPlaces.find(p => p.id === id);
   if (!place) return;
 
-  document.querySelector("#place-form [name=nombre]").value = place.nombre;
-  document.querySelector("#place-form [name=ubicacion]").value = place.ubicacion;
-  document.querySelector("#place-form [name=contacto_nombre]").value = place.contacto_nombre;
-  document.querySelector("#place-form [name=contacto_numero]").value = place.contacto_numero;
+  document.querySelector("#place-form [name=nombre]").value = place.nombre || "";
+  document.querySelector("#place-form [name=ubicacion]").value = place.ubicacion || "";
+  document.querySelector("#place-form [name=contacto_nombre]").value = place.contacto_nombre || "";
+  document.querySelector("#place-form [name=contacto_numero]").value = place.contacto_numero || "";
 
   editingPlaceId = id;
 
-  document.querySelector("#place-form button").textContent = "Guardar";
+  if (placeSaveButton) {
+    placeSaveButton.textContent = "Guardar";
+  }
+  if (placeFormMessage) {
+    placeFormMessage.textContent = "Editando lugar seleccionado.";
+  }
+  openModal("places-modal");
 }
 
 async function deletePlace(id) {
@@ -2536,11 +2623,13 @@ function toggleSection(header, options = {}) {
 }
 
 function openVehiclesModal() {
+  resetVehicleFormState();
   openModal("vehicles-modal");
   closeMenu();
 }
 
 function openPlacesModal() {
+  resetPlaceFormState();
   openModal("places-modal");
   closeMenu();
 }
