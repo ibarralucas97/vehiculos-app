@@ -157,7 +157,13 @@ body.splash-active .app-shell {
 
 .login-brand-logo {
   width: min(100%, 620px);
+  height: auto;
+  object-fit: contain;
   display: block;
+  filter: none;
+  opacity: 1;
+  mix-blend-mode: normal;
+  image-rendering: auto;
 }
 
 .eyebrow,
@@ -496,10 +502,13 @@ button.is-loading {
 }
 
 .pill {
+  display: inline-flex;
+  align-items: center;
   flex-shrink: 0;
   border-radius: 999px;
   padding: 10px 14px;
   background: #ebe6db;
+  border: 1px solid rgba(80, 109, 132, 0.12);
   color: var(--primary-deep);
   font-size: 0.9rem;
   font-weight: 800;
@@ -724,25 +733,28 @@ body.modal-open {
   position: absolute;
   top: 10px;
   right: 10px;
-
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
   min-height: auto;
   padding: 0;
-
   border-radius: 50%;
-  background: transparent;
+  background: rgba(80, 109, 132, 0.08);
   color: #506d84;
-
-  font-size: 18px;
-  font-weight: bold;
-
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-
   cursor: pointer;
   box-shadow: none;
+}
+
+.modal-close svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .modal-close:hover {
@@ -779,24 +791,39 @@ body.modal-open {
 }
 
 .item-actions button {
-  background: none;
-  border: none;
-  cursor: pointer;
-
-  width: 36px;
-  height: 36px;
-  font-size: 16px;
-  padding: 6px;
-
-  border-radius: 6px;
-  min-height: auto; /* 🔥 evita botones gigantes */
-  display: flex;
+  width: 40px;
+  height: 40px;
+  min-height: auto;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid rgba(80, 109, 132, 0.14);
+  background: rgba(80, 109, 132, 0.06);
+  color: var(--primary-deep);
+  display: inline-flex;
   align-items: center;
   justify-content: center;
+  box-shadow: none;
+}
+
+.item-actions button svg,
+.menu-button-icon svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.item-actions button[data-variant="danger"] {
+  color: #9b3d3d;
+  border-color: rgba(155, 61, 61, 0.22);
+  background: rgba(155, 61, 61, 0.08);
 }
 
 .item-actions button:hover {
-  background: rgba(0,0,0,0.05);
+  background: rgba(80, 109, 132, 0.12);
 }
 
 #app-loading {
@@ -1468,30 +1495,6 @@ body.modal-open {
 
 
 
-.app-utilities {
-  width: min(1120px, calc(100% - 28px));
-  margin: 0 auto;
-  padding-top: 14px;
-  display: flex;
-  justify-content: flex-end;
-}
-
-.theme-toggle {
-  width: auto;
-  min-height: 42px;
-  padding: 10px 14px;
-  border: 1px solid rgba(80, 109, 132, 0.18);
-  border-radius: 999px;
-  background: rgba(252, 251, 248, 0.92);
-  color: var(--primary-deep);
-  font-weight: 700;
-  box-shadow: 0 12px 28px rgba(31, 42, 61, 0.08);
-}
-
-.theme-toggle:hover {
-  transform: translateY(-1px);
-}
-
 .app-footer {
   margin-top: auto;
   padding: 28px 0 8px;
@@ -1715,11 +1718,6 @@ body[data-theme="dark"] .menu-panel::before {
   background: #1b2531;
 }
 
-body[data-theme="dark"] .theme-toggle {
-  background: rgba(27, 37, 49, 0.92);
-  color: var(--text);
-  border-color: var(--border);
-}
 
 body[data-theme="dark"] .hero-title,
 body[data-theme="dark"] .item-info span,
@@ -1746,17 +1744,6 @@ body[data-theme="dark"] .modal-close:hover {
 }
 
 @media (max-width: 640px) {
-  .app-utilities {
-    width: min(100% - 16px, 1120px);
-    padding-top: 10px;
-  }
-
-  .theme-toggle {
-    min-height: 38px;
-    padding: 8px 12px;
-    font-size: 0.9rem;
-  }
-
   .maintenance-detail-header,
   .maintenance-detail-grid {
     grid-template-columns: 1fr;
@@ -1879,4 +1866,93 @@ body[data-theme="dark"] .notification-status.is-error {
     width: 100%;
     min-width: 0;
   }
+}
+
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+input::placeholder {
+  color: #7f8794;
+  opacity: 1;
+}
+
+.menu-theme-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.menu-button-icon {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.menu-button-label {
+  display: inline-flex;
+  align-items: center;
+}
+
+body[data-theme="dark"] .login-brand-logo {
+  filter: none;
+  opacity: 1;
+  mix-blend-mode: normal;
+}
+
+body[data-theme="dark"] input::placeholder {
+  color: #90a0b2;
+}
+
+body[data-theme="dark"] .pill {
+  background: rgba(139, 184, 212, 0.16);
+  border-color: rgba(139, 184, 212, 0.22);
+  color: #dce7f2;
+}
+
+body[data-theme="dark"] .section-chevron,
+body[data-theme="dark"] .history-primary-action,
+body[data-theme="dark"] .profile-meta-pill,
+body[data-theme="dark"] .session-badge {
+  background: rgba(139, 184, 212, 0.14) !important;
+  border-color: rgba(139, 184, 212, 0.2) !important;
+  color: #dce7f2 !important;
+}
+
+body[data-theme="dark"] .status-badge.is-sin_configurar {
+  background: #2a3340;
+  color: #d2dae4;
+}
+
+body[data-theme="dark"] .menu-theme-button,
+body[data-theme="dark"] .item-actions button,
+body[data-theme="dark"] .modal-close {
+  background: rgba(139, 184, 212, 0.1);
+  border-color: rgba(139, 184, 212, 0.18);
+  color: #dce7f2;
+}
+
+body[data-theme="dark"] .item-actions button[data-variant="danger"] {
+  background: rgba(155, 61, 61, 0.14);
+  border-color: rgba(239, 154, 154, 0.24);
+  color: #efb1b1;
+}
+
+body[data-theme="dark"] .maintenance-card-button.ghost,
+body[data-theme="dark"] .card-meta span,
+body[data-theme="dark"] .reminder-meta span,
+body[data-theme="dark"] .empty {
+  color: var(--muted);
 }

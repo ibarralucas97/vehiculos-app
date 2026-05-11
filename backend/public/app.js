@@ -93,7 +93,10 @@ const THEME_PREFERENCE_KEY = "mygarage_theme";
 const LIGHT_THEME_COLOR = "#0f6c8d";
 const DARK_THEME_COLOR = "#121922";
 const PWA_INSTALL_DISMISS_KEY = "mygarage_pwa_install_dismissed";
-const themeToggleButton = document.getElementById("theme-toggle");
+const LOGIN_LOGO_LIGHT_SRC = "/login-logo.png";
+const LOGIN_LOGO_DARK_SRC = "/splash-logo-transparent.png";
+const themeMenuButton = document.getElementById("menu-theme-toggle");
+const loginBrandLogo = document.getElementById("login-brand-logo");
 const footerYear = document.getElementById("footer-year");
 const maintenanceDetailModal = document.getElementById("maintenance-detail-modal");
 const maintenanceDetailTitle = document.getElementById("maintenance-detail-title");
@@ -129,6 +132,41 @@ let touchGestureState = {
 let touchScrollResetTimer = null;
 let isTouchScrolling = false;
 const TOUCH_SCROLL_THRESHOLD = 8;
+
+const ICONS = {
+  themeDark: `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" />
+    </svg>
+  `,
+  themeLight: `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="4.2" />
+      <path d="M12 2.5v2.2M12 19.3v2.2M4.9 4.9l1.5 1.5M17.6 17.6l1.5 1.5M2.5 12h2.2M19.3 12h2.2M4.9 19.1l1.5-1.5M17.6 6.4l1.5-1.5" />
+    </svg>
+  `,
+  view: `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M2.5 12s3.4-6 9.5-6 9.5 6 9.5 6-3.4 6-9.5 6-9.5-6-9.5-6Z" />
+      <circle cx="12" cy="12" r="3.2" />
+    </svg>
+  `,
+  edit: `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 20h4.2l9.9-9.9-4.2-4.2L4 15.8V20Z" />
+      <path d="M12.8 6.1l4.2 4.2" />
+      <path d="M14.7 4.2l1.2-1.2a2 2 0 0 1 2.8 0l2 2a2 2 0 0 1 0 2.8l-1.2 1.2" />
+    </svg>
+  `,
+  delete: `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 7h16" />
+      <path d="M9.5 3.5h5L15 7H9l.5-3.5Z" />
+      <path d="M7.5 7l1 13h7l1-13" />
+      <path d="M10 10.5v6M14 10.5v6" />
+    </svg>
+  `,
+};
 
 function buildFullName(user = {}) {
   return [user.nombre, user.apellido].filter(Boolean).join(" ").trim() || user.fullName || user.email || "";
@@ -224,14 +262,39 @@ function getPreferredTheme() {
   return window.matchMedia?.("(prefers-color-scheme: dark)")?.matches ? "dark" : "light";
 }
 
+function buildIconMarkup(name) {
+  return ICONS[name] || "";
+}
+
+function updateThemeMenuButton(theme = document.body.dataset.theme) {
+  if (!themeMenuButton) return;
+
+  const isDark = theme === "dark";
+  const nextLabel = isDark ? "Modo claro" : "Modo oscuro";
+  const nextIcon = isDark ? "themeLight" : "themeDark";
+
+  themeMenuButton.setAttribute("aria-pressed", String(isDark));
+  themeMenuButton.setAttribute("aria-label", `Cambiar a ${nextLabel.toLowerCase()}`);
+  themeMenuButton.innerHTML = `
+    <span class="menu-button-icon" aria-hidden="true">${buildIconMarkup(nextIcon)}</span>
+    <span class="menu-button-label">${nextLabel}</span>
+  `;
+}
+
+function syncLoginBrandLogo(theme = document.body.dataset.theme) {
+  if (!loginBrandLogo) return;
+
+  const nextSrc = theme === "dark" ? LOGIN_LOGO_DARK_SRC : LOGIN_LOGO_LIGHT_SRC;
+  if (!loginBrandLogo.getAttribute("src") || loginBrandLogo.getAttribute("src") !== nextSrc) {
+    loginBrandLogo.setAttribute("src", nextSrc);
+  }
+}
+
 function applyTheme(theme) {
   const resolvedTheme = theme === "dark" ? "dark" : "light";
   document.body.dataset.theme = resolvedTheme;
-
-  if (themeToggleButton) {
-    themeToggleButton.textContent = resolvedTheme === "dark" ? "Modo claro" : "Modo oscuro";
-    themeToggleButton.setAttribute("aria-pressed", String(resolvedTheme === "dark"));
-  }
+  updateThemeMenuButton(resolvedTheme);
+  syncLoginBrandLogo(resolvedTheme);
 
   if (themeColorMeta) {
     themeColorMeta.setAttribute("content", resolvedTheme === "dark" ? DARK_THEME_COLOR : LIGHT_THEME_COLOR);
@@ -250,6 +313,7 @@ function toggleTheme() {
   const nextTheme = document.body.dataset.theme === "dark" ? "light" : "dark";
   persistTheme(nextTheme);
   applyTheme(nextTheme);
+  closeMenu();
 }
 
 function syncFooterYear() {
@@ -561,7 +625,7 @@ function syncSession(user) {
 }
 
 function setButtonLoading(button, isLoading, loadingText = "Guardando...") {
-  if (!button) return; // ðŸ‘ˆ salva todo
+  if (!button) return;
 
   if (isLoading) {
     button.dataset.originalText = button.textContent;
@@ -1264,6 +1328,21 @@ function optionMarkup(items, labelKey) {
     .join("");
 }
 
+function buildItemActionButton({ action, icon, label, variant = "default" }) {
+  return `
+    <button
+      type="button"
+      class="icon-button"
+      data-variant="${variant}"
+      onclick="${action}"
+      aria-label="${label}"
+      title="${label}"
+    >
+      ${buildIconMarkup(icon)}
+    </button>
+  `;
+}
+
 function persistMaintenanceImages(items) {
   let hasChanges = false;
 
@@ -1501,7 +1580,6 @@ async function loadPlacesList() {
 
   const places = await fetchJson(`/places?user_id=${session.id}`);
 
-  // ðŸ”¥ guardamos en memoria
   currentPlaces = places;
 
   const container = document.getElementById("places-list");
@@ -1515,9 +1593,9 @@ async function loadPlacesList() {
       </div>
 
       <div class="item-actions">
-        <button onclick="viewPlace(${p.id})" title="Ver">ðŸ‘</button>
-        <button onclick="editPlace(${p.id})" title="Editar">âœï¸</button>
-        <button onclick="deletePlace(${p.id})" title="Eliminar">ðŸ—‘</button>
+        ${buildItemActionButton({ action: `viewPlace(${p.id})`, icon: "view", label: "Ver lugar" })}
+        ${buildItemActionButton({ action: `editPlace(${p.id})`, icon: "edit", label: "Editar lugar" })}
+        ${buildItemActionButton({ action: `deletePlace(${p.id})`, icon: "delete", label: "Eliminar lugar", variant: "danger" })}
       </div>
 
     </div>
@@ -1535,7 +1613,7 @@ async function loadVehiclesScreen() {
   const container = document.getElementById("vehicles-grid");
 
   if (vehicles.length === 0) {
-    container.innerHTML = "<p>No tenÃ©s vehÃ­culos aÃºn</p>";
+    container.innerHTML = "<p>No tenes vehiculos aun</p>";
     return;
   }
 
@@ -1716,9 +1794,9 @@ async function loadVehiclesList() {
       </div>
 
       <div class="item-actions">
-        <button onclick="viewVehicle(${v.id})" title="Ver">ðŸ‘</button>
-        <button onclick="editVehicle(${v.id})" title="Editar">âœï¸</button>
-        <button onclick="deleteVehicle(${v.id})" title="Eliminar">ðŸ—‘</button>
+        ${buildItemActionButton({ action: `viewVehicle(${v.id})`, icon: "view", label: "Ver vehiculo" })}
+        ${buildItemActionButton({ action: `editVehicle(${v.id})`, icon: "edit", label: "Editar vehiculo" })}
+        ${buildItemActionButton({ action: `deleteVehicle(${v.id})`, icon: "delete", label: "Eliminar vehiculo", variant: "danger" })}
       </div>
 
     </div>
@@ -1801,7 +1879,7 @@ async function loadMaintenance() {
 
   if (usingFilters) {
     historyTitle.textContent = "Historial filtrado";
-    historyCopy.textContent = "Resultados segÃºn los filtros aplicados al vehÃ­culo seleccionado.";
+    historyCopy.textContent = "Resultados segun los filtros aplicados al vehiculo seleccionado.";
   } else {
     historyTitle.textContent = "Historial";
     historyCopy.textContent = "Busca mantenimientos por texto o rango de fechas.";
@@ -1985,7 +2063,6 @@ loginForm?.addEventListener("submit", async (event) => {
     syncSession(response.user);
     loginMessage.textContent = "";
 
-// ðŸ‘‡ NUEVO FLUJO
 await loadVehiclesList();
 await loadVehiclesScreen();
 
@@ -2052,7 +2129,7 @@ vehicleForm?.addEventListener("submit", async (e) => {
     data.km_actual = normalizeNumericPayloadValue(data.km_actual, NUMERIC_FIELD_CONFIG.km_actual);
     data.ultimo_service_km = normalizeNumericPayloadValue(data.ultimo_service_km, NUMERIC_FIELD_CONFIG.ultimo_service_km);
     data.intervalo_km = normalizeNumericPayloadValue(data.intervalo_km, NUMERIC_FIELD_CONFIG.intervalo_km);
-    showAppLoading("Guardando vehÃ­culo...");
+    showAppLoading("Guardando vehiculo...");
 
     if (editingVehicleId) {
       await fetchJson(`/vehicles/${editingVehicleId}`, {
@@ -2079,7 +2156,7 @@ vehicleForm?.addEventListener("submit", async (e) => {
 
     vehicleForm.reset();
     await refreshAllData();
-await loadVehiclesScreen(); // ðŸ‘ˆ CLAVE
+await loadVehiclesScreen();
 closeModal("vehicles-modal");
 
   } catch (err) {
@@ -2137,7 +2214,7 @@ maintenanceForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
 
   if (!selectedVehicleId) {
-    formMessage.textContent = "Primero selecciona un vehÃ­culo.";
+    formMessage.textContent = "Primero selecciona un vehiculo.";
     return;
   }
 
@@ -2236,7 +2313,7 @@ async function deleteMaintenance(id) {
   const session = getSession();
   const confirmed = typeof openUiModal === "function"
     ? await openUiModal({
-        title: "Â¿Eliminar este mantenimiento?",
+        title: "Eliminar este mantenimiento?",
         bodyHtml: "<p>Esta accion no se puede deshacer.</p>",
         confirmLabel: "Eliminar",
         cancelLabel: "Cancelar",
@@ -2334,7 +2411,7 @@ maintenanceDetailDelete?.addEventListener("click", async () => {
   }
 });
 maintenanceImageLightboxClose?.addEventListener("click", closeMaintenanceImageLightbox);
-themeToggleButton?.addEventListener("click", toggleTheme);
+themeMenuButton?.addEventListener("click", toggleTheme);
 notificationsToggleButton?.addEventListener("click", () => {
   handleNotificationToggle().catch((error) => {
     setNotificationStatus(error.message, "error");

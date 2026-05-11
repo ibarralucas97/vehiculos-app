@@ -26,9 +26,6 @@
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body class="splash-active">
-    <div class="app-utilities">
-      <button id="theme-toggle" class="theme-toggle" type="button" aria-pressed="false">Modo oscuro</button>
-    </div>
     <div id="pwa-install-banner" class="pwa-install-banner hidden">
       <div class="pwa-install-banner-copy">
         <p class="pwa-install-banner-title">Instalá Rodado Control</p>
@@ -69,6 +66,10 @@
             <hr />
             <button id="menu-profile" type="button">Mi perfil</button>
             <button id="menu-settings" type="button">Configuracion</button>
+            <button id="menu-theme-toggle" class="menu-theme-button" type="button" aria-pressed="false" aria-label="Cambiar tema">
+              <span class="menu-button-icon" aria-hidden="true"></span>
+              <span class="menu-button-label">Modo oscuro</span>
+            </button>
             <hr />
             <button id="menu-logout" type="button">Cerrar sesion</button>
           </div>
@@ -77,7 +78,7 @@
 
       <section class="hero-card" id="welcome-screen">
         <div class="hero-copy">
-          <img class="login-brand-logo" src="/login-logo.png" alt="Rodado Control" />
+          <img id="login-brand-logo" class="login-brand-logo" src="/login-logo.png" alt="Rodado Control" />
           <h2 class="hero-title">Controla el mantenimiento de tus vehiculos de forma simple y ordenada</h2>
         </div>
 
@@ -291,7 +292,9 @@
 
     <div id="vehicles-modal" class="modal hidden">
       <div class="modal-content">
-        <button class="modal-close" onclick="closeModal('vehicles-modal')" type="button">✕</button>
+        <button class="modal-close" onclick="closeModal('vehicles-modal')" type="button" aria-label="Cerrar"><span class="sr-only">Cerrar</span><svg viewBox="0 0 24 24" aria-hidden="true">
+  <path d="M6 6L18 18M18 6L6 18" />
+</svg></button>
 
         <h2>Vehiculos</h2>
 
@@ -326,7 +329,9 @@
 
     <div id="places-modal" class="modal hidden">
       <div class="modal-content">
-        <button class="modal-close" onclick="closeModal('places-modal')" type="button">✕</button>
+        <button class="modal-close" onclick="closeModal('places-modal')" type="button" aria-label="Cerrar"><span class="sr-only">Cerrar</span><svg viewBox="0 0 24 24" aria-hidden="true">
+  <path d="M6 6L18 18M18 6L6 18" />
+</svg></button>
 
         <h2>Lugares</h2>
 
@@ -344,7 +349,9 @@
 
     <div id="profile-modal" class="modal hidden">
       <div class="modal-content modal-content-wide">
-        <button class="modal-close" onclick="closeModal('profile-modal')" type="button">✕</button>
+        <button class="modal-close" onclick="closeModal('profile-modal')" type="button" aria-label="Cerrar"><span class="sr-only">Cerrar</span><svg viewBox="0 0 24 24" aria-hidden="true">
+  <path d="M6 6L18 18M18 6L6 18" />
+</svg></button>
         <h2>Mi perfil</h2>
         <div class="profile-layout">
           <div class="profile-avatar-card">
@@ -390,7 +397,9 @@
 
     <div id="settings-modal" class="modal hidden">
       <div class="modal-content modal-content-wide">
-        <button class="modal-close" onclick="closeModal('settings-modal')" type="button">✕</button>
+        <button class="modal-close" onclick="closeModal('settings-modal')" type="button" aria-label="Cerrar"><span class="sr-only">Cerrar</span><svg viewBox="0 0 24 24" aria-hidden="true">
+  <path d="M6 6L18 18M18 6L6 18" />
+</svg></button>
         <h2>Configuracion</h2>
         <div class="settings-grid">
           <section class="settings-card">
@@ -468,7 +477,9 @@
 
     <div id="maintenance-detail-modal" class="modal hidden">
       <div class="modal-content modal-content-wide maintenance-detail-modal-content">
-        <button class="modal-close" id="maintenance-detail-close" type="button">✕</button>
+        <button class="modal-close" id="maintenance-detail-close" type="button" aria-label="Cerrar"><span class="sr-only">Cerrar</span><svg viewBox="0 0 24 24" aria-hidden="true">
+  <path d="M6 6L18 18M18 6L6 18" />
+</svg></button>
         <div class="maintenance-detail-header">
           <div>
             <p class="maintenance-detail-kicker">Detalle de mantenimiento</p>
@@ -482,14 +493,18 @@
 
     <div id="maintenance-image-lightbox" class="modal hidden">
       <div class="modal-content maintenance-lightbox-content">
-        <button class="modal-close" id="maintenance-image-lightbox-close" type="button">✕</button>
+        <button class="modal-close" id="maintenance-image-lightbox-close" type="button" aria-label="Cerrar"><span class="sr-only">Cerrar</span><svg viewBox="0 0 24 24" aria-hidden="true">
+  <path d="M6 6L18 18M18 6L6 18" />
+</svg></button>
         <img id="maintenance-image-lightbox-img" alt="Imagen ampliada del mantenimiento" />
       </div>
     </div>
 
     <div id="ui-modal" class="modal hidden">
       <div class="modal-content modal-content-wide">
-        <button class="modal-close" id="ui-modal-close" type="button">✕</button>
+        <button class="modal-close" id="ui-modal-close" type="button" aria-label="Cerrar"><span class="sr-only">Cerrar</span><svg viewBox="0 0 24 24" aria-hidden="true">
+  <path d="M6 6L18 18M18 6L6 18" />
+</svg></button>
         <h2 id="ui-modal-title">Informacion</h2>
         <div id="ui-modal-body" class="modal-body-copy"></div>
         <div class="modal-actions">
