@@ -1,0 +1,2 @@
+ALTER TABLE vehiculos
+  ALTER COLUMN patente DROP NOT NULL;

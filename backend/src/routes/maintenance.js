@@ -376,6 +376,81 @@ router.get("/:id/images", async (req, res) => {
   }
 });
 
+router.put("/:id", async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    const maintenanceId = Number(req.params.id);
+    const userId = Number(req.body.user_id);
+    const { errors, data } = validateMaintenancePayload(req.body);
+
+    if (!maintenanceId) {
+      return res.status(400).json({ error: "maintenance_id invalido" });
+    }
+    if (!userId) {
+      return res.status(400).json({ error: "user_id requerido" });
+    }
+    if (errors.length > 0) {
+      return res.status(400).json({ errors });
+    }
+
+    await client.query("BEGIN");
+
+    const result = await client.query(
+      `UPDATE mantenimiento
+       SET fecha = $1,
+           vehiculo_id = $2,
+           lugar_id = $3,
+           accion = $4,
+           km = $5,
+           cost = $6
+       WHERE id = $7 AND user_id = $8
+       RETURNING *`,
+      [data.fecha, data.vehiculo_id, data.lugar_id, data.accion, data.km, data.cost, maintenanceId, userId]
+    );
+
+    if (result.rowCount === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Mantenimiento no encontrado" });
+    }
+
+    await client.query(
+      `UPDATE vehiculos
+       SET km_actual = CASE
+         WHEN km_actual IS NULL OR km_actual < $1 THEN $1
+         ELSE km_actual
+       END
+       WHERE id = $2 AND user_id = $3`,
+      [data.km, data.vehiculo_id, userId]
+    );
+
+    await logActivity(client, {
+      userId,
+      action: "maintenance.update",
+      entityType: "maintenance",
+      entityId: result.rows[0].id,
+      title: "Mantenimiento actualizado",
+      description: `Actualizaste el mantenimiento "${result.rows[0].accion}".`,
+      metadata: { vehiculo_id: result.rows[0].vehiculo_id, lugar_id: result.rows[0].lugar_id },
+    }).catch((error) => {
+      console.error("No se pudo registrar la actividad", error);
+    });
+
+    await client.query("COMMIT");
+    res.json(result.rows[0]);
+  } catch (error) {
+    try {
+      await client.query("ROLLBACK");
+    } catch (_rollbackError) {
+      // Ignore rollback failures and surface the original error below.
+    }
+    console.error(error);
+    res.status(500).json({ error: "Error al actualizar el mantenimiento" });
+  } finally {
+    client.release();
+  }
+});
+
 
 router.delete("/:id", async (req, res) => {
   try {

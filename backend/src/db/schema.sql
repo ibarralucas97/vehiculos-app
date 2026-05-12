@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS vehiculos (
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   nombre TEXT NOT NULL,
   modelo TEXT NOT NULL,
-  patente TEXT UNIQUE NOT NULL,
+  patente TEXT UNIQUE,
   vehicle_type TEXT NOT NULL DEFAULT 'otro',
   vehicle_color TEXT NOT NULL DEFAULT 'neutro',
   km_actual INTEGER,

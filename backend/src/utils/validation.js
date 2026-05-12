@@ -138,7 +138,7 @@ function validateMaintenancePayload(payload) {
 function validateVehiclePayload(payload) {
   const nombre = normalizeText(payload.nombre);
   const modelo = normalizeText(payload.modelo);
-  const patente = normalizeText(payload.patente).toUpperCase();
+  const patente = normalizeText(payload.patente).toUpperCase() || null;
   const vehicleType = normalizeText(payload.vehicle_type || "otro").toLowerCase() || "otro";
   const vehicleColor = normalizeText(payload.vehicle_color || "neutro").toLowerCase() || "neutro";
 
@@ -152,7 +152,6 @@ function validateVehiclePayload(payload) {
 
   if (!nombre) errors.push("nombre es obligatorio");
   if (!modelo) errors.push("modelo es obligatorio");
-  if (!patente) errors.push("patente es obligatoria");
   if (!ALLOWED_VEHICLE_TYPES.has(vehicleType)) errors.push("vehicle_type no es valido");
   if (!ALLOWED_VEHICLE_COLORS.has(vehicleColor)) errors.push("vehicle_color no es valido");
 

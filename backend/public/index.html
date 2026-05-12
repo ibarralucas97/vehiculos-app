@@ -61,18 +61,29 @@
         <div class="topbar-menu">
           <button id="menu-toggle" class="menu-btn" type="button" aria-expanded="false">☰</button>
           <div id="menu-panel" class="menu-panel hidden">
-            <button onclick="goBackToVehicles()" type="button">Mis vehiculos</button>
-            <button onclick="openPlacesModal()" type="button">Lugares</button>
-            <hr />
-            <button id="menu-profile" type="button">Mi perfil</button>
-            <button id="menu-settings" type="button">Configuracion</button>
-            <button id="menu-activity" type="button">Actividad</button>
-            <button id="menu-theme-toggle" class="menu-theme-button" type="button" aria-pressed="false" aria-label="Cambiar tema">
-              <span class="menu-button-icon" aria-hidden="true"></span>
-              <span class="menu-button-label">Modo oscuro</span>
-            </button>
-            <hr />
-            <button id="menu-logout" type="button">Cerrar sesion</button>
+            <div class="menu-section">
+              <p class="menu-section-label">General</p>
+              <button id="menu-home" type="button">Inicio</button>
+              <button id="menu-theme-toggle" class="menu-theme-button" type="button" aria-pressed="false" aria-label="Cambiar tema">
+                <span class="menu-button-icon" aria-hidden="true"></span>
+                <span class="menu-button-label">Modo oscuro</span>
+              </button>
+              <button id="menu-profile" type="button">Mi perfil</button>
+              <button id="menu-settings" type="button">Ajustes de la app</button>
+              <button id="menu-activity" type="button">Actividad</button>
+              <button id="menu-logout" type="button">Cerrar sesion</button>
+            </div>
+            <div id="menu-current-vehicle-group" class="menu-section hidden">
+              <p class="menu-section-label">Vehiculo actual</p>
+              <p id="menu-current-vehicle-name" class="menu-current-vehicle-name">Sin vehiculo abierto</p>
+              <button id="menu-current-dashboard" type="button">Dashboard</button>
+              <button id="menu-current-maintenance" type="button">Mantenimientos</button>
+              <button id="menu-current-places" type="button">Lugares</button>
+              <button id="menu-current-activity" type="button">Actividad</button>
+              <button id="menu-current-edit" type="button">Editar vehiculo</button>
+              <button id="menu-current-settings" type="button">Ajustes del vehiculo</button>
+              <button id="menu-current-delete" class="menu-danger-button" type="button">Eliminar vehiculo</button>
+            </div>
           </div>
         </div>
       </header>
@@ -80,7 +91,7 @@
       <section class="hero-card" id="welcome-screen">
         <div class="hero-copy">
           <img id="login-brand-logo" class="login-brand-logo" src="/login-logo.png" alt="Rodado Control" />
-          <h2 class="hero-title">Controla el mantenimiento de tus vehiculos de forma simple y ordenada</h2>
+          <h2 class="hero-title">Organiza kilometraje, services y gastos con una experiencia simple y clara.</h2>
         </div>
 
         <aside class="login-card">
@@ -92,7 +103,7 @@
             <button id="logout-button" class="ghost hidden" type="button">Cerrar sesion</button>
           </div>
 
-          <p id="session-copy" class="section-copy">Ingresa para continuar.</p>
+          <p id="session-copy" class="section-copy">Ingresa para seguir con tus vehiculos.</p>
 
           <form id="login-form" class="form-stack">
             <label>
@@ -154,12 +165,19 @@
               <h2 id="current-vehicle-name">Sin seleccion</h2>
             </div>
             <div class="km-panel">
-              <p class="km-panel-label">Unidad actual</p>
+              <p class="km-panel-label">Kilometraje actual</p>
               <div class="km-panel-row">
                 <strong id="current-vehicle-km">Sin dato</strong>
                 <button id="update-km-button" class="ghost" type="button">Actualizar</button>
               </div>
             </div>
+          </div>
+          <div class="vehicle-context-nav" aria-label="Navegacion contextual del vehiculo">
+            <button id="vehicle-nav-dashboard" class="vehicle-context-tab is-active" type="button">Dashboard</button>
+            <button id="vehicle-nav-maintenance" class="vehicle-context-tab" type="button">Mantenimientos</button>
+            <button id="vehicle-nav-places" class="vehicle-context-tab" type="button">Lugares</button>
+            <button id="vehicle-nav-activity" class="vehicle-context-tab" type="button">Actividad</button>
+            <button id="vehicle-nav-settings" class="vehicle-context-tab" type="button">Ajustes del vehiculo</button>
           </div>
         </section>
 
@@ -168,7 +186,7 @@
             <div class="section-head section-head-stack collapsible-header" onclick="toggleSection(this)">
               <div>
                 <h2>Cargar mantenimiento</h2>
-                <p class="section-copy">Registrá un servicio nuevo en pocos campos.</p>
+                <p class="section-copy">Carga un service nuevo en pocos pasos y sin perder contexto.</p>
               </div>
               <span class="section-chevron arrow" aria-hidden="true">⌄</span>
             </div>
@@ -214,7 +232,7 @@
             <div class="section-head collapsible-header" onclick="toggleSection(this, { loadOnOpen: 'latest' })">
               <div class="history-header-copy">
                 <h2>Ultimos registros</h2>
-                <p class="section-copy">Se muestran los ultimos 3 mantenimientos del vehiculo seleccionado.</p>
+                <p class="section-copy">Vista rapida de los 3 mantenimientos mas recientes del vehiculo actual.</p>
               </div>
 
               <div class="history-header-meta">
@@ -240,7 +258,7 @@
             <div class="section-head collapsible-header" onclick="toggleSection(this)">
               <div class="history-header-copy">
                 <h2 id="history-title">Historial</h2>
-                <p id="history-copy" class="section-copy">Busca mantenimientos por texto o rango de fechas.</p>
+                <p id="history-copy" class="section-copy">Busca por texto o acota por fechas para encontrar algo rapido.</p>
               </div>
 
               <div class="history-header-meta">
@@ -300,38 +318,91 @@
         <h2>Vehiculos</h2>
 
         <form id="vehicle-form" class="vehicle-form-grid">
-          <input name="nombre" placeholder="Nombre" required />
-          <input name="modelo" placeholder="Modelo" required />
-          <input name="patente" placeholder="Patente" required />
-          <div class="vehicle-visual-field">
-            <span class="vehicle-visual-label">Tipo</span>
-            <input id="vehicle_type" name="vehicle_type" type="hidden" value="otro" />
-            <div id="vehicle-type-options" class="vehicle-type-options"></div>
+          <div class="vehicle-wizard-header">
+            <div>
+              <p id="vehicle-wizard-kicker" class="vehicle-wizard-kicker">Paso 1 de 4</p>
+              <h3 id="vehicle-wizard-title" class="vehicle-wizard-title">Datos basicos</h3>
+            </div>
+            <div id="vehicle-wizard-stepper" class="vehicle-wizard-stepper" aria-label="Progreso del formulario"></div>
           </div>
-          <div class="vehicle-visual-field">
-            <span class="vehicle-visual-label">Color</span>
-            <input id="vehicle_color" name="vehicle_color" type="hidden" value="neutro" />
-            <div id="vehicle-color-options" class="vehicle-color-options"></div>
+
+          <section class="vehicle-form-step" data-step="1">
+            <label>
+              Nombre
+              <input name="nombre" placeholder="Ej. XPulse" required />
+            </label>
+            <label>
+              Modelo
+              <input name="modelo" placeholder="Ej. 200 FI" required />
+            </label>
+            <label>
+              Patente
+              <input name="patente" placeholder="Opcional" />
+            </label>
+            <p class="helper-copy">Empieza por lo esencial para identificar el vehiculo sin hacer scroll de mas.</p>
+          </section>
+
+          <section class="vehicle-form-step hidden" data-step="2">
+            <div class="vehicle-visual-field">
+              <span class="vehicle-visual-label">Tipo de vehiculo</span>
+              <input id="vehicle_type" name="vehicle_type" type="hidden" value="otro" />
+              <div id="vehicle-type-options" class="vehicle-type-options"></div>
+            </div>
+          </section>
+
+          <section class="vehicle-form-step hidden" data-step="3">
+            <div class="vehicle-visual-field">
+              <span class="vehicle-visual-label">Color</span>
+              <input id="vehicle_color" name="vehicle_color" type="hidden" value="neutro" />
+              <div id="vehicle-color-options" class="vehicle-color-options"></div>
+            </div>
+            <div class="vehicle-service-grid">
+              <label>
+                KM actual
+                <input name="km_actual" type="text" inputmode="numeric" autocomplete="off" placeholder="KM actual" />
+              </label>
+              <label>
+                Ultimo service (KM)
+                <input
+                  name="ultimo_service_km"
+                  type="text"
+                  inputmode="numeric"
+                  autocomplete="off"
+                  placeholder="Ultimo service (KM)"
+                />
+              </label>
+              <label>
+                Intervalo KM
+                <input name="intervalo_km" type="text" inputmode="numeric" autocomplete="off" placeholder="Intervalo KM" />
+              </label>
+              <label>
+                Fecha ultimo service
+                <input name="fecha_ultimo_service" type="date" placeholder="Fecha ultimo service" />
+              </label>
+              <label>
+                Intervalo meses
+                <input
+                  name="intervalo_tiempo"
+                  type="number"
+                  inputmode="numeric"
+                  pattern="[0-9]*"
+                  placeholder="Intervalo meses"
+                />
+              </label>
+            </div>
+            <p class="helper-copy">Si quieres, deja listos los recordatorios por kilometraje, tiempo o ambos.</p>
+          </section>
+
+          <section class="vehicle-form-step hidden" data-step="4">
+            <div id="vehicle-wizard-summary" class="vehicle-wizard-summary"></div>
+            <p class="helper-copy">Revisa el resumen y guarda cuando todo se vea bien.</p>
+          </section>
+
+          <div class="vehicle-wizard-actions">
+            <button id="vehicle-wizard-back" class="ghost" type="button">Volver</button>
+            <button id="vehicle-wizard-next" type="button">Siguiente</button>
+            <button id="vehicle-save-button" type="submit" class="hidden">Guardar vehiculo</button>
           </div>
-          <input name="km_actual" type="text" inputmode="numeric" autocomplete="off" placeholder="KM actual" />
-          <input
-            name="ultimo_service_km"
-            type="text"
-            inputmode="numeric"
-            autocomplete="off"
-            placeholder="Ultimo service (KM)"
-          />
-          <input name="intervalo_km" type="text" inputmode="numeric" autocomplete="off" placeholder="Intervalo KM" />
-          <input name="fecha_ultimo_service" type="date" placeholder="Fecha ultimo service" />
-          <input
-            name="intervalo_tiempo"
-            type="number"
-            inputmode="numeric"
-            pattern="[0-9]*"
-            placeholder="Intervalo meses"
-          />
-          <p class="helper-copy">Podes definir recordatorios por kilometros, por tiempo o por ambos.</p>
-          <button id="vehicle-save-button" type="submit">Crear</button>
           <p id="vehicle-form-message" class="message"></p>
         </form>
 
@@ -536,7 +607,10 @@
             <p class="maintenance-detail-kicker">Detalle de mantenimiento</p>
             <h2 id="maintenance-detail-title">Mantenimiento</h2>
           </div>
-          <button id="maintenance-detail-delete" class="ghost maintenance-delete-button" type="button">Eliminar</button>
+          <div class="maintenance-detail-header-actions">
+            <button id="maintenance-detail-edit" class="ghost" type="button">Editar</button>
+            <button id="maintenance-detail-delete" class="ghost maintenance-delete-button" type="button">Eliminar</button>
+          </div>
         </div>
         <div id="maintenance-detail-body" class="maintenance-detail-layout"></div>
       </div>

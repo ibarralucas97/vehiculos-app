@@ -12,6 +12,10 @@ async function recordActivity(details) {
   }
 }
 
+function formatPlateLabel(value) {
+  return value || "sin patente";
+}
+
 router.get("/", async (req, res) => {
   try {
     const userId = Number(req.query.user_id);
@@ -103,8 +107,8 @@ router.post("/", async (req, res) => {
       entityType: "vehicle",
       entityId: result.rows[0].id,
       title: "Vehiculo creado",
-      description: `Creaste el vehiculo "${result.rows[0].nombre}" (${result.rows[0].patente}).`,
-      metadata: { patente: result.rows[0].patente },
+      description: `Creaste el vehiculo "${result.rows[0].nombre}" (${formatPlateLabel(result.rows[0].patente)}).`,
+      metadata: { patente: result.rows[0].patente || null },
     });
 
     res.status(201).json(result.rows[0]);
@@ -168,8 +172,8 @@ router.put("/:id", async (req, res) => {
       entityType: "vehicle",
       entityId: result.rows[0].id,
       title: "Vehiculo actualizado",
-      description: `Actualizaste el vehiculo "${result.rows[0].nombre}" (${result.rows[0].patente}).`,
-      metadata: { patente: result.rows[0].patente },
+      description: `Actualizaste el vehiculo "${result.rows[0].nombre}" (${formatPlateLabel(result.rows[0].patente)}).`,
+      metadata: { patente: result.rows[0].patente || null },
     });
 
     res.json(result.rows[0]);
@@ -263,8 +267,8 @@ router.delete("/:id", async (req, res) => {
       entityType: "vehicle",
       entityId: result.rows[0].id,
       title: "Vehiculo eliminado",
-      description: `Eliminaste el vehiculo "${result.rows[0].nombre}" (${result.rows[0].patente}).`,
-      metadata: { patente: result.rows[0].patente },
+      description: `Eliminaste el vehiculo "${result.rows[0].nombre}" (${formatPlateLabel(result.rows[0].patente)}).`,
+      metadata: { patente: result.rows[0].patente || null },
     });
 
     res.json({ ok: true });

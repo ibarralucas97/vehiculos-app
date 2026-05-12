@@ -3,6 +3,7 @@ let currentPlaces = [];
 let currentVehicles = [];
 let editingVehicleId = null;
 let editingPlaceId = null;
+let editingMaintenanceId = null;
 const SESSION_KEY = "mygarage_session";
 const MAINTENANCE_IMAGES_KEY = "mygarage_maintenance_images";
 const VIEW_STATE_KEY = "mygarage_view_state";
@@ -41,6 +42,12 @@ const VEHICLE_TYPE_MAP = Object.fromEntries(VEHICLE_TYPE_OPTIONS.map((item) => [
 const VEHICLE_COLOR_MAP = Object.fromEntries(VEHICLE_COLOR_OPTIONS.map((item) => [item.value, item]));
 const DEFAULT_VEHICLE_TYPE = "otro";
 const DEFAULT_VEHICLE_COLOR = "neutro";
+const VEHICLE_WIZARD_STEPS = [
+  { step: 1, title: "Datos basicos", kicker: "Paso 1 de 4" },
+  { step: 2, title: "Tipo de vehiculo", kicker: "Paso 2 de 4" },
+  { step: 3, title: "Color y recordatorios", kicker: "Paso 3 de 4" },
+  { step: 4, title: "Confirmacion", kicker: "Paso 4 de 4" },
+];
 
 const dashboard = document.getElementById("dashboard");
 const loginForm = document.getElementById("login-form");
@@ -70,6 +77,13 @@ const vehicleTypeInput = document.getElementById("vehicle_type");
 const vehicleColorInput = document.getElementById("vehicle_color");
 const vehicleTypeOptions = document.getElementById("vehicle-type-options");
 const vehicleColorOptions = document.getElementById("vehicle-color-options");
+const vehicleWizardKicker = document.getElementById("vehicle-wizard-kicker");
+const vehicleWizardTitle = document.getElementById("vehicle-wizard-title");
+const vehicleWizardStepper = document.getElementById("vehicle-wizard-stepper");
+const vehicleWizardSummary = document.getElementById("vehicle-wizard-summary");
+const vehicleWizardBackButton = document.getElementById("vehicle-wizard-back");
+const vehicleWizardNextButton = document.getElementById("vehicle-wizard-next");
+const vehicleFormSteps = Array.from(document.querySelectorAll(".vehicle-form-step"));
 const filtersSubmitButton = document.getElementById("filters-submit");
 const latestButton = document.getElementById("latest-button");
 const exportPdfButton = document.getElementById("export-pdf-button");
@@ -80,13 +94,28 @@ const vehicleSelect = document.getElementById("vehiculo_id");
 const placeSelect = document.getElementById("lugar_id");
 const menuButton = document.getElementById("menu-toggle");
 const menuPanel = document.getElementById("menu-panel");
+const menuHomeButton = document.getElementById("menu-home");
 const menuLogoutButton = document.getElementById("menu-logout");
 const menuProfileButton = document.getElementById("menu-profile");
 const menuSettingsButton = document.getElementById("menu-settings");
 const menuActivityButton = document.getElementById("menu-activity");
+const menuCurrentVehicleGroup = document.getElementById("menu-current-vehicle-group");
+const menuCurrentVehicleName = document.getElementById("menu-current-vehicle-name");
+const menuCurrentDashboardButton = document.getElementById("menu-current-dashboard");
+const menuCurrentMaintenanceButton = document.getElementById("menu-current-maintenance");
+const menuCurrentPlacesButton = document.getElementById("menu-current-places");
+const menuCurrentActivityButton = document.getElementById("menu-current-activity");
+const menuCurrentEditButton = document.getElementById("menu-current-edit");
+const menuCurrentSettingsButton = document.getElementById("menu-current-settings");
+const menuCurrentDeleteButton = document.getElementById("menu-current-delete");
 const currentVehicleName = document.getElementById("current-vehicle-name");
 const currentVehicleKm = document.getElementById("current-vehicle-km");
 const updateKmButton = document.getElementById("update-km-button");
+const vehicleNavDashboardButton = document.getElementById("vehicle-nav-dashboard");
+const vehicleNavMaintenanceButton = document.getElementById("vehicle-nav-maintenance");
+const vehicleNavPlacesButton = document.getElementById("vehicle-nav-places");
+const vehicleNavActivityButton = document.getElementById("vehicle-nav-activity");
+const vehicleNavSettingsButton = document.getElementById("vehicle-nav-settings");
 const maintenanceImageInput = document.getElementById("maintenance-image");
 const maintenanceImagePreview = document.getElementById("maintenance-image-preview");
 const maintenanceImagePreviewImg = document.getElementById("maintenance-image-preview-img");
@@ -137,6 +166,7 @@ const maintenanceDetailModal = document.getElementById("maintenance-detail-modal
 const maintenanceDetailTitle = document.getElementById("maintenance-detail-title");
 const maintenanceDetailBody = document.getElementById("maintenance-detail-body");
 const maintenanceDetailClose = document.getElementById("maintenance-detail-close");
+const maintenanceDetailEdit = document.getElementById("maintenance-detail-edit");
 const maintenanceDetailDelete = document.getElementById("maintenance-detail-delete");
 const maintenanceImageLightbox = document.getElementById("maintenance-image-lightbox");
 const maintenanceImageLightboxImg = document.getElementById("maintenance-image-lightbox-img");
@@ -171,6 +201,7 @@ let backButtonTouchState = {
   lastTouchEndAt: 0,
 };
 let activeView = "unknown";
+let currentVehicleWizardStep = 1;
 let touchGestureState = {
   active: false,
   moved: false,
@@ -490,6 +521,94 @@ function syncVehicleVisualSelectors() {
     button.classList.toggle("is-active", isActive);
     button.setAttribute("aria-pressed", String(isActive));
   });
+}
+
+function buildVehicleWizardStepper() {
+  if (!vehicleWizardStepper) return;
+  vehicleWizardStepper.innerHTML = VEHICLE_WIZARD_STEPS.map((item) => `
+    <span
+      class="vehicle-wizard-dot${item.step === currentVehicleWizardStep ? " is-active" : ""}${item.step < currentVehicleWizardStep ? " is-complete" : ""}"
+      aria-hidden="true"
+    ></span>
+  `).join("");
+}
+
+function buildVehicleWizardSummary() {
+  if (!vehicleWizardSummary || !vehicleForm) return;
+  const formData = Object.fromEntries(new FormData(vehicleForm).entries());
+  const typeConfig = getVehicleTypeConfig(formData.vehicle_type);
+  const colorConfig = getVehicleColorConfig(formData.vehicle_color);
+  vehicleWizardSummary.innerHTML = `
+    <div class="vehicle-wizard-summary-card" style="--vehicle-color:${colorConfig.hex}">
+      ${buildVehicleIdentityMarkup({
+        nombre: formData.nombre,
+        modelo: formData.modelo,
+        patente: formData.patente,
+        vehicle_type: formData.vehicle_type,
+        vehicle_color: formData.vehicle_color,
+      })}
+      <div class="vehicle-wizard-summary-meta">
+        <span><strong>Tipo:</strong> ${typeConfig.label}</span>
+        <span><strong>Color:</strong> ${colorConfig.label}</span>
+        <span><strong>KM actual:</strong> ${formData.km_actual || "Sin dato"}</span>
+        <span><strong>Ultimo service:</strong> ${formData.ultimo_service_km || "Sin dato"}</span>
+        <span><strong>Intervalo KM:</strong> ${formData.intervalo_km || "Sin dato"}</span>
+        <span><strong>Intervalo meses:</strong> ${formData.intervalo_tiempo || "Sin dato"}</span>
+      </div>
+    </div>
+  `;
+}
+
+function setVehicleWizardStep(nextStep) {
+  const safeStep = Math.min(Math.max(Number(nextStep) || 1, 1), VEHICLE_WIZARD_STEPS.length);
+  currentVehicleWizardStep = safeStep;
+  const stepConfig = VEHICLE_WIZARD_STEPS.find((item) => item.step === safeStep) || VEHICLE_WIZARD_STEPS[0];
+
+  vehicleFormSteps.forEach((section) => {
+    const isActive = Number(section.dataset.step) === safeStep;
+    section.classList.toggle("hidden", !isActive);
+  });
+
+  if (vehicleWizardKicker) {
+    vehicleWizardKicker.textContent = stepConfig.kicker;
+  }
+  if (vehicleWizardTitle) {
+    vehicleWizardTitle.textContent = stepConfig.title;
+  }
+  if (vehicleWizardBackButton) {
+    vehicleWizardBackButton.disabled = safeStep === 1;
+  }
+  if (vehicleWizardNextButton) {
+    vehicleWizardNextButton.classList.toggle("hidden", safeStep === VEHICLE_WIZARD_STEPS.length);
+  }
+  if (vehicleSaveButton) {
+    vehicleSaveButton.classList.toggle("hidden", safeStep !== VEHICLE_WIZARD_STEPS.length);
+    if (!vehicleSaveButton.classList.contains("hidden")) {
+      vehicleSaveButton.textContent = editingVehicleId ? "Guardar vehiculo" : "Crear vehiculo";
+    }
+  }
+
+  buildVehicleWizardStepper();
+  if (safeStep === VEHICLE_WIZARD_STEPS.length) {
+    buildVehicleWizardSummary();
+  }
+}
+
+function validateVehicleWizardStep(step = currentVehicleWizardStep) {
+  if (!vehicleForm) return true;
+  if (step === 1) {
+    const nameField = vehicleForm.elements.nombre;
+    const modelField = vehicleForm.elements.modelo;
+    return nameField?.reportValidity() && modelField?.reportValidity();
+  }
+  return true;
+}
+
+function goToVehicleWizardStep(nextStep) {
+  if (nextStep > currentVehicleWizardStep && !validateVehicleWizardStep(currentVehicleWizardStep)) {
+    return;
+  }
+  setVehicleWizardStep(nextStep);
 }
 
 function buildVehicleIdentityMarkup(vehicle = {}) {
@@ -1174,11 +1293,12 @@ function resetVehicleFormState() {
   }
   syncVehicleVisualSelectors();
   if (vehicleSaveButton) {
-    vehicleSaveButton.textContent = "Crear";
+    vehicleSaveButton.textContent = "Crear vehiculo";
   }
   if (vehicleFormMessage) {
     vehicleFormMessage.textContent = "";
   }
+  setVehicleWizardStep(1);
 }
 
 function resetPlaceFormState() {
@@ -1192,6 +1312,18 @@ function resetPlaceFormState() {
   }
 }
 
+function resetMaintenanceFormState() {
+  editingMaintenanceId = null;
+  maintenanceForm?.reset();
+  clearMaintenanceImagePreview();
+  if (maintenanceSubmitButton) {
+    maintenanceSubmitButton.textContent = "Guardar mantenimiento";
+  }
+  if (formMessage) {
+    formMessage.textContent = "";
+  }
+}
+
 
 const vehiclesScreen = document.getElementById("vehicles-screen");
 
@@ -1200,6 +1332,94 @@ function updateTopbarContext() {
   const inVehicleDetail = getCurrentView() === "dashboard";
   topbarBackButton.disabled = !inVehicleDetail;
   topbarBackButton.classList.toggle("is-inactive", !inVehicleDetail);
+}
+
+function getSelectedVehicle() {
+  return currentVehicles.find((vehicle) => Number(vehicle.id) === Number(selectedVehicleId)) || null;
+}
+
+function updateMenuContext() {
+  const selectedVehicle = getSelectedVehicle();
+  const hasCurrentVehicle = Boolean(selectedVehicle) && getCurrentView() === "dashboard";
+
+  menuCurrentVehicleGroup?.classList.toggle("hidden", !hasCurrentVehicle);
+
+  if (menuCurrentVehicleName) {
+    menuCurrentVehicleName.textContent = hasCurrentVehicle
+      ? `${selectedVehicle.nombre || "Vehiculo"}${selectedVehicle.modelo ? ` · ${selectedVehicle.modelo}` : ""}`
+      : "Sin vehiculo abierto";
+  }
+
+  menuHomeButton?.classList.toggle("hidden", getCurrentView() === "vehicles");
+}
+
+function updateVehicleContextTabs(activeTab = "dashboard") {
+  const tabs = [
+    [vehicleNavDashboardButton, "dashboard"],
+    [vehicleNavMaintenanceButton, "maintenance"],
+    [vehicleNavPlacesButton, "places"],
+    [vehicleNavActivityButton, "activity"],
+    [vehicleNavSettingsButton, "settings"],
+  ];
+
+  tabs.forEach(([button, key]) => {
+    if (!button) return;
+    button.classList.toggle("is-active", key === activeTab);
+  });
+}
+
+function focusDashboardSection(section) {
+  if (!section) return;
+  section.classList.add("open");
+  updateVehicleContextTabs(section === maintenanceSection ? "maintenance" : "dashboard");
+  section.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function openCurrentVehicleDashboard() {
+  closeMenu();
+  updateVehicleContextTabs("dashboard");
+  dashboard?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function openCurrentVehicleMaintenance() {
+  closeMenu();
+  focusDashboardSection(maintenanceSection);
+}
+
+function openCurrentVehiclePlaces() {
+  closeMenu();
+  updateVehicleContextTabs("places");
+  openPlacesModal();
+}
+
+function openCurrentVehicleActivity() {
+  closeMenu();
+  updateVehicleContextTabs("activity");
+  openActivityModal();
+}
+
+function openCurrentVehicleSettings() {
+  const selectedVehicle = getSelectedVehicle();
+  if (!selectedVehicle || typeof openUiModal !== "function") return;
+
+  closeMenu();
+  updateVehicleContextTabs("settings");
+  openUiModal({
+    title: "Configuracion del vehiculo",
+    bodyHtml: `
+      <div class="vehicle-detail-grid">
+        <div><strong>Vehiculo:</strong> ${escapeHtml(selectedVehicle.nombre || "Sin dato")}</div>
+        <div><strong>Modelo:</strong> ${escapeHtml(selectedVehicle.modelo || "Sin dato")}</div>
+        <div><strong>Tipo:</strong> ${escapeHtml(getVehicleTypeConfig(selectedVehicle.vehicle_type).label)}</div>
+        <div><strong>Color:</strong> ${escapeHtml(getVehicleColorConfig(selectedVehicle.vehicle_color).label)}</div>
+      </div>
+      <p>Desde aqui puedes editar el vehiculo o eliminarlo con confirmacion.</p>
+      <div class="vehicle-settings-actions">
+        <button class="ghost" type="button" onclick="editVehicle(${Number(selectedVehicle.id)})">Editar vehiculo</button>
+        <button class="ghost maintenance-delete-button" type="button" onclick="deleteVehicle(${Number(selectedVehicle.id)})">Eliminar vehiculo</button>
+      </div>
+    `,
+  });
 }
 
 function updateSessionUI() {
@@ -1246,6 +1466,7 @@ function updateSessionUI() {
   }
 
   updateTopbarContext();
+  updateMenuContext();
   updateDebugCurrentView(getCurrentView());
   return isLoggedIn;
 }
@@ -1360,6 +1581,7 @@ function setView(nextView, source, event = null, extra = {}) {
 
   activeView = nextView;
   updateTopbarContext();
+  updateMenuContext();
   updateDebugCurrentView(nextView);
   return true;
 }
@@ -1466,6 +1688,8 @@ function goBackToVehicles(origin = "goBackToVehicles") {
 
   if (currentVehicleKm) currentVehicleKm.textContent = "Sin dato";
   if (updateKmButton) updateKmButton.disabled = true;
+  updateVehicleContextTabs("dashboard");
+  resetMaintenanceFormState();
 
   loadVehiclesScreen();
 }
@@ -2053,6 +2277,9 @@ function openMaintenanceDetail(id) {
 
   maintenanceDetailTitle.textContent = item.accion || "Detalle de mantenimiento";
   maintenanceDetailBody.innerHTML = buildMaintenanceDetailMarkup(item);
+  if (maintenanceDetailEdit) {
+    maintenanceDetailEdit.dataset.maintenanceId = String(item.id);
+  }
   if (maintenanceDetailDelete) {
     maintenanceDetailDelete.dataset.maintenanceId = String(item.id);
   }
@@ -2066,6 +2293,9 @@ function closeMaintenanceDetail() {
   }
   if (maintenanceDetailDelete) {
     delete maintenanceDetailDelete.dataset.maintenanceId;
+  }
+  if (maintenanceDetailEdit) {
+    delete maintenanceDetailEdit.dataset.maintenanceId;
   }
 }
 
@@ -2083,6 +2313,28 @@ function closeMaintenanceImageLightbox() {
     maintenanceImageLightboxImg.removeAttribute("src");
   }
   closeModal("maintenance-image-lightbox");
+}
+
+function editMaintenance(id) {
+  const item = getMaintenanceRecord(id);
+  if (!item || !maintenanceForm) return;
+
+  editingMaintenanceId = Number(id);
+  maintenanceForm.elements.fecha.value = item.fecha ? String(item.fecha).slice(0, 10) : "";
+  maintenanceForm.elements.lugar_id.value = item.lugar_id ? String(item.lugar_id) : "";
+  maintenanceForm.elements.accion.value = item.accion || "";
+  maintenanceForm.elements.km.value = item.km ?? "";
+  maintenanceForm.elements.cost.value = item.cost ?? "";
+  clearMaintenanceImagePreview();
+  closeMaintenanceDetail();
+  if (maintenanceSubmitButton) {
+    maintenanceSubmitButton.textContent = "Guardar cambios";
+  }
+  if (formMessage) {
+    formMessage.textContent = "Editando mantenimiento seleccionado.";
+  }
+  focusDashboardSection(maintenanceSection);
+  maintenanceForm.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 async function refreshMaintenanceViewsAfterMutation() {
@@ -2145,6 +2397,7 @@ function renderMaintenanceCards(items, container) {
           </div>
           <div class="maintenance-card-actions">
             <button class="ghost maintenance-card-button" type="button" onclick="openMaintenanceDetail(${Number(item.id)})">Ver detalle</button>
+            <button class="ghost maintenance-card-button" type="button" onclick="editMaintenance(${Number(item.id)})">Editar</button>
             <button class="ghost maintenance-card-button danger" type="button" onclick="deleteMaintenance(${Number(item.id)})">Eliminar</button>
           </div>
         </article>
@@ -2257,9 +2510,14 @@ async function loadVehiclesScreen() {
   }
 
   container.innerHTML = vehicles.map((v) => `
-  <button class="vehicle-card card border-0 shadow-sm" type="button" onclick="selectVehicle(${v.id})">
-    ${buildVehicleIdentityMarkup(v)}
-  </button>
+  <article class="vehicle-card card border-0 shadow-sm">
+    <button class="vehicle-card-main" type="button" onclick="selectVehicle(${v.id})" aria-label="Abrir ${escapeHtml(v.nombre || "vehiculo")}">
+      ${buildVehicleIdentityMarkup(v)}
+    </button>
+    <button class="vehicle-card-quick-action" type="button" onclick="editVehicle(${v.id})" aria-label="Editar ${escapeHtml(v.nombre || "vehiculo")}">
+      ${buildIconMarkup("edit")}
+    </button>
+  </article>
 `).join("");
 }
 
@@ -2273,6 +2531,7 @@ function selectVehicle(id, origin = "selectVehicle") {
     currentVehicleName.textContent = vehicle ? `${typeLabel} · ${vehicle.nombre}${vehicle.modelo ? ` - ${vehicle.modelo}` : ""}` : `ID ${id}`;
   }
   renderCurrentVehicleKm();
+  updateVehicleContextTabs("dashboard");
 
   if (!setView("dashboard", origin)) {
     return;
@@ -2469,12 +2728,10 @@ function editVehicle(id) {
 
   editingVehicleId = id;
 
-  if (vehicleSaveButton) {
-    vehicleSaveButton.textContent = "Guardar";
-  }
   if (vehicleFormMessage) {
     vehicleFormMessage.textContent = "Editando vehiculo seleccionado.";
   }
+  setVehicleWizardStep(1);
   openModal("vehicles-modal");
 }
 
@@ -2776,11 +3033,34 @@ function logout() {
 
 
 logoutButton?.addEventListener("click", logout);
+menuHomeButton?.addEventListener("click", () => goBackToVehicles("menuHome"));
 menuLogoutButton?.addEventListener("click", logout);
 settingsLogoutButton?.addEventListener("click", logout);
 menuProfileButton?.addEventListener("click", openProfileModal);
 menuSettingsButton?.addEventListener("click", openSettingsModal);
 menuActivityButton?.addEventListener("click", openActivityModal);
+menuCurrentDashboardButton?.addEventListener("click", openCurrentVehicleDashboard);
+menuCurrentMaintenanceButton?.addEventListener("click", openCurrentVehicleMaintenance);
+menuCurrentPlacesButton?.addEventListener("click", openCurrentVehiclePlaces);
+menuCurrentActivityButton?.addEventListener("click", openCurrentVehicleActivity);
+menuCurrentEditButton?.addEventListener("click", () => {
+  const vehicle = getSelectedVehicle();
+  if (vehicle) {
+    editVehicle(vehicle.id);
+  }
+});
+menuCurrentSettingsButton?.addEventListener("click", openCurrentVehicleSettings);
+menuCurrentDeleteButton?.addEventListener("click", () => {
+  const vehicle = getSelectedVehicle();
+  if (vehicle) {
+    deleteVehicle(vehicle.id);
+  }
+});
+vehicleNavDashboardButton?.addEventListener("click", openCurrentVehicleDashboard);
+vehicleNavMaintenanceButton?.addEventListener("click", openCurrentVehicleMaintenance);
+vehicleNavPlacesButton?.addEventListener("click", openCurrentVehiclePlaces);
+vehicleNavActivityButton?.addEventListener("click", openCurrentVehicleActivity);
+vehicleNavSettingsButton?.addEventListener("click", openCurrentVehicleSettings);
 vehicleTypeOptions?.addEventListener("click", (event) => {
   const button = event.target.closest("[data-vehicle-type-option]");
   if (!button || !vehicleTypeInput) return;
@@ -2792,6 +3072,14 @@ vehicleColorOptions?.addEventListener("click", (event) => {
   if (!button || !vehicleColorInput) return;
   vehicleColorInput.value = button.getAttribute("data-vehicle-color-option") || DEFAULT_VEHICLE_COLOR;
   syncVehicleVisualSelectors();
+});
+
+vehicleWizardBackButton?.addEventListener("click", () => {
+  goToVehicleWizardStep(currentVehicleWizardStep - 1);
+});
+
+vehicleWizardNextButton?.addEventListener("click", () => {
+  goToVehicleWizardStep(currentVehicleWizardStep + 1);
 });
 
 vehicleForm?.addEventListener("submit", async (e) => {
@@ -2911,8 +3199,9 @@ maintenanceForm?.addEventListener("submit", async (event) => {
     return;
   }
 
-  formMessage.textContent = "Guardando mantenimiento...";
-  setButtonLoading(maintenanceSubmitButton, true, "Guardando...");
+  const isEditingMaintenance = Boolean(editingMaintenanceId);
+  formMessage.textContent = isEditingMaintenance ? "Guardando cambios del mantenimiento..." : "Guardando mantenimiento...";
+  setButtonLoading(maintenanceSubmitButton, true, isEditingMaintenance ? "Guardando..." : "Guardando...");
 
   const formData = new FormData(maintenanceForm);
   const payload = Object.fromEntries(formData.entries());
@@ -2934,40 +3223,50 @@ maintenanceForm?.addEventListener("submit", async (event) => {
     const imageRef = await fileToDataUrl(selectedImage);
     const session = getSession();
 
-    const created = await fetchJson(`/maintenance`, {
-      method: "POST",
+    const requestBody = JSON.stringify({
+      ...payload,
+      user_id: session.id,
+      image_base64: imageRef || "",
+      image_mime_type: imageValidation.mimeType,
+    });
+
+    const savedMaintenance = await fetchJson(isEditingMaintenance ? `/maintenance/${editingMaintenanceId}` : `/maintenance`, {
+      method: isEditingMaintenance ? "PUT" : "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        ...payload,
-        user_id: session.id,
-        image_base64: imageRef || "",
-        image_mime_type: imageValidation.mimeType,
-      }),
+      body: requestBody,
     });
 
-    if (created?.id && created.image?.imageSource) {
-      maintenanceImageRefs[created.id] = created.image.imageSource;
+    if (!isEditingMaintenance && savedMaintenance?.id && savedMaintenance.image?.imageSource) {
+      maintenanceImageRefs[savedMaintenance.id] = savedMaintenance.image.imageSource;
       saveMaintenanceImageRefs();
     }
 
-    maintenanceForm.reset();
-    clearMaintenanceImagePreview();
+    resetMaintenanceFormState();
     await refreshAllData();
     await loadLatestRecords();
     if (hasActiveFilters()) {
       await loadMaintenance();
     }
-    formMessage.textContent = imageRef
-      ? "Mantenimiento e imagen guardados correctamente."
-      : "Mantenimiento guardado correctamente.";
-    setStatus("Mantenimiento guardado");
-    showToast(imageRef ? "Mantenimiento e imagen guardados" : "Mantenimiento guardado", { tone: "success" });
+    formMessage.textContent = isEditingMaintenance
+      ? "Mantenimiento actualizado correctamente."
+      : imageRef
+        ? "Mantenimiento e imagen guardados correctamente."
+        : "Mantenimiento guardado correctamente.";
+    setStatus(isEditingMaintenance ? "Mantenimiento actualizado" : "Mantenimiento guardado");
+    showToast(
+      isEditingMaintenance
+        ? "Mantenimiento actualizado"
+        : imageRef
+          ? "Mantenimiento e imagen guardados"
+          : "Mantenimiento guardado",
+      { tone: "success" }
+    );
   } catch (error) {
     formMessage.textContent = error.message;
   } finally {
-    setButtonLoading(maintenanceSubmitButton, false, "Guardando...");
+    setButtonLoading(maintenanceSubmitButton, false, isEditingMaintenance ? "Guardando..." : "Guardando...");
   }
 });
 
@@ -3025,6 +3324,9 @@ async function deleteMaintenance(id) {
       method: "DELETE",
     });
 
+    if (editingMaintenanceId === Number(id)) {
+      resetMaintenanceFormState();
+    }
     removeCachedMaintenance(id);
     closeMaintenanceDetail();
     closeMaintenanceImageLightbox();
@@ -3098,6 +3400,11 @@ function closeModal(id) {
 }
 
 maintenanceDetailClose?.addEventListener("click", closeMaintenanceDetail);
+maintenanceDetailEdit?.addEventListener("click", () => {
+  const maintenanceId = Number(maintenanceDetailEdit.dataset.maintenanceId);
+  if (!maintenanceId) return;
+  editMaintenance(maintenanceId);
+});
 maintenanceDetailDelete?.addEventListener("click", async () => {
   const maintenanceId = Number(maintenanceDetailDelete.dataset.maintenanceId);
   if (!maintenanceId) return;
@@ -3587,6 +3894,7 @@ function registerServiceWorker() {
 (async function init() {
   setupNumericFieldValidation();
   renderVehicleVisualSelectors();
+  setVehicleWizardStep(1);
   setupTouchScrollTracking();
   applyTheme(getPreferredTheme());
   syncFooterYear();
@@ -3624,4 +3932,3 @@ function registerServiceWorker() {
 
   updateDebugCurrentView();
 })();
-
