@@ -78,7 +78,6 @@
               <button id="menu-current-places" type="button">Lugares</button>
               <button id="menu-current-reminders" type="button">Recordatorios</button>
               <button id="menu-current-edit" type="button">Editar vehiculo</button>
-              <button id="menu-current-delete" class="menu-danger-button" type="button">Eliminar vehiculo</button>
             </div>
             <div class="menu-section menu-section-logout">
               <button id="menu-logout" class="menu-logout-button" type="button">Cerrar sesion</button>
@@ -153,7 +152,7 @@
 
         <div id="vehicles-grid" class="vehicles-grid"></div>
 
-        <button onclick="openVehiclesModal()" class="primary" type="button">+ Crear vehiculo</button>
+        <button onclick="openVehicleCreateModal()" class="primary" type="button">+ Crear vehiculo</button>
       </section>
 
       <section id="dashboard" class="hidden">
@@ -301,7 +300,8 @@
   <path d="M6 6L18 18M18 6L6 18" />
 </svg></button>
 
-        <h2>Vehiculos</h2>
+        <h2 id="vehicles-modal-title">Crear vehiculo</h2>
+        <p id="vehicles-modal-copy" class="vehicle-modal-copy">Completa los datos y guarda un nuevo vehiculo.</p>
 
         <form id="vehicle-form" class="vehicle-form-grid">
           <div class="vehicle-wizard-header">
@@ -339,7 +339,7 @@
           <section class="vehicle-form-step hidden" data-step="3">
             <div class="vehicle-visual-field">
               <span class="vehicle-visual-label">Color</span>
-              <input id="vehicle_color" name="vehicle_color" type="hidden" value="neutro" />
+              <input id="vehicle_color" name="vehicle_color" type="hidden" value="gris" />
               <div id="vehicle-color-options" class="vehicle-color-options"></div>
             </div>
             <div class="vehicle-service-grid">
@@ -389,10 +389,13 @@
             <button id="vehicle-wizard-next" type="button">Siguiente</button>
             <button id="vehicle-save-button" type="submit" class="hidden">Guardar vehiculo</button>
           </div>
+          <div id="vehicle-form-danger-zone" class="vehicle-form-danger-zone hidden">
+            <button id="vehicle-delete-button" class="ghost vehicle-delete-button" type="button">Eliminar vehiculo</button>
+          </div>
           <p id="vehicle-form-message" class="message"></p>
         </form>
 
-        <div id="vehicles-list-modal"></div>
+        <div id="vehicles-list-modal" class="hidden" aria-hidden="true"></div>
       </div>
     </div>
 
@@ -690,10 +693,6 @@
           <div>
             <p class="maintenance-detail-kicker">Detalle de mantenimiento</p>
             <h2 id="maintenance-detail-title">Mantenimiento</h2>
-          </div>
-          <div class="maintenance-detail-header-actions">
-            <button id="maintenance-detail-edit" class="ghost" type="button">Editar</button>
-            <button id="maintenance-detail-delete" class="ghost maintenance-delete-button" type="button">Eliminar</button>
           </div>
         </div>
         <div id="maintenance-detail-body" class="maintenance-detail-layout"></div>

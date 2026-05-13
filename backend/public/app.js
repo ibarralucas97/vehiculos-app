@@ -2,6 +2,7 @@ let selectedVehicleId = null;
 let currentPlaces = [];
 let currentVehicles = [];
 let editingVehicleId = null;
+let vehicleModalMode = "create";
 let editingVehicleReminderId = null;
 let editingPlaceId = null;
 let editingMaintenanceId = null;
@@ -25,27 +26,29 @@ const NUMERIC_FIELD_CONFIG = {
 
 const VEHICLE_TYPE_OPTIONS = [
   { value: "moto", label: "Moto", icon: "vehicleMoto" },
+  { value: "bicicleta", label: "Bici", icon: "vehicleBicicleta" },
   { value: "auto", label: "Auto", icon: "vehicleAuto" },
   { value: "camioneta", label: "Camioneta", icon: "vehicleCamioneta" },
-  { value: "camion", label: "Camion", icon: "vehicleCamion" },
-  { value: "bicicleta", label: "Bicicleta", icon: "vehicleBicicleta" },
-  { value: "colectivo", label: "Colectivo", icon: "vehicleColectivo" },
-  { value: "otro", label: "Otro", icon: "vehicleOtro" },
+  { value: "otro", label: "Otros", icon: "vehicleOtro" },
 ];
 
 const VEHICLE_COLOR_OPTIONS = [
-  { value: "rojo", label: "Rojo", hex: "#d55c55" },
-  { value: "azul", label: "Azul", hex: "#1f9ae0" },
-  { value: "gris", label: "Gris", hex: "#7b8794" },
+  { value: "rojo", label: "Rojo", hex: "#d85a56" },
+  { value: "azul", label: "Azul", hex: "#2f6fdd" },
+  { value: "verde", label: "Verde", hex: "#2f9f6b" },
   { value: "negro", label: "Negro", hex: "#1f2937" },
-  { value: "verde", label: "Verde", hex: "#239b72" },
-  { value: "neutro", label: "Neutro", hex: "#8fa4b4" },
+  { value: "gris", label: "Gris", hex: "#7b8794" },
+  { value: "blanco", label: "Blanco", hex: "#f8fafc" },
+  { value: "amarillo", label: "Amarillo", hex: "#f2c94c" },
+  { value: "naranja", label: "Naranja", hex: "#f2994a" },
+  { value: "violeta", label: "Violeta", hex: "#8b5cf6" },
+  { value: "celeste", label: "Celeste", hex: "#56ccf2" },
 ];
 
 const VEHICLE_TYPE_MAP = Object.fromEntries(VEHICLE_TYPE_OPTIONS.map((item) => [item.value, item]));
 const VEHICLE_COLOR_MAP = Object.fromEntries(VEHICLE_COLOR_OPTIONS.map((item) => [item.value, item]));
 const DEFAULT_VEHICLE_TYPE = "otro";
-const DEFAULT_VEHICLE_COLOR = "neutro";
+const DEFAULT_VEHICLE_COLOR = "gris";
 const VEHICLE_WIZARD_STEPS = [
   { step: 1, title: "Datos basicos", kicker: "Paso 1 de 4" },
   { step: 2, title: "Tipo de vehiculo", kicker: "Paso 2 de 4" },
@@ -88,6 +91,11 @@ const vehicleWizardSummary = document.getElementById("vehicle-wizard-summary");
 const vehicleWizardBackButton = document.getElementById("vehicle-wizard-back");
 const vehicleWizardNextButton = document.getElementById("vehicle-wizard-next");
 const vehicleFormSteps = Array.from(document.querySelectorAll(".vehicle-form-step"));
+const vehiclesModalTitle = document.getElementById("vehicles-modal-title");
+const vehiclesModalCopy = document.getElementById("vehicles-modal-copy");
+const vehicleFormDangerZone = document.getElementById("vehicle-form-danger-zone");
+const vehicleDeleteButton = document.getElementById("vehicle-delete-button");
+const vehiclesListModal = document.getElementById("vehicles-list-modal");
 const filtersSubmitButton = document.getElementById("filters-submit");
 const latestButton = document.getElementById("latest-button");
 const exportPdfButton = document.getElementById("export-pdf-button");
@@ -112,7 +120,6 @@ const menuCurrentRemindersButton = document.getElementById("menu-current-reminde
 const menuCurrentActivityButton = document.getElementById("menu-current-activity");
 const menuCurrentEditButton = document.getElementById("menu-current-edit");
 const menuCurrentSettingsButton = document.getElementById("menu-current-settings");
-const menuCurrentDeleteButton = document.getElementById("menu-current-delete");
 const currentVehicleName = document.getElementById("current-vehicle-name");
 const currentVehicleKm = document.getElementById("current-vehicle-km");
 const updateKmButton = document.getElementById("update-km-button");
@@ -171,8 +178,6 @@ const maintenanceDetailModal = document.getElementById("maintenance-detail-modal
 const maintenanceDetailTitle = document.getElementById("maintenance-detail-title");
 const maintenanceDetailBody = document.getElementById("maintenance-detail-body");
 const maintenanceDetailClose = document.getElementById("maintenance-detail-close");
-const maintenanceDetailEdit = document.getElementById("maintenance-detail-edit");
-const maintenanceDetailDelete = document.getElementById("maintenance-detail-delete");
 const maintenanceImageLightbox = document.getElementById("maintenance-image-lightbox");
 const maintenanceImageLightboxImg = document.getElementById("maintenance-image-lightbox-img");
 const maintenanceImageLightboxClose = document.getElementById("maintenance-image-lightbox-close");
@@ -504,6 +509,7 @@ function renderVehicleVisualSelectors() {
       >
         <span class="vehicle-type-chip-icon" aria-hidden="true">${buildIconMarkup(item.icon)}</span>
         <span>${item.label}</span>
+        <span class="vehicle-type-chip-check" aria-hidden="true"></span>
       </button>
     `).join("");
   }
@@ -518,6 +524,7 @@ function renderVehicleVisualSelectors() {
         title="${item.label}"
       >
         <span class="vehicle-color-chip-swatch" style="--vehicle-color:${item.hex}"></span>
+        <span class="vehicle-color-chip-check" aria-hidden="true"></span>
         <span class="sr-only">${item.label}</span>
       </button>
     `).join("");
@@ -606,8 +613,13 @@ function setVehicleWizardStep(nextStep) {
     vehicleSaveButton.classList.toggle("hidden", safeStep !== VEHICLE_WIZARD_STEPS.length);
     vehicleSaveButton.toggleAttribute("hidden", safeStep !== VEHICLE_WIZARD_STEPS.length);
     if (!vehicleSaveButton.classList.contains("hidden")) {
-      vehicleSaveButton.textContent = editingVehicleId ? "Guardar vehiculo" : "Crear vehiculo";
+      vehicleSaveButton.textContent = editingVehicleId ? "Guardar cambios" : "Crear vehiculo";
     }
+  }
+  if (vehicleFormDangerZone) {
+    const showDangerZone = Boolean(editingVehicleId) && safeStep === VEHICLE_WIZARD_STEPS.length;
+    vehicleFormDangerZone.classList.toggle("hidden", !showDangerZone);
+    vehicleFormDangerZone.toggleAttribute("hidden", !showDangerZone);
   }
 
   buildVehicleWizardStepper();
@@ -934,7 +946,8 @@ async function refreshCurrentContext({ silent = false } = {}) {
       showToast("Datos actualizados", { tone: "success" });
     }
   } catch (error) {
-    showToast(error.message, { tone: "error", duration: 3400 });
+    console.error(error);
+    showToast("No se pudieron actualizar los datos", { tone: "error", duration: 3400 });
   } finally {
     window.setTimeout(() => topbarTitleAction?.classList.remove("is-refreshing"), 320);
   }
@@ -1315,6 +1328,7 @@ function setButtonLoading(button, isLoading, loadingText = "Guardando...") {
 
 function resetVehicleFormState() {
   editingVehicleId = null;
+  vehicleModalMode = "create";
   vehicleForm?.reset();
   if (vehicleTypeInput) {
     vehicleTypeInput.value = DEFAULT_VEHICLE_TYPE;
@@ -1326,10 +1340,86 @@ function resetVehicleFormState() {
   if (vehicleSaveButton) {
     vehicleSaveButton.textContent = "Crear vehiculo";
   }
+  if (vehiclesModalTitle) {
+    vehiclesModalTitle.textContent = "Crear vehiculo";
+  }
+  if (vehiclesModalCopy) {
+    vehiclesModalCopy.textContent = "Completa los datos y guarda un nuevo vehiculo.";
+  }
+  if (vehicleFormDangerZone) {
+    vehicleFormDangerZone.classList.add("hidden");
+    vehicleFormDangerZone.setAttribute("hidden", "");
+  }
+  if (vehiclesListModal) {
+    vehiclesListModal.classList.add("hidden");
+    vehiclesListModal.setAttribute("aria-hidden", "true");
+  }
   if (vehicleFormMessage) {
     vehicleFormMessage.textContent = "";
   }
   setVehicleWizardStep(1);
+}
+
+function setVehicleModalMode(mode, vehicle = null) {
+  vehicleModalMode = mode === "edit" ? "edit" : "create";
+  const isEditMode = vehicleModalMode === "edit" && Boolean(vehicle);
+
+  if (vehiclesModalTitle) {
+    vehiclesModalTitle.textContent = isEditMode ? "Editar vehiculo" : "Crear vehiculo";
+  }
+  if (vehiclesModalCopy) {
+    vehiclesModalCopy.textContent = isEditMode
+      ? `Revisa y actualiza los datos de ${vehicle?.nombre || "este vehiculo"}.`
+      : "Completa los datos y guarda un nuevo vehiculo.";
+  }
+  if (vehicleSaveButton) {
+    vehicleSaveButton.textContent = isEditMode ? "Guardar cambios" : "Crear vehiculo";
+  }
+  if (vehicleFormDangerZone) {
+    const showDangerZone = isEditMode && currentVehicleWizardStep === VEHICLE_WIZARD_STEPS.length;
+    vehicleFormDangerZone.classList.toggle("hidden", !showDangerZone);
+    vehicleFormDangerZone.toggleAttribute("hidden", !showDangerZone);
+  }
+  if (vehiclesListModal) {
+    vehiclesListModal.classList.add("hidden");
+    vehiclesListModal.setAttribute("aria-hidden", "true");
+  }
+}
+
+function populateVehicleForm(vehicle) {
+  document.querySelector("#vehicle-form [name=nombre]").value = vehicle.nombre || "";
+  document.querySelector("#vehicle-form [name=modelo]").value = vehicle.modelo || "";
+  document.querySelector("#vehicle-form [name=patente]").value = vehicle.patente || "";
+  document.querySelector("#vehicle-form [name=vehicle_type]").value = normalizeVehicleType(vehicle.vehicle_type);
+  document.querySelector("#vehicle-form [name=vehicle_color]").value = normalizeVehicleColor(vehicle.vehicle_color);
+  document.querySelector("#vehicle-form [name=km_actual]").value = vehicle.km_actual ?? "";
+  document.querySelector("#vehicle-form [name=ultimo_service_km]").value = vehicle.ultimo_service_km ?? "";
+  document.querySelector("#vehicle-form [name=intervalo_km]").value = vehicle.intervalo_km ?? "";
+  document.querySelector("#vehicle-form [name=fecha_ultimo_service]").value = vehicle.fecha_ultimo_service ? String(vehicle.fecha_ultimo_service).slice(0, 10) : "";
+  document.querySelector("#vehicle-form [name=intervalo_tiempo]").value = vehicle.intervalo_tiempo ?? "";
+  syncVehicleVisualSelectors();
+}
+
+function openVehicleCreateModal() {
+  resetVehicleFormState();
+  openModal("vehicles-modal");
+  closeMenu();
+}
+
+function openVehicleEditModal(id) {
+  const vehicle = currentVehicles.find((item) => Number(item.id) === Number(id));
+  if (!vehicle) return;
+
+  resetVehicleFormState();
+  editingVehicleId = Number(id);
+  populateVehicleForm(vehicle);
+  setVehicleModalMode("edit", vehicle);
+  if (vehicleFormMessage) {
+    vehicleFormMessage.textContent = "Editando vehiculo seleccionado.";
+  }
+  setVehicleWizardStep(1);
+  openModal("vehicles-modal");
+  closeMenu();
 }
 
 function resetPlaceFormState() {
@@ -1442,7 +1532,7 @@ function openCurrentVehicleSettings() {
   if (!selectedVehicle) return;
 
   closeMenu();
-  openVehicleConfigurationModal(selectedVehicle.id);
+  openVehicleEditModal(selectedVehicle.id);
 }
 
 function updateSessionUI() {
@@ -2424,12 +2514,6 @@ function openMaintenanceDetail(id) {
 
   maintenanceDetailTitle.textContent = item.accion || "Detalle de mantenimiento";
   maintenanceDetailBody.innerHTML = buildMaintenanceDetailMarkup(item);
-  if (maintenanceDetailEdit) {
-    maintenanceDetailEdit.dataset.maintenanceId = String(item.id);
-  }
-  if (maintenanceDetailDelete) {
-    maintenanceDetailDelete.dataset.maintenanceId = String(item.id);
-  }
   openModal("maintenance-detail-modal");
 }
 
@@ -2437,12 +2521,6 @@ function closeMaintenanceDetail() {
   closeModal("maintenance-detail-modal");
   if (maintenanceDetailBody) {
     maintenanceDetailBody.innerHTML = "";
-  }
-  if (maintenanceDetailDelete) {
-    delete maintenanceDetailDelete.dataset.maintenanceId;
-  }
-  if (maintenanceDetailEdit) {
-    delete maintenanceDetailEdit.dataset.maintenanceId;
   }
 }
 
@@ -2659,7 +2737,7 @@ async function loadVehiclesScreen() {
       title: "Todavia no hay vehiculos",
       body: "Crea tu primer vehiculo para empezar a registrar kilometraje y mantenimientos.",
       actionLabel: "Crear vehiculo",
-      action: "openVehiclesModal()",
+      action: "openVehicleCreateModal()",
     });
     return;
   }
@@ -2714,7 +2792,7 @@ loadVehiclesScreen = async function patchedLoadVehiclesScreen() {
       title: "Todavia no hay vehiculos",
       body: "Crea tu primer vehiculo para empezar a registrar kilometraje y mantenimientos.",
       actionLabel: "Crear vehiculo",
-      action: "openVehiclesModal()",
+      action: "openVehicleCreateModal()",
     });
     return;
   }
@@ -2888,12 +2966,13 @@ topbarBackButton?.addEventListener("click", (event) => {
 
 async function loadVehiclesList() {
   const session = getSession();
+  if (!vehiclesListModal) return;
 
   const vehicles = (await fetchJson(`/vehicles?user_id=${session.id}`)).map(normalizeVehicleRecord);
 
   currentVehicles = vehicles;
 
-  const container = document.getElementById("vehicles-list-modal");
+  const container = vehiclesListModal;
 
   if (vehicles.length === 0) {
     container.innerHTML = buildEmptyStateMarkup({
@@ -2901,7 +2980,7 @@ async function loadVehiclesList() {
       title: "Todavia no hay vehiculos",
       body: "Crea tu primer vehiculo y personalizalo con un tipo y color.",
       actionLabel: "Crear vehiculo",
-      action: "openVehiclesModal()",
+      action: "openVehicleCreateModal()",
     });
     return;
   }
@@ -2914,7 +2993,7 @@ async function loadVehiclesList() {
 
       <div class="item-actions">
         ${buildItemActionButton({ action: `viewVehicle(${v.id})`, icon: "view", label: "Ver vehiculo" })}
-        ${buildItemActionButton({ action: `editVehicle(${v.id})`, icon: "edit", label: "Editar vehiculo" })}
+        ${buildItemActionButton({ action: `openVehicleEditModal(${v.id})`, icon: "edit", label: "Editar vehiculo" })}
         ${buildItemActionButton({ action: `deleteVehicle(${v.id})`, icon: "delete", label: "Eliminar vehiculo", variant: "danger" })}
       </div>
 
@@ -2923,28 +3002,7 @@ async function loadVehiclesList() {
 }
 
 function openVehicleEditor(id) {
-  const vehicle = currentVehicles.find(v => v.id === id);
-  if (!vehicle) return;
-
-  document.querySelector("#vehicle-form [name=nombre]").value = vehicle.nombre;
-  document.querySelector("#vehicle-form [name=modelo]").value = vehicle.modelo;
-  document.querySelector("#vehicle-form [name=patente]").value = vehicle.patente;
-  document.querySelector("#vehicle-form [name=vehicle_type]").value = normalizeVehicleType(vehicle.vehicle_type);
-  document.querySelector("#vehicle-form [name=vehicle_color]").value = normalizeVehicleColor(vehicle.vehicle_color);
-  syncVehicleVisualSelectors();
-  document.querySelector("#vehicle-form [name=km_actual]").value = vehicle.km_actual ?? "";
-  document.querySelector("#vehicle-form [name=ultimo_service_km]").value = vehicle.ultimo_service_km ?? "";
-  document.querySelector("#vehicle-form [name=intervalo_km]").value = vehicle.intervalo_km ?? "";
-  document.querySelector("#vehicle-form [name=fecha_ultimo_service]").value = vehicle.fecha_ultimo_service ? String(vehicle.fecha_ultimo_service).slice(0, 10) : "";
-  document.querySelector("#vehicle-form [name=intervalo_tiempo]").value = vehicle.intervalo_tiempo ?? "";
-
-  editingVehicleId = id;
-
-  if (vehicleFormMessage) {
-    vehicleFormMessage.textContent = "Editando vehiculo seleccionado.";
-  }
-  setVehicleWizardStep(1);
-  openModal("vehicles-modal");
+  openVehicleEditModal(id);
 }
 
 function openVehicleConfigurationModal(id) {
@@ -2972,8 +3030,7 @@ function openVehicleConfigurationModal(id) {
         </div>
         <div class="vehicle-settings-actions">
           <button class="ghost" type="button" onclick="openVehicleRemindersModal(${Number(vehicle.id)})">Recordatorios</button>
-          <button class="ghost" type="button" onclick="openVehicleEditor(${Number(vehicle.id)})">Editar vehiculo</button>
-          <button class="ghost maintenance-delete-button" type="button" onclick="deleteVehicle(${Number(vehicle.id)})">Eliminar vehiculo</button>
+          <button class="ghost" type="button" onclick="openVehicleEditModal(${Number(vehicle.id)})">Editar vehiculo</button>
         </div>
       </div>
     `,
@@ -2981,7 +3038,7 @@ function openVehicleConfigurationModal(id) {
 }
 
 function editVehicle(id) {
-  openVehicleConfigurationModal(id);
+  openVehicleEditModal(id);
 }
 
 function viewVehicle(id) {
@@ -3316,16 +3373,10 @@ menuCurrentActivityButton?.addEventListener("click", openCurrentVehicleActivity)
 menuCurrentEditButton?.addEventListener("click", () => {
   const vehicle = getSelectedVehicle();
   if (vehicle) {
-    editVehicle(vehicle.id);
+    openVehicleEditModal(vehicle.id);
   }
 });
 menuCurrentSettingsButton?.addEventListener("click", openCurrentVehicleSettings);
-menuCurrentDeleteButton?.addEventListener("click", () => {
-  const vehicle = getSelectedVehicle();
-  if (vehicle) {
-    deleteVehicle(vehicle.id);
-  }
-});
 vehicleNavDashboardButton?.addEventListener("click", openCurrentVehicleDashboard);
 vehicleNavMaintenanceButton?.addEventListener("click", openCurrentVehicleMaintenance);
 vehicleNavPlacesButton?.addEventListener("click", openCurrentVehiclePlaces);
@@ -3350,6 +3401,15 @@ vehicleWizardBackButton?.addEventListener("click", () => {
 
 vehicleWizardNextButton?.addEventListener("click", () => {
   goToVehicleWizardStep(currentVehicleWizardStep + 1);
+});
+
+vehicleDeleteButton?.addEventListener("click", async () => {
+  if (!editingVehicleId) return;
+  try {
+    await deleteVehicle(editingVehicleId);
+  } catch (_error) {
+    // Error modal already shown above.
+  }
 });
 
 vehicleForm?.addEventListener("submit", async (e) => {
@@ -3639,6 +3699,10 @@ async function deleteVehicle(id) {
       method: "DELETE",
     });
 
+    if (editingVehicleId === Number(id)) {
+      resetVehicleFormState();
+      closeModal("vehicles-modal");
+    }
     await refreshAllData();
     await loadVehiclesScreen();
     showToast("Vehiculo eliminado correctamente", { tone: "success" });
@@ -3670,20 +3734,6 @@ function closeModal(id) {
 }
 
 maintenanceDetailClose?.addEventListener("click", closeMaintenanceDetail);
-maintenanceDetailEdit?.addEventListener("click", () => {
-  const maintenanceId = Number(maintenanceDetailEdit.dataset.maintenanceId);
-  if (!maintenanceId) return;
-  editMaintenance(maintenanceId);
-});
-maintenanceDetailDelete?.addEventListener("click", async () => {
-  const maintenanceId = Number(maintenanceDetailDelete.dataset.maintenanceId);
-  if (!maintenanceId) return;
-  try {
-    await deleteMaintenance(maintenanceId);
-  } catch (_error) {
-    // Error modal already shown above.
-  }
-});
 maintenanceImageLightboxClose?.addEventListener("click", closeMaintenanceImageLightbox);
 themeMenuButton?.addEventListener("click", toggleTheme);
 notificationsToggleButton?.addEventListener("click", () => {
@@ -3823,9 +3873,7 @@ function toggleSection(header, options = {}) {
 }
 
 function openVehiclesModal() {
-  resetVehicleFormState();
-  openModal("vehicles-modal");
-  closeMenu();
+  openVehicleCreateModal();
 }
 
 function openPlacesModal() {

@@ -8,7 +8,19 @@ function isNonNegativeInteger(value) {
 
 const MAX_NUMERIC_FIELD_VALUE = 999999999;
 const ALLOWED_VEHICLE_TYPES = new Set(["moto", "auto", "camioneta", "camion", "bicicleta", "colectivo", "otro"]);
-const ALLOWED_VEHICLE_COLORS = new Set(["rojo", "azul", "gris", "negro", "verde", "neutro"]);
+const ALLOWED_VEHICLE_COLORS = new Set([
+  "rojo",
+  "azul",
+  "verde",
+  "negro",
+  "gris",
+  "blanco",
+  "amarillo",
+  "naranja",
+  "violeta",
+  "celeste",
+  "neutro",
+]);
 
 function normalizeText(value) {
   return typeof value === "string" ? value.trim() : "";

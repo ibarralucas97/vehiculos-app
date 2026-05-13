@@ -1459,6 +1459,31 @@ body.modal-open {
   justify-content: space-between;
 }
 
+.vehicle-modal-copy {
+  margin: 8px 0 18px;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.vehicle-form-danger-zone {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+  padding-top: 4px;
+}
+
+.vehicle-delete-button {
+  border-color: rgba(155, 61, 61, 0.2);
+  color: #9b3d3d;
+  background: rgba(155, 61, 61, 0.08);
+}
+
+.vehicle-delete-button:hover,
+.vehicle-delete-button:active {
+  border-color: rgba(155, 61, 61, 0.34);
+  background: rgba(155, 61, 61, 0.14);
+}
+
 .helper-copy {
   margin: 0;
   font-size: 0.86rem;
@@ -2861,6 +2886,8 @@ body[data-theme="dark"] .empty-state-icon {
 
 .vehicle-type-chip,
 .vehicle-color-chip {
+  position: relative;
+  overflow: hidden;
   min-height: 52px;
   justify-content: flex-start;
   gap: 10px;
@@ -2869,8 +2896,9 @@ body[data-theme="dark"] .empty-state-icon {
   border: 1px solid rgba(80, 109, 132, 0.16);
   background: rgba(255, 255, 255, 0.86);
   color: var(--primary-deep);
-  box-shadow: none;
-  transition: transform 140ms ease, border-color 140ms ease, box-shadow 140ms ease, background-color 140ms ease;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease, opacity 180ms ease;
+  opacity: 0.84;
 }
 
 .vehicle-type-chip svg,
@@ -2894,17 +2922,18 @@ body[data-theme="dark"] .empty-state-icon {
   color: var(--primary-deep);
 }
 
-.vehicle-type-chip span:last-child {
+.vehicle-type-chip span:nth-child(2) {
   font-size: 0.9rem;
   font-weight: 700;
 }
 
 .vehicle-type-chip.is-active,
 .vehicle-color-chip.is-active {
-  border-color: rgba(31, 154, 224, 0.34);
-  box-shadow: 0 14px 24px rgba(15, 108, 141, 0.12);
-  background: rgba(240, 249, 255, 0.96);
-  transform: translateY(-1px) scale(1.01);
+  border-color: rgba(31, 154, 224, 0.58);
+  box-shadow: 0 18px 30px rgba(15, 108, 141, 0.16), 0 0 0 1px rgba(31, 154, 224, 0.16);
+  background: linear-gradient(180deg, rgba(240, 249, 255, 0.98), rgba(229, 244, 255, 0.94));
+  transform: translateY(-1px) scale(1.035);
+  opacity: 1;
 }
 
 .vehicle-type-chip:hover,
@@ -2912,13 +2941,14 @@ body[data-theme="dark"] .empty-state-icon {
 .vehicle-context-tab:hover,
 .item-actions button:hover,
 .vehicle-card-quick-action:hover {
-  border-color: rgba(31, 154, 224, 0.22);
+  border-color: rgba(31, 154, 224, 0.28);
+  opacity: 1;
 }
 
 .vehicle-color-chip {
-  width: 52px;
-  min-width: 52px;
-  min-height: 52px;
+  width: 60px;
+  min-width: 60px;
+  min-height: 60px;
   justify-content: center;
   padding: 0;
   flex: 0 0 auto;
@@ -2927,19 +2957,60 @@ body[data-theme="dark"] .empty-state-icon {
 
 .vehicle-color-chip:hover,
 .vehicle-color-chip:active {
-  transform: translateY(-1px) scale(1.02);
+  transform: translateY(-1px) scale(1.04);
 }
 
 .vehicle-color-chip-swatch {
-  width: 24px;
-  height: 24px;
+  width: 32px;
+  height: 32px;
   border-radius: 999px;
   background: var(--vehicle-color);
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.85), 0 0 0 4px rgba(80, 109, 132, 0.12);
+  border: 1px solid rgba(80, 109, 132, 0.12);
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.92), 0 0 0 5px rgba(80, 109, 132, 0.12);
 }
 
 .vehicle-color-chip.is-active .vehicle-color-chip-swatch {
-  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.96), 0 0 0 6px rgba(31, 154, 224, 0.24);
+  box-shadow: 0 0 0 5px rgba(255, 255, 255, 0.98), 0 0 0 8px rgba(31, 154, 224, 0.28), 0 14px 28px rgba(31, 154, 224, 0.14);
+}
+
+.vehicle-type-chip-check,
+.vehicle-color-chip-check {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: rgba(31, 154, 224, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(31, 154, 224, 0.08);
+  opacity: 0;
+  transform: scale(0.7);
+  transition: opacity 180ms ease, transform 180ms ease, background-color 180ms ease;
+}
+
+.vehicle-type-chip-check::before,
+.vehicle-color-chip-check::before {
+  content: "";
+  position: absolute;
+  top: 5px;
+  left: 6px;
+  width: 5px;
+  height: 8px;
+  border-right: 2px solid #fff;
+  border-bottom: 2px solid #fff;
+  transform: rotate(45deg);
+}
+
+.vehicle-type-chip.is-active .vehicle-type-chip-check,
+.vehicle-color-chip.is-active .vehicle-color-chip-check {
+  opacity: 1;
+  transform: scale(1);
+  background: linear-gradient(180deg, #1f9ae0, #0f6c8d);
+}
+
+.vehicle-type-chip.is-active .vehicle-type-chip-icon,
+.vehicle-type-chip.is-active span:nth-child(2) {
+  color: #0c6280;
 }
 
 .vehicle-card {
@@ -3082,6 +3153,27 @@ body[data-theme="dark"] .vehicle-type-chip,
 body[data-theme="dark"] .vehicle-color-chip {
   background: var(--surface-alt);
   border-color: var(--border);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+body[data-theme="dark"] .vehicle-type-chip.is-active,
+body[data-theme="dark"] .vehicle-color-chip.is-active {
+  background: linear-gradient(180deg, rgba(25, 43, 60, 0.96), rgba(18, 33, 47, 0.96));
+  border-color: rgba(98, 188, 255, 0.62);
+  box-shadow: 0 16px 30px rgba(2, 8, 20, 0.42), 0 0 0 1px rgba(98, 188, 255, 0.18);
+}
+
+body[data-theme="dark"] .vehicle-type-chip.is-active .vehicle-type-chip-icon,
+body[data-theme="dark"] .vehicle-type-chip.is-active span:nth-child(2) {
+  color: #8fd9ff;
+}
+
+body[data-theme="dark"] .vehicle-color-chip-swatch {
+  box-shadow: 0 0 0 4px rgba(9, 15, 24, 0.98), 0 0 0 5px rgba(143, 217, 255, 0.12);
+}
+
+body[data-theme="dark"] .vehicle-color-chip.is-active .vehicle-color-chip-swatch {
+  box-shadow: 0 0 0 5px rgba(9, 15, 24, 1), 0 0 0 8px rgba(98, 188, 255, 0.26), 0 14px 28px rgba(2, 8, 20, 0.32);
 }
 
 body[data-theme="dark"] .vehicle-card-main,
