@@ -71,18 +71,17 @@
               <button id="menu-profile" type="button">Mi perfil</button>
               <button id="menu-settings" type="button">Ajustes de la app</button>
               <button id="menu-activity" type="button">Actividad</button>
-              <button id="menu-logout" type="button">Cerrar sesion</button>
             </div>
             <div id="menu-current-vehicle-group" class="menu-section hidden">
               <p class="menu-section-label">Vehiculo actual</p>
               <p id="menu-current-vehicle-name" class="menu-current-vehicle-name">Sin vehiculo abierto</p>
-              <button id="menu-current-dashboard" type="button">Dashboard</button>
-              <button id="menu-current-maintenance" type="button">Mantenimientos</button>
               <button id="menu-current-places" type="button">Lugares</button>
-              <button id="menu-current-activity" type="button">Actividad</button>
+              <button id="menu-current-reminders" type="button">Recordatorios</button>
               <button id="menu-current-edit" type="button">Editar vehiculo</button>
-              <button id="menu-current-settings" type="button">Ajustes del vehiculo</button>
               <button id="menu-current-delete" class="menu-danger-button" type="button">Eliminar vehiculo</button>
+            </div>
+            <div class="menu-section menu-section-logout">
+              <button id="menu-logout" class="menu-logout-button" type="button">Cerrar sesion</button>
             </div>
           </div>
         </div>
@@ -171,13 +170,6 @@
                 <button id="update-km-button" class="ghost" type="button">Actualizar</button>
               </div>
             </div>
-          </div>
-          <div class="vehicle-context-nav" aria-label="Navegacion contextual del vehiculo">
-            <button id="vehicle-nav-dashboard" class="vehicle-context-tab is-active" type="button">Dashboard</button>
-            <button id="vehicle-nav-maintenance" class="vehicle-context-tab" type="button">Mantenimientos</button>
-            <button id="vehicle-nav-places" class="vehicle-context-tab" type="button">Lugares</button>
-            <button id="vehicle-nav-activity" class="vehicle-context-tab" type="button">Actividad</button>
-            <button id="vehicle-nav-settings" class="vehicle-context-tab" type="button">Ajustes del vehiculo</button>
           </div>
         </section>
 
@@ -502,16 +494,16 @@
                 </select>
               </label>
               <label class="toggle-row">
-                <span>Recordatorios activos</span>
+                <span>Recordatorios generales activos</span>
                 <input name="reminders_enabled" type="checkbox" checked />
               </label>
-              <p class="inline-help">La unidad se usa para mostrar distancias. Los datos actuales se conservan.</p>
+              <p class="inline-help">La unidad se usa para mostrar distancias. Si pausas los recordatorios generales, tambien se pausaran los avisos por vehiculo.</p>
 
               <div class="notification-settings-panel">
                 <div class="notification-settings-header">
                   <div>
-                    <h3>Notificaciones push</h3>
-                    <p class="section-copy">Reutiliza esta configuracion para enviar recordatorios reales a tus dispositivos.</p>
+                    <h3>Notificaciones generales</h3>
+                    <p class="section-copy">Las notificaciones permiten recibir avisos importantes de Rodado Control en este dispositivo.</p>
                   </div>
                 </div>
                 <p id="notifications-status" class="message notification-status">Cargando estado de notificaciones...</p>
@@ -543,8 +535,8 @@
                   </article>
                 </div>
                 <div class="settings-reminder-copy">
-                  <p id="settings-reminder-frequency" class="inline-help">La frecuencia y kilometraje de avisos se define por vehiculo en Intervalo KM e Intervalo meses.</p>
-                  <p id="settings-reminder-km" class="inline-help">La actualizacion de kilometraje se hace desde el Dashboard, usando el boton "Actualizar".</p>
+                  <p id="settings-reminder-frequency" class="inline-help">Los recordatorios por meses, kilometraje y actualizacion de km se configuran por vehiculo desde el menu contextual.</p>
+                  <p id="settings-reminder-km" class="inline-help">Si quieres recibir avisos reales, mantene activas las notificaciones y la suscripcion de este dispositivo.</p>
                 </div>
               </div>
 
@@ -594,6 +586,104 @@
         <h2>Historial de actividad</h2>
         <p class="section-copy">Acciones importantes recientes de tu cuenta.</p>
         <div id="activity-list" class="activity-list"></div>
+      </div>
+    </div>
+
+    <div id="vehicle-reminders-modal" class="modal hidden">
+      <div class="modal-content modal-content-wide">
+        <button class="modal-close" onclick="closeModal('vehicle-reminders-modal')" type="button" aria-label="Cerrar"><span class="sr-only">Cerrar</span><svg viewBox="0 0 24 24" aria-hidden="true">
+  <path d="M6 6L18 18M18 6L6 18" />
+</svg></button>
+        <div class="vehicle-reminders-header">
+          <p class="vehicle-reminders-kicker">Vehiculo actual</p>
+          <h2 id="vehicle-reminders-title">Recordatorios del vehiculo</h2>
+          <p id="vehicle-reminders-subtitle" class="section-copy">Configura avisos por tiempo, kilometraje y actualizacion de km.</p>
+        </div>
+
+        <form id="vehicle-reminders-form" class="vehicle-reminders-layout">
+          <section class="vehicle-reminders-card">
+            <div class="section-head section-head-stack">
+              <div>
+                <h3>Estado</h3>
+                <p class="section-copy">Activa o pausa solo los recordatorios de este vehiculo.</p>
+              </div>
+            </div>
+            <label class="toggle-row">
+              <span>Recordatorios de este vehiculo</span>
+              <input name="vehicle_reminders_enabled" type="checkbox" checked />
+            </label>
+          </section>
+
+          <section class="vehicle-reminders-card">
+            <div class="section-head section-head-stack">
+              <div>
+                <h3>Por tiempo</h3>
+                <p class="section-copy">Cada cuantos meses quieres hacer mantenimiento y cuantos dias antes avisarte.</p>
+              </div>
+            </div>
+            <div class="vehicle-reminders-grid">
+              <label>
+                Cada cuantos meses quieres hacer mantenimiento
+                <input name="intervalo_tiempo" type="number" min="1" inputmode="numeric" placeholder="Ej. 3" />
+              </label>
+              <label>
+                Cuantos dias antes quieres que te avise
+                <input name="notify_days_before" type="number" min="1" inputmode="numeric" placeholder="Ej. 15" />
+              </label>
+            </div>
+          </section>
+
+          <section class="vehicle-reminders-card">
+            <div class="section-head section-head-stack">
+              <div>
+                <h3>Por km</h3>
+                <p class="section-copy">Define el intervalo de mantenimiento y el margen previo de aviso.</p>
+              </div>
+            </div>
+            <div class="vehicle-reminders-grid">
+              <label>
+                Cada cuantos km corresponde mantenimiento
+                <input name="intervalo_km" type="number" min="1" inputmode="numeric" placeholder="Ej. 5000" />
+              </label>
+              <label>
+                Cuantos km antes quieres que te avise
+                <input name="notify_km_before" type="number" min="1" inputmode="numeric" placeholder="Ej. 500" />
+              </label>
+            </div>
+          </section>
+
+          <section class="vehicle-reminders-card">
+            <div class="section-head section-head-stack">
+              <div>
+                <h3>Actualizar km</h3>
+                <p class="section-copy">Si te falta el kilometraje actual, podemos recordartelo cada cierto tiempo.</p>
+              </div>
+            </div>
+            <label>
+              Cada cuantos dias quieres que te recuerde actualizar km
+              <input name="km_update_reminder_days" type="number" min="1" inputmode="numeric" placeholder="Ej. 7" />
+            </label>
+          </section>
+
+          <section class="vehicle-reminders-card vehicle-reminders-summary-card">
+            <div class="section-head section-head-stack">
+              <div>
+                <h3>Vista resumen</h3>
+                <p class="section-copy">Te mostramos una estimacion rapida con la informacion disponible hoy.</p>
+              </div>
+            </div>
+            <div class="vehicle-reminders-summary">
+              <p id="vehicle-reminders-summary-date">Proximo mantenimiento estimado: sin fecha aun.</p>
+              <p id="vehicle-reminders-summary-km">Faltan aproximadamente km por calcular.</p>
+              <p id="vehicle-reminders-summary-note" class="inline-help">Si falta informacion, te diremos que dato conviene completar para mejorar los recordatorios.</p>
+            </div>
+          </section>
+
+          <div class="form-actions vehicle-reminders-actions">
+            <button id="vehicle-reminders-save-button" type="submit">Guardar recordatorios</button>
+          </div>
+          <p id="vehicle-reminders-message" class="message"></p>
+        </form>
       </div>
     </div>
 

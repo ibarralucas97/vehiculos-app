@@ -65,10 +65,10 @@ body.splash-active .app-shell {
   align-items: center;
   gap: 14px;
   min-width: 0;
-  padding: 12px 18px;
-  margin-bottom: 14px;
+  padding: 9px 14px;
+  margin-bottom: 12px;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 12px;
   background: rgba(255, 255, 255, 0.9);
   box-shadow: 0 8px 20px rgba(31, 42, 61, 0.08);
 }
@@ -114,7 +114,7 @@ body.splash-active .app-shell {
   justify-self: end;
   flex: 0 0 auto;
   text-align: center;
-  font-size: 0.9rem;
+  font-size: 0.82rem;
   font-weight: 700;
   color: #4b5563;
   min-width: 0;
@@ -123,7 +123,7 @@ body.splash-active .app-shell {
   text-overflow: ellipsis;
   white-space: nowrap;
   margin: 0;
-  padding: 8px 10px;
+  padding: 7px 9px;
   border-radius: 999px;
   background: rgba(80, 109, 132, 0.08);
   border: 1px solid rgba(80, 109, 132, 0.12);
@@ -318,6 +318,19 @@ button {
   background: rgba(215, 76, 76, 0.08);
   color: #9c2f2f;
   border: 1px solid rgba(215, 76, 76, 0.16);
+}
+
+.menu-section-logout {
+  margin-top: 10px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(80, 109, 132, 0.1);
+}
+
+.menu-panel .menu-logout-button {
+  background: rgba(80, 109, 132, 0.06);
+  color: var(--primary-deep);
+  border: 1px solid rgba(80, 109, 132, 0.12);
+  box-shadow: none;
 }
 
 .menu-section {
@@ -926,8 +939,8 @@ body.modal-open {
 
 
 .app-title {
-  font-size: clamp(1.5rem, 4vw, 2rem);
-  font-weight: 800;
+  font-size: clamp(1.2rem, 3vw, 1.55rem);
+  font-weight: 700;
 
   background: linear-gradient(90deg, #3a7bd5, #00d2ff);
 
@@ -937,7 +950,7 @@ body.modal-open {
   color: transparent;                 /* 👈 estándar */
   -webkit-text-fill-color: transparent; /* 👈 soporte */
 
-  margin-bottom: 8px;
+  margin-bottom: 0;
 }
 
 .hero-title {
@@ -1028,19 +1041,16 @@ body.modal-open {
 .vehicles-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 14px;
-  margin-top: 15px;
+  gap: 12px;
+  margin-top: 14px;
 }
 
 .vehicle-card {
-  padding: 16px;
-
+  padding: 0;
   background: white;
-  border-radius: 14px;
-
-  border: 1px solid #e5e7eb;
-
-  box-shadow: 0 8px 20px rgba(0,0,0,0.05);
+  border-radius: 18px;
+  border: 1px solid rgba(80, 109, 132, 0.12);
+  box-shadow: 0 6px 16px rgba(31, 42, 61, 0.04);
 
   cursor: pointer;
   transition: all 0.2s ease;
@@ -1052,9 +1062,9 @@ body.modal-open {
 }
 
 .vehicle-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 16px 28px rgba(15, 168, 171, 0.18);
-  border-color: #0fa8ab;
+  transform: translateY(-2px);
+  box-shadow: 0 14px 24px rgba(31, 42, 61, 0.08);
+  border-color: rgba(31, 154, 224, 0.18);
 }
 
 .vehicle-card strong {
@@ -2049,6 +2059,10 @@ body[data-theme="dark"] .notification-status.is-error {
 }
 
 @media (max-width: 768px) {
+  .vehicle-reminders-grid {
+    grid-template-columns: 1fr;
+  }
+
   .pwa-install-banner {
     flex-direction: column;
     align-items: stretch;
@@ -2106,6 +2120,110 @@ input::placeholder {
   gap: 10px;
 }
 
+.vehicle-settings-sheet {
+  display: grid;
+  gap: 18px;
+}
+
+.vehicle-settings-hero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 0 2px;
+}
+
+.vehicle-settings-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--vehicle-color) 14%, white);
+  color: var(--vehicle-color);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--vehicle-color) 20%, transparent);
+}
+
+.vehicle-settings-icon svg {
+  width: 26px;
+  height: 26px;
+  stroke: currentColor;
+  fill: none;
+}
+
+.vehicle-settings-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.vehicle-settings-copy h3,
+.vehicle-settings-copy p,
+.vehicle-settings-copy span {
+  margin: 0;
+}
+
+.vehicle-settings-copy h3 {
+  font-size: 1.1rem;
+  color: var(--primary-deep);
+}
+
+.vehicle-settings-copy p,
+.vehicle-settings-copy span {
+  color: var(--muted);
+}
+
+.vehicle-reminders-header {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.vehicle-reminders-kicker {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.vehicle-reminders-layout {
+  display: grid;
+  gap: 14px;
+}
+
+.vehicle-reminders-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(80, 109, 132, 0.12);
+  background: rgba(80, 109, 132, 0.04);
+}
+
+.vehicle-reminders-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.vehicle-reminders-summary {
+  display: grid;
+  gap: 8px;
+}
+
+.vehicle-reminders-summary p {
+  margin: 0;
+}
+
+.vehicle-reminders-summary-card {
+  background: linear-gradient(180deg, rgba(15, 108, 141, 0.05), rgba(80, 109, 132, 0.03));
+}
+
+.vehicle-reminders-actions {
+  margin-top: 2px;
+}
+
 body[data-theme="dark"] .login-brand-logo {
   filter: none;
   opacity: 1;
@@ -2155,6 +2273,15 @@ body[data-theme="dark"] .card-meta span,
 body[data-theme="dark"] .reminder-meta span,
 body[data-theme="dark"] .empty {
   color: var(--muted);
+}
+
+body[data-theme="dark"] .vehicle-reminders-card {
+  background: var(--surface-alt);
+  border-color: var(--border);
+}
+
+body[data-theme="dark"] .vehicle-reminders-summary-card {
+  background: linear-gradient(180deg, rgba(139, 184, 212, 0.1), rgba(18, 25, 34, 0.72));
 }
 
 
@@ -2518,6 +2645,7 @@ body[data-theme="dark"] .empty-state-icon {
   text-align: left;
   padding: 16px;
   min-height: 100%;
+  border-radius: 18px;
 }
 
 .vehicle-card-main:hover,
@@ -2530,11 +2658,11 @@ body[data-theme="dark"] .empty-state-icon {
   position: absolute;
   top: 12px;
   right: 12px;
-  width: 42px;
-  min-height: 42px;
+  width: 36px;
+  min-height: 36px;
   padding: 0;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.92);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.96);
   color: var(--primary-deep);
   border: 1px solid rgba(80, 109, 132, 0.12);
   box-shadow: none;
@@ -2549,21 +2677,20 @@ body[data-theme="dark"] .empty-state-icon {
 
 .vehicle-card-shell {
   display: grid;
-  gap: 14px;
-  padding-top: 4px;
+  gap: 10px;
 }
 
 .vehicle-card-head {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
+  gap: 10px;
 }
 
 .vehicle-card-icon {
-  width: 46px;
-  height: 46px;
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--vehicle-color) 18%, white);
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--vehicle-color) 12%, white);
   color: var(--vehicle-color);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--vehicle-color) 24%, transparent);
   flex-shrink: 0;
@@ -2571,11 +2698,11 @@ body[data-theme="dark"] .empty-state-icon {
 
 .vehicle-card-copy {
   display: grid;
-  gap: 3px;
+  gap: 2px;
 }
 
 .vehicle-card-type {
-  font-size: 0.74rem;
+  font-size: 0.7rem;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -2585,7 +2712,7 @@ body[data-theme="dark"] .empty-state-icon {
 .vehicle-card-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
 }
 
 .vehicle-card-color-badge,
@@ -2593,8 +2720,8 @@ body[data-theme="dark"] .empty-state-icon {
 .vehicle-list-summary-color {
   display: inline-flex;
   align-items: center;
-  min-height: 28px;
-  padding: 6px 10px;
+  min-height: 26px;
+  padding: 5px 9px;
   border-radius: 999px;
   font-size: 0.82rem;
   border: 1px solid rgba(80, 109, 132, 0.12);
@@ -2603,8 +2730,8 @@ body[data-theme="dark"] .empty-state-icon {
 }
 
 .vehicle-card-color-badge {
-  background: color-mix(in srgb, var(--vehicle-color) 18%, white);
-  color: color-mix(in srgb, var(--vehicle-color) 72%, #102132);
+  background: color-mix(in srgb, var(--vehicle-color) 12%, white);
+  color: color-mix(in srgb, var(--vehicle-color) 62%, #102132);
 }
 
 .item-info-vehicle {
@@ -2676,6 +2803,12 @@ body[data-theme="dark"] .menu-panel .menu-danger-button {
   background: rgba(156, 47, 47, 0.18);
   color: #f6b4b4;
   border-color: rgba(246, 180, 180, 0.16);
+}
+
+body[data-theme="dark"] .menu-panel .menu-logout-button {
+  background: rgba(139, 184, 212, 0.1);
+  color: #dce7f2;
+  border-color: rgba(139, 184, 212, 0.14);
 }
 
 body[data-theme="dark"] .vehicle-card-icon,

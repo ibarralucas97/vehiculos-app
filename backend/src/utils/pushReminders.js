@@ -1,4 +1,7 @@
-const { normalizeReminder } = require("./reminders");
+const {
+  DEFAULT_REPEAT_DAYS,
+  normalizeReminder,
+} = require("./reminders");
 const { buildNotificationPayload, sendPushToUser } = require("./pushNotifications");
 
 function buildNotificationIntentUrl({ vehicleId = null, maintenanceId = null, view = "dashboard" } = {}) {
@@ -22,6 +25,10 @@ async function fetchUserReminderRows(pool, userId) {
       v.intervalo_km,
       v.fecha_ultimo_service,
       v.intervalo_tiempo,
+      v.vehicle_reminders_enabled,
+      v.notify_days_before,
+      v.notify_km_before,
+      v.km_update_reminder_days,
       lm.fecha AS latest_fecha,
       lm.km AS latest_km
     FROM vehiculos v
@@ -40,85 +47,185 @@ async function fetchUserReminderRows(pool, userId) {
   return result.rows;
 }
 
-function buildReminderCandidate(reminder) {
+function buildReminderCandidates(reminder) {
+  if (!reminder.vehicleRemindersEnabled) {
+    return [];
+  }
+
   const vehicleLabel = reminder.vehicleName || "tu vehiculo";
   const url = buildNotificationIntentUrl({ vehicleId: reminder.vehicleId, view: "dashboard" });
+  const candidates = [];
 
-  if (reminder.currentKm === null && reminder.intervalKm !== null) {
-    return {
-      type: "km-update",
-      dedupeKey: `km-update:${reminder.vehicleId}:${reminder.intervalKm}:${reminder.intervalMonths ?? "na"}`,
+  if (reminder.timeReminder.status === "upcoming" && reminder.timeReminder.nextDate) {
+    candidates.push({
+      type: "maintenance_upcoming_time",
+      stage: "upcoming",
+      dueSnapshot: `time:${reminder.timeReminder.nextDate}`,
+      dedupeKey: `maintenance_upcoming_time:${reminder.vehicleId}:${reminder.timeReminder.nextDate}`,
+      cooldownDays: DEFAULT_REPEAT_DAYS,
+      notification: buildNotificationPayload({
+        title: "Mantenimiento proximo por tiempo",
+        body: `${vehicleLabel} necesita atencion pronto. Te avisaremos con ${reminder.notifyDaysBefore} dias de anticipacion.`,
+        type: "maintenance_upcoming_time",
+        tag: `maintenance-upcoming-time-${reminder.vehicleId}`,
+        url,
+        data: {
+          vehicleId: reminder.vehicleId,
+        },
+      }),
+    });
+  }
+
+  if (reminder.timeReminder.status === "overdue" && reminder.timeReminder.nextDate) {
+    candidates.push({
+      type: "maintenance_overdue_time",
+      stage: "overdue",
+      dueSnapshot: `time:${reminder.timeReminder.nextDate}`,
+      dedupeKey: `maintenance_overdue_time:${reminder.vehicleId}:${reminder.timeReminder.nextDate}`,
+      cooldownDays: DEFAULT_REPEAT_DAYS,
+      notification: buildNotificationPayload({
+        title: "Mantenimiento vencido por tiempo",
+        body: `${vehicleLabel} ya supero la fecha estimada de mantenimiento. Revisalo cuanto antes.`,
+        type: "maintenance_overdue_time",
+        tag: `maintenance-overdue-time-${reminder.vehicleId}`,
+        url,
+        data: {
+          vehicleId: reminder.vehicleId,
+        },
+      }),
+    });
+  }
+
+  if (reminder.kmReminder.status === "upcoming" && reminder.kmReminder.nextKm !== null) {
+    candidates.push({
+      type: "maintenance_upcoming_km",
+      stage: "upcoming",
+      dueSnapshot: `km:${reminder.kmReminder.nextKm}`,
+      dedupeKey: `maintenance_upcoming_km:${reminder.vehicleId}:${reminder.kmReminder.nextKm}`,
+      cooldownDays: DEFAULT_REPEAT_DAYS,
+      notification: buildNotificationPayload({
+        title: "Mantenimiento proximo por kilometraje",
+        body: `${vehicleLabel} se acerca al proximo service. Te avisaremos con ${reminder.notifyKmBefore.toLocaleString("es-AR")} km de margen.`,
+        type: "maintenance_upcoming_km",
+        tag: `maintenance-upcoming-km-${reminder.vehicleId}`,
+        url,
+        data: {
+          vehicleId: reminder.vehicleId,
+        },
+      }),
+    });
+  }
+
+  if (reminder.kmReminder.status === "overdue" && reminder.kmReminder.nextKm !== null) {
+    candidates.push({
+      type: "maintenance_overdue_km",
+      stage: "overdue",
+      dueSnapshot: `km:${reminder.kmReminder.nextKm}`,
+      dedupeKey: `maintenance_overdue_km:${reminder.vehicleId}:${reminder.kmReminder.nextKm}`,
+      cooldownDays: DEFAULT_REPEAT_DAYS,
+      notification: buildNotificationPayload({
+        title: "Mantenimiento vencido por kilometraje",
+        body: `${vehicleLabel} ya esta pasado de kilometraje para el proximo service.`,
+        type: "maintenance_overdue_km",
+        tag: `maintenance-overdue-km-${reminder.vehicleId}`,
+        url,
+        data: {
+          vehicleId: reminder.vehicleId,
+        },
+      }),
+    });
+  }
+
+  if (reminder.kmUpdateReminder.needsUpdate) {
+    candidates.push({
+      type: "km_update_needed",
+      stage: "needs_update",
+      dueSnapshot: `km-update:${reminder.intervalKm ?? "na"}`,
+      dedupeKey: `km_update_needed:${reminder.vehicleId}:${reminder.intervalKm ?? "na"}`,
+      cooldownDays: reminder.kmUpdateReminder.intervalDays || DEFAULT_REPEAT_DAYS,
       notification: buildNotificationPayload({
         title: "Actualiza el kilometraje",
-        body: `Actualiza el kilometraje actual de ${vehicleLabel} para mantener tus recordatorios al dia.`,
-        type: "km-update",
-        tag: `km-update-${reminder.vehicleId}`,
+        body: `Actualiza el kilometraje actual de ${vehicleLabel} para mantener tus recordatorios por kilometraje al dia.`,
+        type: "km_update_needed",
+        tag: `km-update-needed-${reminder.vehicleId}`,
         url,
         data: {
           vehicleId: reminder.vehicleId,
         },
       }),
-    };
+    });
   }
 
-  if (reminder.status === "atrasado") {
-    return {
-      type: "maintenance-pending",
-      dedupeKey: `maintenance-pending:${reminder.vehicleId}:${reminder.nextKm ?? "na"}:${reminder.nextDate ?? "na"}`,
-      notification: buildNotificationPayload({
-        title: "Mantenimiento pendiente",
-        body: `${vehicleLabel} ya necesita atencion. Revisalo para evitar gastos sorpresa.`,
-        type: "maintenance-pending",
-        tag: `maintenance-pending-${reminder.vehicleId}`,
-        url,
-        data: {
-          vehicleId: reminder.vehicleId,
-        },
-      }),
-    };
-  }
-
-  if (reminder.status === "proximo") {
-    return {
-      type: "maintenance-upcoming",
-      dedupeKey: `maintenance-upcoming:${reminder.vehicleId}:${reminder.nextKm ?? "na"}:${reminder.nextDate ?? "na"}`,
-      notification: buildNotificationPayload({
-        title: "Vencimiento proximo",
-        body: `Se acerca el proximo mantenimiento de ${vehicleLabel}. Conviene programarlo pronto.`,
-        type: "maintenance-upcoming",
-        tag: `maintenance-upcoming-${reminder.vehicleId}`,
-        url,
-        data: {
-          vehicleId: reminder.vehicleId,
-        },
-      }),
-    };
-  }
-
-  return null;
+  return candidates;
 }
 
-async function reserveNotificationEvent(pool, { userId, vehicleId, notificationType, dedupeKey, payload }) {
+async function upsertNotificationEvent(pool, { userId, vehicleId, notificationType, dedupeKey, payload, stage, dueSnapshot }) {
   const result = await pool.query(
     `INSERT INTO push_notification_events (
       user_id,
       vehicle_id,
       notification_type,
       dedupe_key,
+      stage,
+      due_snapshot,
       payload
     )
-    VALUES ($1, $2, $3, $4, $5::jsonb)
-    ON CONFLICT (dedupe_key) DO NOTHING
-    RETURNING id`,
-    [userId, vehicleId || null, notificationType, dedupeKey, JSON.stringify(payload)]
+    VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
+    ON CONFLICT (dedupe_key)
+    DO UPDATE SET
+      notification_type = EXCLUDED.notification_type,
+      stage = EXCLUDED.stage,
+      due_snapshot = EXCLUDED.due_snapshot,
+      payload = EXCLUDED.payload
+    RETURNING id, last_sent_at, cooldown_until, send_count`,
+    [
+      userId,
+      vehicleId || null,
+      notificationType,
+      dedupeKey,
+      stage || null,
+      dueSnapshot || null,
+      JSON.stringify(payload),
+    ]
   );
 
-  return result.rows[0]?.id || null;
+  return result.rows[0] || null;
 }
 
-async function releaseNotificationEvent(pool, eventId) {
-  if (!eventId) return;
-  await pool.query("DELETE FROM push_notification_events WHERE id = $1", [eventId]);
+function isEventInCooldown(eventRow) {
+  if (!eventRow?.cooldown_until) {
+    return false;
+  }
+
+  return new Date(eventRow.cooldown_until).getTime() > Date.now();
+}
+
+async function markNotificationEventSent(pool, { eventId, payload, cooldownDays, result }) {
+  await pool.query(
+    `UPDATE push_notification_events
+     SET payload = $2::jsonb,
+         last_sent_at = NOW(),
+         cooldown_until = NOW() + ($3 * INTERVAL '1 day'),
+         send_count = COALESCE(send_count, 0) + 1,
+         last_result = $4
+     WHERE id = $1`,
+    [
+      eventId,
+      JSON.stringify(payload),
+      Math.max(Number(cooldownDays) || DEFAULT_REPEAT_DAYS, 1),
+      result,
+    ]
+  );
+}
+
+async function markNotificationEventFailure(pool, { eventId, payload, result }) {
+  await pool.query(
+    `UPDATE push_notification_events
+     SET payload = $2::jsonb,
+         last_result = $3
+     WHERE id = $1`,
+    [eventId, JSON.stringify(payload), result]
+  );
 }
 
 async function runReminderSweep(pool) {
@@ -141,6 +248,7 @@ async function runReminderSweep(pool) {
     failed: 0,
     skipped: 0,
     pruned: 0,
+    cooldownSkipped: 0,
   };
 
   for (const row of usersResult.rows) {
@@ -148,38 +256,55 @@ async function runReminderSweep(pool) {
     const reminders = reminderRows.map(normalizeReminder);
 
     for (const reminder of reminders) {
-      const candidate = buildReminderCandidate(reminder);
+      const candidates = buildReminderCandidates(reminder);
 
-      if (!candidate) {
-        continue;
-      }
+      for (const candidate of candidates) {
+        summary.candidates += 1;
 
-      summary.candidates += 1;
+        const eventRow = await upsertNotificationEvent(pool, {
+          userId: row.id,
+          vehicleId: reminder.vehicleId,
+          notificationType: candidate.type,
+          dedupeKey: candidate.dedupeKey,
+          payload: candidate.notification,
+          stage: candidate.stage,
+          dueSnapshot: candidate.dueSnapshot,
+        });
 
-      const eventId = await reserveNotificationEvent(pool, {
-        userId: row.id,
-        vehicleId: reminder.vehicleId,
-        notificationType: candidate.type,
-        dedupeKey: candidate.dedupeKey,
-        payload: candidate.notification,
-      });
+        if (!eventRow) {
+          summary.skipped += 1;
+          continue;
+        }
 
-      if (!eventId) {
-        summary.skipped += 1;
-        continue;
-      }
+        if (isEventInCooldown(eventRow)) {
+          summary.cooldownSkipped += 1;
+          continue;
+        }
 
-      const result = await sendPushToUser(pool, {
-        userId: row.id,
-        notification: candidate.notification,
-      });
+        const result = await sendPushToUser(pool, {
+          userId: row.id,
+          notification: candidate.notification,
+        });
 
-      summary.sent += result.sent;
-      summary.failed += result.failed;
-      summary.pruned += result.pruned;
+        summary.sent += result.sent;
+        summary.failed += result.failed;
+        summary.pruned += result.pruned;
 
-      if (result.sent === 0 && result.pruned === 0) {
-        await releaseNotificationEvent(pool, eventId);
+        if (result.sent > 0 || result.pruned > 0) {
+          await markNotificationEventSent(pool, {
+            eventId: eventRow.id,
+            payload: candidate.notification,
+            cooldownDays: candidate.cooldownDays,
+            result: result.sent > 0 ? "sent" : "pruned",
+          });
+          continue;
+        }
+
+        await markNotificationEventFailure(pool, {
+          eventId: eventRow.id,
+          payload: candidate.notification,
+          result: result.error || "failed",
+        });
       }
     }
   }
@@ -189,6 +314,6 @@ async function runReminderSweep(pool) {
 
 module.exports = {
   buildNotificationIntentUrl,
-  buildReminderCandidate,
+  buildReminderCandidates,
   runReminderSweep,
 };

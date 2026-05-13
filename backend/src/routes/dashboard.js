@@ -30,6 +30,10 @@ router.get("/overview", async (req, res) => {
         v.intervalo_km,
         v.fecha_ultimo_service,
         v.intervalo_tiempo,
+        v.vehicle_reminders_enabled,
+        v.notify_days_before,
+        v.notify_km_before,
+        v.km_update_reminder_days,
         lm.fecha AS latest_fecha,
         lm.km AS latest_km
       FROM vehiculos v

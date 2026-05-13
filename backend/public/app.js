@@ -2,6 +2,7 @@ let selectedVehicleId = null;
 let currentPlaces = [];
 let currentVehicles = [];
 let editingVehicleId = null;
+let editingVehicleReminderId = null;
 let editingPlaceId = null;
 let editingMaintenanceId = null;
 const SESSION_KEY = "mygarage_session";
@@ -10,6 +11,9 @@ const VIEW_STATE_KEY = "mygarage_view_state";
 const BACK_BUTTON_MOVE_THRESHOLD = 10;
 const BACK_BUTTON_GHOST_CLICK_WINDOW_MS = 700;
 const MAX_NUMERIC_FIELD_VALUE = 999999999;
+const DEFAULT_NOTIFY_DAYS_BEFORE = 30;
+const DEFAULT_NOTIFY_KM_BEFORE = 1000;
+const DEFAULT_KM_UPDATE_REMINDER_DAYS = 7;
 const ALLOWED_MAINTENANCE_IMAGE_TYPES = new Set(["image/png", "image/jpeg"]);
 const NUMERIC_FIELD_CONFIG = {
   km: { allowDecimal: false, label: "Kilometros" },
@@ -104,6 +108,7 @@ const menuCurrentVehicleName = document.getElementById("menu-current-vehicle-nam
 const menuCurrentDashboardButton = document.getElementById("menu-current-dashboard");
 const menuCurrentMaintenanceButton = document.getElementById("menu-current-maintenance");
 const menuCurrentPlacesButton = document.getElementById("menu-current-places");
+const menuCurrentRemindersButton = document.getElementById("menu-current-reminders");
 const menuCurrentActivityButton = document.getElementById("menu-current-activity");
 const menuCurrentEditButton = document.getElementById("menu-current-edit");
 const menuCurrentSettingsButton = document.getElementById("menu-current-settings");
@@ -182,6 +187,14 @@ const settingsSyncState = document.getElementById("settings-sync-state");
 const settingsSyncCopy = document.getElementById("settings-sync-copy");
 const settingsReminderFrequency = document.getElementById("settings-reminder-frequency");
 const settingsReminderKm = document.getElementById("settings-reminder-km");
+const vehicleRemindersForm = document.getElementById("vehicle-reminders-form");
+const vehicleRemindersTitle = document.getElementById("vehicle-reminders-title");
+const vehicleRemindersSubtitle = document.getElementById("vehicle-reminders-subtitle");
+const vehicleRemindersSaveButton = document.getElementById("vehicle-reminders-save-button");
+const vehicleRemindersMessage = document.getElementById("vehicle-reminders-message");
+const vehicleRemindersSummaryDate = document.getElementById("vehicle-reminders-summary-date");
+const vehicleRemindersSummaryKm = document.getElementById("vehicle-reminders-summary-km");
+const vehicleRemindersSummaryNote = document.getElementById("vehicle-reminders-summary-note");
 const themeColorMeta = document.querySelector('meta[name="theme-color"]');
 
 let maintenanceImageRefs = getMaintenanceImageRefs();
@@ -614,21 +627,24 @@ function goToVehicleWizardStep(nextStep) {
 function buildVehicleIdentityMarkup(vehicle = {}) {
   const typeConfig = getVehicleTypeConfig(vehicle.vehicle_type);
   const colorConfig = getVehicleColorConfig(vehicle.vehicle_color);
-  const modelLabel = vehicle.modelo ? escapeHtml(vehicle.modelo) : "Sin modelo";
+  const modelLabel = vehicle.modelo ? escapeHtml(vehicle.modelo) : "";
   const plateLabel = vehicle.patente ? escapeHtml(vehicle.patente) : "Sin patente";
+  const showType = normalizeVehicleType(vehicle.vehicle_type) !== DEFAULT_VEHICLE_TYPE;
+  const showColor = normalizeVehicleColor(vehicle.vehicle_color) !== DEFAULT_VEHICLE_COLOR;
+  const subtitle = [modelLabel, showType ? typeConfig.label : ""].filter(Boolean).join(" · ");
 
   return `
     <div class="vehicle-card-shell" style="--vehicle-color:${colorConfig.hex}">
       <div class="vehicle-card-head">
         <div class="vehicle-card-icon" aria-hidden="true">${buildIconMarkup(typeConfig.icon)}</div>
         <div class="vehicle-card-copy">
-          <span class="vehicle-card-type">${typeConfig.label}</span>
+          ${showType ? `<span class="vehicle-card-type">${typeConfig.label}</span>` : ""}
           <strong>${escapeHtml(vehicle.nombre || "Vehiculo")}</strong>
-          <span>${modelLabel}</span>
+          ${subtitle ? `<span>${subtitle}</span>` : ""}
         </div>
       </div>
       <div class="vehicle-card-meta">
-        <span class="vehicle-card-color-badge">${colorConfig.label}</span>
+        ${showColor ? `<span class="vehicle-card-color-badge">${colorConfig.label}</span>` : ""}
         <span class="vehicle-card-plate">${plateLabel}</span>
       </div>
     </div>
@@ -638,6 +654,9 @@ function buildVehicleIdentityMarkup(vehicle = {}) {
 function buildVehicleListSummaryMarkup(vehicle = {}) {
   const typeConfig = getVehicleTypeConfig(vehicle.vehicle_type);
   const colorConfig = getVehicleColorConfig(vehicle.vehicle_color);
+  const showType = normalizeVehicleType(vehicle.vehicle_type) !== DEFAULT_VEHICLE_TYPE;
+  const showColor = normalizeVehicleColor(vehicle.vehicle_color) !== DEFAULT_VEHICLE_COLOR;
+  const summaryMeta = [showType ? typeConfig.label : "", escapeHtml(vehicle.patente || "Sin patente")].filter(Boolean).join(" · ");
   return `
     <div class="vehicle-list-summary">
       <span class="vehicle-list-summary-icon" style="--vehicle-color:${colorConfig.hex}" aria-hidden="true">${buildIconMarkup(typeConfig.icon)}</span>
@@ -790,13 +809,13 @@ function renderReminderSettingsSummary(session = getSession(), status = notifica
   if (settingsSyncCopy) settingsSyncCopy.textContent = status ? "Estado consultado al backend correctamente." : "Se completara al refrescar notificaciones.";
 
   if (settingsReminderFrequency) {
-    settingsReminderFrequency.textContent = "La frecuencia y kilometraje de avisos se define por vehiculo usando Intervalo KM e Intervalo meses.";
+    settingsReminderFrequency.textContent = "Los recordatorios por meses, kilometraje y actualizacion de km se configuran por vehiculo desde el menu contextual.";
   }
 
   if (settingsReminderKm) {
     settingsReminderKm.textContent = session?.remindersEnabled === false
       ? "Los recordatorios automaticos estan pausados en tu configuracion."
-      : "Actualiza el kilometraje desde el Dashboard para mejorar la precision de los avisos.";
+      : "Mantene activas las notificaciones de este dispositivo para recibir avisos reales.";
   }
 }
 
@@ -853,6 +872,9 @@ async function refreshCurrentContext({ silent = false } = {}) {
   if (!session?.id) return;
 
   topbarTitleAction?.classList.add("is-refreshing");
+  if (!silent) {
+    showToast("Actualizando datos...", { tone: "info", duration: 1800 });
+  }
 
   try {
     if (getCurrentView() === "vehicles") {
@@ -1392,6 +1414,14 @@ function openCurrentVehiclePlaces() {
   openPlacesModal();
 }
 
+function openCurrentVehicleReminders() {
+  const selectedVehicle = getSelectedVehicle();
+  if (!selectedVehicle) return;
+
+  closeMenu();
+  openVehicleRemindersModal(selectedVehicle.id);
+}
+
 function openCurrentVehicleActivity() {
   closeMenu();
   updateVehicleContextTabs("activity");
@@ -1400,26 +1430,10 @@ function openCurrentVehicleActivity() {
 
 function openCurrentVehicleSettings() {
   const selectedVehicle = getSelectedVehicle();
-  if (!selectedVehicle || typeof openUiModal !== "function") return;
+  if (!selectedVehicle) return;
 
   closeMenu();
-  updateVehicleContextTabs("settings");
-  openUiModal({
-    title: "Configuracion del vehiculo",
-    bodyHtml: `
-      <div class="vehicle-detail-grid">
-        <div><strong>Vehiculo:</strong> ${escapeHtml(selectedVehicle.nombre || "Sin dato")}</div>
-        <div><strong>Modelo:</strong> ${escapeHtml(selectedVehicle.modelo || "Sin dato")}</div>
-        <div><strong>Tipo:</strong> ${escapeHtml(getVehicleTypeConfig(selectedVehicle.vehicle_type).label)}</div>
-        <div><strong>Color:</strong> ${escapeHtml(getVehicleColorConfig(selectedVehicle.vehicle_color).label)}</div>
-      </div>
-      <p>Desde aqui puedes editar el vehiculo o eliminarlo con confirmacion.</p>
-      <div class="vehicle-settings-actions">
-        <button class="ghost" type="button" onclick="editVehicle(${Number(selectedVehicle.id)})">Editar vehiculo</button>
-        <button class="ghost maintenance-delete-button" type="button" onclick="deleteVehicle(${Number(selectedVehicle.id)})">Eliminar vehiculo</button>
-      </div>
-    `,
-  });
+  openVehicleConfigurationModal(selectedVehicle.id);
 }
 
 function updateSessionUI() {
@@ -1948,11 +1962,131 @@ function isValidPhone(value) {
 }
 
 function getSelectedVehicle() {
-  return currentVehicles.find((item) => item.id === selectedVehicleId) || null;
+  return currentVehicles.find((item) => Number(item.id) === Number(selectedVehicleId)) || null;
 }
 
 function formatKmValue(value) {
   return formatDistance(value);
+}
+
+function normalizeReminderNumber(value, fallback) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function formatReminderDate(value) {
+  if (!value) return "sin fecha aun";
+  const date = new Date(`${String(value).slice(0, 10)}T00:00:00`);
+  return date.toLocaleDateString("es-AR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
+
+function buildVehicleReminderSummary(reminder, vehicle) {
+  if (!reminder) {
+    return {
+      dateText: "Proximo mantenimiento estimado: sin fecha aun.",
+      kmText: "Faltan aproximadamente km por calcular.",
+      noteText: "Completa los intervalos del vehiculo para empezar a calcular avisos.",
+    };
+  }
+
+  const nextDateText = reminder.nextDate
+    ? `Proximo mantenimiento estimado: ${formatReminderDate(reminder.nextDate)}.`
+    : "Proximo mantenimiento estimado: sin fecha aun.";
+
+  let kmText = "Faltan aproximadamente km por calcular.";
+  if (reminder.kmRemaining !== null && reminder.kmRemaining !== undefined) {
+    kmText = `Faltan aproximadamente ${Number(reminder.kmRemaining).toLocaleString("es-AR")} km.`;
+  } else if (reminder.nextKm !== null && reminder.nextKm !== undefined) {
+    kmText = `Proximo mantenimiento estimado cerca de ${Number(reminder.nextKm).toLocaleString("es-AR")} km.`;
+  }
+
+  let noteText = reminder.message || "Completa los datos base del vehiculo para mejorar los avisos.";
+
+  if (vehicle?.intervalo_km && (vehicle?.km_actual === null || vehicle?.km_actual === undefined)) {
+    noteText = "Para calcular recordatorios por km, actualiza el kilometraje actual.";
+  } else if (vehicle?.intervalo_tiempo && !vehicle?.fecha_ultimo_service) {
+    noteText = "Para calcular recordatorios por tiempo, carga la fecha del ultimo service.";
+  }
+
+  return {
+    dateText: nextDateText,
+    kmText,
+    noteText,
+  };
+}
+
+function fillVehicleRemindersForm(vehicle) {
+  if (!vehicleRemindersForm || !vehicle) return;
+
+  vehicleRemindersForm.elements.vehicle_reminders_enabled.checked = vehicle.vehicle_reminders_enabled !== false;
+  vehicleRemindersForm.elements.intervalo_tiempo.value = vehicle.intervalo_tiempo ?? "";
+  vehicleRemindersForm.elements.notify_days_before.value = normalizeReminderNumber(
+    vehicle.notify_days_before,
+    DEFAULT_NOTIFY_DAYS_BEFORE
+  );
+  vehicleRemindersForm.elements.intervalo_km.value = vehicle.intervalo_km ?? "";
+  vehicleRemindersForm.elements.notify_km_before.value = normalizeReminderNumber(
+    vehicle.notify_km_before,
+    DEFAULT_NOTIFY_KM_BEFORE
+  );
+  vehicleRemindersForm.elements.km_update_reminder_days.value = normalizeReminderNumber(
+    vehicle.km_update_reminder_days,
+    DEFAULT_KM_UPDATE_REMINDER_DAYS
+  );
+}
+
+function renderVehicleRemindersSummary(reminder, vehicle) {
+  const summary = buildVehicleReminderSummary(reminder, vehicle);
+  if (vehicleRemindersSummaryDate) vehicleRemindersSummaryDate.textContent = summary.dateText;
+  if (vehicleRemindersSummaryKm) vehicleRemindersSummaryKm.textContent = summary.kmText;
+  if (vehicleRemindersSummaryNote) vehicleRemindersSummaryNote.textContent = summary.noteText;
+}
+
+async function loadVehicleReminderSummary(vehicleId) {
+  const session = getSession();
+  if (!session?.id || !vehicleId) {
+    return null;
+  }
+
+  const data = await fetchJson(`/dashboard/overview?user_id=${session.id}&vehiculo_id=${vehicleId}`);
+  return data.selectedReminder || null;
+}
+
+async function openVehicleRemindersModal(id = selectedVehicleId) {
+  const vehicle = currentVehicles.find((item) => Number(item.id) === Number(id));
+  if (!vehicle || !vehicleRemindersForm) {
+    return;
+  }
+
+  if (typeof closeUiModal === "function") {
+    const uiModalElement = document.getElementById("ui-modal");
+    if (uiModalElement && !uiModalElement.classList.contains("hidden")) {
+      closeUiModal(false);
+    }
+  }
+
+  editingVehicleReminderId = Number(vehicle.id);
+  fillVehicleRemindersForm(vehicle);
+  if (vehicleRemindersTitle) vehicleRemindersTitle.textContent = `Recordatorios de ${vehicle.nombre || "vehiculo"}`;
+  if (vehicleRemindersSubtitle) {
+    vehicleRemindersSubtitle.textContent = `${vehicle.modelo || "Tu vehiculo"}${vehicle.patente ? ` · ${vehicle.patente}` : ""}`;
+  }
+  if (vehicleRemindersMessage) vehicleRemindersMessage.textContent = "";
+  renderVehicleRemindersSummary(null, vehicle);
+  openModal("vehicle-reminders-modal");
+
+  try {
+    const reminder = await loadVehicleReminderSummary(vehicle.id);
+    renderVehicleRemindersSummary(reminder, vehicle);
+  } catch (error) {
+    if (vehicleRemindersSummaryNote) {
+      vehicleRemindersSummaryNote.textContent = error.message;
+    }
+  }
 }
 
 function renderCurrentVehicleKm() {
@@ -2710,7 +2844,7 @@ async function loadVehiclesList() {
   `).join("");
 }
 
-function editVehicle(id) {
+function openVehicleEditor(id) {
   const vehicle = currentVehicles.find(v => v.id === id);
   if (!vehicle) return;
 
@@ -2733,6 +2867,43 @@ function editVehicle(id) {
   }
   setVehicleWizardStep(1);
   openModal("vehicles-modal");
+}
+
+function openVehicleConfigurationModal(id) {
+  const vehicle = currentVehicles.find((item) => Number(item.id) === Number(id));
+  if (!vehicle || typeof openUiModal !== "function") return;
+
+  const typeConfig = getVehicleTypeConfig(vehicle.vehicle_type);
+  const colorConfig = getVehicleColorConfig(vehicle.vehicle_color);
+  const showType = normalizeVehicleType(vehicle.vehicle_type) !== DEFAULT_VEHICLE_TYPE;
+  const showColor = normalizeVehicleColor(vehicle.vehicle_color) !== DEFAULT_VEHICLE_COLOR;
+  const identityMeta = [showType ? typeConfig.label : "", showColor ? colorConfig.label : ""].filter(Boolean).join(" · ");
+
+  openUiModal({
+    title: "Configuracion del vehiculo",
+    showConfirm: false,
+    bodyHtml: `
+      <div class="vehicle-settings-sheet" style="--vehicle-color:${colorConfig.hex}">
+        <div class="vehicle-settings-hero">
+          <div class="vehicle-settings-icon" aria-hidden="true">${buildIconMarkup(typeConfig.icon)}</div>
+          <div class="vehicle-settings-copy">
+            <h3>${escapeHtml(vehicle.nombre || "Vehiculo")}</h3>
+            ${identityMeta ? `<p>${escapeHtml(identityMeta)}</p>` : ""}
+            <span>${escapeHtml(vehicle.patente || "Sin patente")}</span>
+          </div>
+        </div>
+        <div class="vehicle-settings-actions">
+          <button class="ghost" type="button" onclick="openVehicleRemindersModal(${Number(vehicle.id)})">Recordatorios</button>
+          <button class="ghost" type="button" onclick="openVehicleEditor(${Number(vehicle.id)})">Editar vehiculo</button>
+          <button class="ghost maintenance-delete-button" type="button" onclick="deleteVehicle(${Number(vehicle.id)})">Eliminar vehiculo</button>
+        </div>
+      </div>
+    `,
+  });
+}
+
+function editVehicle(id) {
+  openVehicleConfigurationModal(id);
 }
 
 function viewVehicle(id) {
@@ -2917,6 +3088,26 @@ function normalizeNumericPayloadValue(rawValue, config) {
   return sanitizedValue === "" ? "" : Number(sanitizedValue);
 }
 
+function normalizeOptionalPositiveInteger(rawValue, label, fallback = null) {
+  const normalized = String(rawValue ?? "").trim();
+
+  if (!normalized) {
+    return fallback;
+  }
+
+  if (!/^\d+$/.test(normalized)) {
+    throw new Error(`${label} debe contener solo numeros enteros.`);
+  }
+
+  const parsed = Number(normalized);
+
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error(`${label} debe ser un entero positivo.`);
+  }
+
+  return parsed;
+}
+
 function validateSelectedMaintenanceImage(file) {
   if (!file) {
     return { ok: true, message: "", mimeType: "" };
@@ -3042,6 +3233,7 @@ menuActivityButton?.addEventListener("click", openActivityModal);
 menuCurrentDashboardButton?.addEventListener("click", openCurrentVehicleDashboard);
 menuCurrentMaintenanceButton?.addEventListener("click", openCurrentVehicleMaintenance);
 menuCurrentPlacesButton?.addEventListener("click", openCurrentVehiclePlaces);
+menuCurrentRemindersButton?.addEventListener("click", openCurrentVehicleReminders);
 menuCurrentActivityButton?.addEventListener("click", openCurrentVehicleActivity);
 menuCurrentEditButton?.addEventListener("click", () => {
   const vehicle = getSelectedVehicle();
@@ -3708,6 +3900,85 @@ preferencesForm?.addEventListener("submit", async (event) => {
     preferencesMessage.textContent = error.message;
   } finally {
     setButtonLoading(preferencesSaveButton, false, "Guardando...");
+  }
+});
+
+vehicleRemindersForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const session = getSession();
+
+  if (!session?.id || !editingVehicleReminderId) {
+    if (vehicleRemindersMessage) {
+      vehicleRemindersMessage.textContent = "No hay un vehiculo seleccionado para configurar.";
+    }
+    return;
+  }
+
+  if (vehicleRemindersMessage) {
+    vehicleRemindersMessage.textContent = "Guardando recordatorios...";
+  }
+  setButtonLoading(vehicleRemindersSaveButton, true, "Guardando...");
+
+  try {
+    const payload = {
+      user_id: session.id,
+      vehicle_reminders_enabled: vehicleRemindersForm.elements.vehicle_reminders_enabled.checked,
+      intervalo_tiempo: normalizeOptionalPositiveInteger(
+        vehicleRemindersForm.elements.intervalo_tiempo.value,
+        "Cada cuantos meses quieres hacer mantenimiento",
+        null
+      ),
+      notify_days_before: normalizeOptionalPositiveInteger(
+        vehicleRemindersForm.elements.notify_days_before.value,
+        "Cuantos dias antes quieres que te avise",
+        DEFAULT_NOTIFY_DAYS_BEFORE
+      ),
+      intervalo_km: normalizeOptionalPositiveInteger(
+        vehicleRemindersForm.elements.intervalo_km.value,
+        "Cada cuantos km corresponde mantenimiento",
+        null
+      ),
+      notify_km_before: normalizeOptionalPositiveInteger(
+        vehicleRemindersForm.elements.notify_km_before.value,
+        "Cuantos km antes quieres que te avise",
+        DEFAULT_NOTIFY_KM_BEFORE
+      ),
+      km_update_reminder_days: normalizeOptionalPositiveInteger(
+        vehicleRemindersForm.elements.km_update_reminder_days.value,
+        "Cada cuantos dias quieres que te recuerde actualizar km",
+        DEFAULT_KM_UPDATE_REMINDER_DAYS
+      ),
+    };
+
+    const updatedVehicle = await fetchJson(`/vehicles/${editingVehicleReminderId}/reminders`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    currentVehicles = currentVehicles.map((item) => (
+      Number(item.id) === Number(updatedVehicle.id) ? { ...item, ...updatedVehicle } : item
+    ));
+
+    syncSelectedVehicleContext();
+    await refreshAllData(true);
+
+    const reminder = await loadVehicleReminderSummary(updatedVehicle.id);
+    renderVehicleRemindersSummary(reminder, updatedVehicle);
+
+    if (vehicleRemindersMessage) {
+      vehicleRemindersMessage.textContent = "Recordatorios actualizados.";
+    }
+    setStatus("Recordatorios guardados");
+    showToast("Recordatorios del vehiculo actualizados", { tone: "success" });
+  } catch (error) {
+    if (vehicleRemindersMessage) {
+      vehicleRemindersMessage.textContent = error.message;
+    }
+  } finally {
+    setButtonLoading(vehicleRemindersSaveButton, false, "Guardando...");
   }
 });
 

@@ -186,6 +186,43 @@ function validateVehiclePayload(payload) {
   };
 }
 
+function validateVehicleReminderPayload(payload) {
+  const vehicleRemindersEnabled = normalizeBoolean(payload.vehicle_reminders_enabled, true);
+  const intervaloKm = parseOptionalInteger(payload.intervalo_km, "intervalo_km", { positiveOnly: true });
+  const intervaloTiempo = parseOptionalInteger(payload.intervalo_tiempo, "intervalo_tiempo", { positiveOnly: true });
+  const notifyDaysBefore = parseOptionalInteger(payload.notify_days_before, "notify_days_before", {
+    positiveOnly: true,
+  });
+  const notifyKmBefore = parseOptionalInteger(payload.notify_km_before, "notify_km_before", {
+    positiveOnly: true,
+  });
+  const kmUpdateReminderDays = parseOptionalInteger(
+    payload.km_update_reminder_days,
+    "km_update_reminder_days",
+    { positiveOnly: true }
+  );
+
+  const errors = [];
+
+  [intervaloKm, intervaloTiempo, notifyDaysBefore, notifyKmBefore, kmUpdateReminderDays].forEach((result) => {
+    if (result.error) {
+      errors.push(result.error);
+    }
+  });
+
+  return {
+    errors,
+    data: {
+      vehicle_reminders_enabled: vehicleRemindersEnabled,
+      intervalo_km: intervaloKm.value,
+      intervalo_tiempo: intervaloTiempo.value,
+      notify_days_before: notifyDaysBefore.value,
+      notify_km_before: notifyKmBefore.value,
+      km_update_reminder_days: kmUpdateReminderDays.value,
+    },
+  };
+}
+
 function validatePlacePayload(payload) {
   const nombre = normalizeText(payload.nombre);
   const ubicacion = normalizeText(payload.ubicacion);
@@ -283,6 +320,7 @@ module.exports = {
   validateMaintenancePayload,
   validatePasswordChangePayload,
   validatePlacePayload,
+  validateVehicleReminderPayload,
   validateUserPreferencesPayload,
   validateUserProfilePayload,
   validateVehiclePayload,

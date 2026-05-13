@@ -37,7 +37,15 @@ function statusModifier(status) {
   return `is-${String(status || "sin_configurar").replace(/[^a-z_]/g, "")}`;
 }
 
-function openUiModal({ title, bodyHtml, confirmLabel = "Aceptar", cancelLabel = "Cancelar", showCancel = false, destructive = false }) {
+function openUiModal({
+  title,
+  bodyHtml,
+  confirmLabel = "Aceptar",
+  cancelLabel = "Cancelar",
+  showCancel = false,
+  destructive = false,
+  showConfirm = true,
+}) {
   if (!uiModal) {
     return Promise.resolve(true);
   }
@@ -47,6 +55,7 @@ function openUiModal({ title, bodyHtml, confirmLabel = "Aceptar", cancelLabel = 
   uiModalConfirm.textContent = confirmLabel;
   uiModalCancel.textContent = cancelLabel;
   uiModalCancel.classList.toggle("hidden", !showCancel);
+  uiModalConfirm.classList.toggle("hidden", !showConfirm);
   uiModalConfirm.classList.toggle("secondary", destructive);
   uiModal.classList.remove("hidden");
 
@@ -117,6 +126,10 @@ function renderOverview(data) {
     overviewStatusLabel.textContent = "Pausados";
     overviewStatusCopy.textContent = "Los recordatorios estan desactivados en configuracion.";
     overviewNextService.textContent = "Recordatorios desactivados";
+  } else if (reminder?.status === "pausado") {
+    overviewStatusLabel.textContent = "Pausados";
+    overviewStatusCopy.textContent = "Los recordatorios de este vehiculo estan desactivados.";
+    overviewNextService.textContent = "Vehiculo en pausa";
   } else if (!reminder) {
     overviewStatusLabel.textContent = "Sin configuracion";
     overviewStatusCopy.textContent = "Todavia no hay datos suficientes para calcular el proximo mantenimiento.";

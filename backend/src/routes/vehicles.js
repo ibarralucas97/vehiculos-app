@@ -1,8 +1,30 @@
 const express = require("express");
 const router = express.Router();
 const pool = require("../db/connection");
-const { MAX_NUMERIC_FIELD_VALUE, validateVehiclePayload } = require("../utils/validation");
+const {
+  MAX_NUMERIC_FIELD_VALUE,
+  validateVehiclePayload,
+  validateVehicleReminderPayload,
+} = require("../utils/validation");
 const { logActivity } = require("../utils/activityLog");
+
+const VEHICLE_RETURNING_FIELDS = `
+  id,
+  nombre,
+  modelo,
+  patente,
+  vehicle_type,
+  vehicle_color,
+  km_actual,
+  ultimo_service_km,
+  intervalo_km,
+  fecha_ultimo_service,
+  intervalo_tiempo,
+  vehicle_reminders_enabled,
+  notify_days_before,
+  notify_km_before,
+  km_update_reminder_days
+`;
 
 async function recordActivity(details) {
   try {
@@ -36,7 +58,11 @@ router.get("/", async (req, res) => {
         ultimo_service_km,
         intervalo_km,
         fecha_ultimo_service,
-        intervalo_tiempo
+        intervalo_tiempo,
+        vehicle_reminders_enabled,
+        notify_days_before,
+        notify_km_before,
+        km_update_reminder_days
        FROM vehiculos
        WHERE user_id = $1
        ORDER BY id ASC`,
@@ -85,7 +111,7 @@ router.post("/", async (req, res) => {
         intervalo_tiempo
       )
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-      RETURNING *`,
+      RETURNING ${VEHICLE_RETURNING_FIELDS}`,
       [
         data.nombre,
         data.modelo,
@@ -145,7 +171,7 @@ router.put("/:id", async (req, res) => {
            fecha_ultimo_service = $9,
            intervalo_tiempo = $10
        WHERE id = $11 AND user_id = $12
-       RETURNING *`,
+       RETURNING ${VEHICLE_RETURNING_FIELDS}`,
       [
         data.nombre,
         data.modelo,
@@ -222,7 +248,7 @@ router.patch("/:id/km", async (req, res) => {
       `UPDATE vehiculos
        SET km_actual = $1
        WHERE id = $2 AND user_id = $3
-       RETURNING id, nombre, modelo, patente, vehicle_type, vehicle_color, km_actual, ultimo_service_km, intervalo_km, fecha_ultimo_service, intervalo_tiempo`,
+       RETURNING ${VEHICLE_RETURNING_FIELDS}`,
       [kmActual, id, userId]
     );
 
@@ -240,6 +266,74 @@ router.patch("/:id/km", async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Error al actualizar kilometraje" });
+  }
+});
+
+router.patch("/:id/reminders", async (req, res) => {
+  try {
+    const userId = Number(req.body.user_id);
+    const id = Number(req.params.id);
+    const { errors, data } = validateVehicleReminderPayload(req.body);
+
+    if (errors.length > 0) {
+      return res.status(400).json({ errors });
+    }
+
+    if (!userId) {
+      return res.status(400).json({ error: "user_id requerido" });
+    }
+
+    const notifyDaysBefore = data.notify_days_before ?? 30;
+    const notifyKmBefore = data.notify_km_before ?? 1000;
+    const kmUpdateReminderDays = data.km_update_reminder_days ?? 7;
+
+    const result = await pool.query(
+      `UPDATE vehiculos
+       SET vehicle_reminders_enabled = $1,
+           intervalo_tiempo = $2,
+           notify_days_before = $3,
+           intervalo_km = $4,
+           notify_km_before = $5,
+           km_update_reminder_days = $6
+       WHERE id = $7 AND user_id = $8
+       RETURNING ${VEHICLE_RETURNING_FIELDS}`,
+      [
+        data.vehicle_reminders_enabled,
+        data.intervalo_tiempo,
+        notifyDaysBefore,
+        data.intervalo_km,
+        notifyKmBefore,
+        kmUpdateReminderDays,
+        id,
+        userId,
+      ]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Vehiculo no encontrado" });
+    }
+
+    await recordActivity({
+      userId,
+      action: "vehicle.reminders.update",
+      entityType: "vehicle",
+      entityId: result.rows[0].id,
+      title: "Recordatorios actualizados",
+      description: `Actualizaste la configuracion de recordatorios de "${result.rows[0].nombre}".`,
+      metadata: {
+        vehicle_reminders_enabled: result.rows[0].vehicle_reminders_enabled,
+        intervalo_tiempo: result.rows[0].intervalo_tiempo,
+        notify_days_before: result.rows[0].notify_days_before,
+        intervalo_km: result.rows[0].intervalo_km,
+        notify_km_before: result.rows[0].notify_km_before,
+        km_update_reminder_days: result.rows[0].km_update_reminder_days,
+      },
+    });
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error al actualizar recordatorios del vehiculo" });
   }
 });
 
