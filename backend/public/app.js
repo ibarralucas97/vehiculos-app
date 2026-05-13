@@ -16,6 +16,10 @@ const DEFAULT_NOTIFY_DAYS_BEFORE = 30;
 const DEFAULT_NOTIFY_KM_BEFORE = 1000;
 const DEFAULT_KM_UPDATE_REMINDER_DAYS = 7;
 const ALLOWED_MAINTENANCE_IMAGE_TYPES = new Set(["image/png", "image/jpeg"]);
+const MAX_MAINTENANCE_IMAGE_FILE_BYTES = 5 * 1024 * 1024;
+const MAX_MAINTENANCE_IMAGE_DATA_URL_LENGTH = 7_000_000;
+const MAINTENANCE_IMAGE_MAX_DIMENSION = 1600;
+const MAINTENANCE_IMAGE_JPEG_QUALITY = 0.82;
 const NUMERIC_FIELD_CONFIG = {
   km: { allowDecimal: false, label: "Kilometros" },
   cost: { allowDecimal: false, label: "Costo" },
@@ -525,6 +529,7 @@ function renderVehicleVisualSelectors() {
         data-vehicle-color-option="${item.value}"
         aria-pressed="false"
         title="${item.label}"
+        style="--vehicle-color:${item.hex}"
       >
         <span class="vehicle-color-chip-swatch" style="--vehicle-color:${item.hex}"></span>
         <span class="vehicle-color-chip-check" aria-hidden="true"></span>
@@ -1962,7 +1967,7 @@ async function fetchJson(url, options = {}) {
     try {
       data = JSON.parse(rawBody);
     } catch (_error) {
-      data = { error: rawBody };
+      data = { error: response.status === 413 ? getMaintenanceImageSizeMessage() : "" };
     }
   }
 
@@ -1970,7 +1975,7 @@ async function fetchJson(url, options = {}) {
     console.error("[API ERROR]", method, requestUrl, response.status, data);
     const message = Array.isArray(data?.errors)
       ? data.errors.join(", ")
-      : data?.error || `Error ${response.status}` || "Ocurrio un error";
+      : data?.error || (response.status === 413 ? getMaintenanceImageSizeMessage() : `Error ${response.status}`) || "Ocurrio un error";
     throw new Error(message);
   }
 
@@ -2241,7 +2246,7 @@ async function openKmUpdateModal() {
   }
 
   const existingKm = vehicle.km_actual ?? "";
-  const confirmation = openUiModal({
+  openUiModal({
     title: "Actualizar kilometraje",
     bodyHtml: `
       <label class="form-stack">
@@ -2254,6 +2259,7 @@ async function openKmUpdateModal() {
     confirmLabel: "Guardar",
     cancelLabel: "Cancelar",
     showCancel: true,
+    onConfirm: async () => saveKmUpdateFromModal(vehicle),
   });
 
   setTimeout(() => {
@@ -2262,13 +2268,9 @@ async function openKmUpdateModal() {
     input?.focus();
     input?.select();
   }, 0);
+}
 
-  const confirmed = await confirmation;
-
-  if (!confirmed) {
-    return;
-  }
-
+async function saveKmUpdateFromModal(vehicle) {
   const input = document.getElementById("km-update-input");
   const feedback = document.getElementById("km-update-feedback");
   const rawValue = String(input?.value || "").trim();
@@ -2276,25 +2278,26 @@ async function openKmUpdateModal() {
 
   if (errorMessage) {
     if (feedback) feedback.textContent = errorMessage;
-    return;
+    return false;
   }
 
   const nextKm = Number(rawValue);
 
   if (!rawValue) {
     if (feedback) feedback.textContent = "Ingresa un kilometraje valido mayor o igual a 0.";
-    return;
+    return false;
   }
 
   if (vehicle.km_actual !== null && vehicle.km_actual !== undefined && nextKm < Number(vehicle.km_actual)) {
     if (feedback) feedback.textContent = "No puedes bajar el kilometraje actual.";
-    return;
+    return false;
   }
 
   const session = getSession();
 
   try {
     showAppLoading("Actualizando kilometraje...");
+    if (feedback) feedback.textContent = "";
     const updatedVehicle = await fetchJson(`/vehicles/${vehicle.id}/km`, {
       method: "PATCH",
       headers: {
@@ -2315,11 +2318,11 @@ async function openKmUpdateModal() {
     }
     setStatus("KM actualizado");
     showToast("Kilometraje actualizado correctamente", { tone: "success" });
+    return true;
   } catch (error) {
-    await openUiModal({
-      title: "No se pudo actualizar",
-      bodyHtml: `<p>${error.message}</p>`,
-    });
+    if (feedback) feedback.textContent = error.message || "No se pudo actualizar el kilometraje.";
+    showToast(error.message || "No se pudo actualizar el kilometraje", { tone: "error" });
+    return false;
   } finally {
     hideAppLoading();
   }
@@ -2496,10 +2499,38 @@ function getMaintenanceRecord(id) {
 
 function formatMaintenanceDate(value) {
   if (!value) return "Sin fecha";
-  return new Date(`${value}T00:00:00`).toLocaleDateString("es-AR", {
+
+  const rawValue = String(value).trim();
+  const dateOnlyMatch = rawValue.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const date = dateOnlyMatch
+    ? new Date(Number(dateOnlyMatch[1]), Number(dateOnlyMatch[2]) - 1, Number(dateOnlyMatch[3]))
+    : new Date(rawValue);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Sin fecha";
+  }
+
+  return date.toLocaleDateString("es-AR", {
     day: "2-digit",
-    month: "short",
+    month: "2-digit",
     year: "numeric",
+  });
+}
+
+function formatMaintenanceListKm(value) {
+  if (value === null || value === undefined || value === "") {
+    return "Sin dato";
+  }
+
+  const numericValue = Number(value);
+
+  if (!Number.isFinite(numericValue)) {
+    return "Sin dato";
+  }
+
+  return numericValue.toLocaleString("es-AR", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
   });
 }
 
@@ -2623,7 +2654,7 @@ async function refreshMaintenanceViewsAfterMutation() {
   }
 }
 
-function renderMaintenanceCards(items, container, options = {}) {
+function renderMaintenanceCards(items, container) {
   cacheMaintenanceItems(items);
   if (!container) return;
 
@@ -2631,43 +2662,30 @@ function renderMaintenanceCards(items, container, options = {}) {
     return;
   }
 
-  const detailOnly = options.detailOnly === true;
-
   container.innerHTML = items
     .map(
-      (item) => `
+      (item) => {
+        const placeMarkup = item.lugar ? `<span>Taller: ${item.lugar}</span>` : "";
+
+        return `
         <article class="card">
           <div class="card-top">
             <div>
               <h3>${item.accion}</h3>
-              <p>${item.vehiculo} ${item.modelo ? `- ${item.modelo}` : ""}</p>
             </div>
             <strong>${formatCurrency(item.cost)}</strong>
           </div>
-          ${
-            getMaintenanceImageSource(item)
-              ? `<img class="maintenance-thumb" src="${getMaintenanceImageSource(item)}" alt="Imagen de mantenimiento" />`
-              : ""
-          }
           <div class="card-meta">
-            <span>Fecha: ${item.fecha.slice(0, 10)}</span>
-            <span>Unidad: ${formatDistance(item.km)}</span>
-            <span>Taller: ${item.lugar}</span>
-            <span>Patente: ${item.patente}</span>
+            <span>Fecha: ${formatMaintenanceDate(item.fecha)}</span>
+            <span>Km: ${formatMaintenanceListKm(item.km)}</span>
+            ${placeMarkup}
           </div>
           <div class="maintenance-card-actions">
             <button class="ghost maintenance-card-button" type="button" onclick="openMaintenanceDetail(${Number(item.id)})">Ver detalle</button>
-            ${
-              detailOnly
-                ? ""
-                : `
-            <button class="ghost maintenance-card-button" type="button" onclick="editMaintenance(${Number(item.id)})">Editar</button>
-            <button class="ghost maintenance-card-button danger" type="button" onclick="deleteMaintenance(${Number(item.id)})">Eliminar</button>
-            `
-            }
           </div>
         </article>
-      `
+      `;
+      }
     )
     .join("");
 }
@@ -2687,7 +2705,7 @@ function renderLatestMaintenance(items) {
     return;
   }
 
-  renderMaintenanceCards(items, latestMaintenanceList, { detailOnly: true });
+  renderMaintenanceCards(items, latestMaintenanceList);
   if (latestStatusPill) {
     latestStatusPill.textContent = `${items.length} registros`;
   }
@@ -3283,6 +3301,14 @@ function validateSelectedMaintenanceImage(file) {
     };
   }
 
+  if (file.size > MAX_MAINTENANCE_IMAGE_FILE_BYTES) {
+    return {
+      ok: false,
+      message: getMaintenanceImageSizeMessage(),
+      mimeType: "",
+    };
+  }
+
   return { ok: true, message: "", mimeType: normalizedMimeType };
 }
 
@@ -3575,14 +3601,15 @@ maintenanceForm?.addEventListener("submit", async (event) => {
   try {
     payload.km = normalizeNumericPayloadValue(payload.km, NUMERIC_FIELD_CONFIG.km);
     payload.cost = normalizeNumericPayloadValue(payload.cost, NUMERIC_FIELD_CONFIG.cost);
-    const imageRef = await fileToDataUrl(selectedImage);
+    const preparedImage = await prepareMaintenanceImageData(selectedImage);
+    const imageRef = preparedImage.dataUrl;
     const session = getSession();
 
     const requestBody = JSON.stringify({
       ...payload,
       user_id: session.id,
       image_base64: imageRef || "",
-      image_mime_type: imageValidation.mimeType,
+      image_mime_type: preparedImage.mimeType,
     });
 
     const savedMaintenance = await fetchJson(isEditingMaintenance ? `/maintenance/${editingMaintenanceId}` : `/maintenance`, {
@@ -3917,6 +3944,55 @@ function fileToDataUrl(file) {
   });
 }
 
+function getMaintenanceImageSizeMessage() {
+  const maxMb = Math.floor(MAX_MAINTENANCE_IMAGE_FILE_BYTES / (1024 * 1024));
+  return `La imagen es demasiado grande. Proba con una imagen menor a ${maxMb} MB.`;
+}
+
+function loadImageElement(src) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("No se pudo procesar la imagen seleccionada."));
+    image.src = src;
+  });
+}
+
+async function prepareMaintenanceImageData(file) {
+  if (!file) {
+    return { dataUrl: "", mimeType: "" };
+  }
+
+  const originalDataUrl = await fileToDataUrl(file);
+  const image = await loadImageElement(originalDataUrl);
+  const width = image.naturalWidth || image.width;
+  const height = image.naturalHeight || image.height;
+  const largestSide = Math.max(width, height);
+
+  if (largestSide <= MAINTENANCE_IMAGE_MAX_DIMENSION && originalDataUrl.length <= MAX_MAINTENANCE_IMAGE_DATA_URL_LENGTH) {
+    return { dataUrl: originalDataUrl, mimeType: String(file.type || "").toLowerCase() };
+  }
+
+  const scale = largestSide > MAINTENANCE_IMAGE_MAX_DIMENSION ? MAINTENANCE_IMAGE_MAX_DIMENSION / largestSide : 1;
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(width * scale));
+  canvas.height = Math.max(1, Math.round(height * scale));
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    throw new Error("No se pudo procesar la imagen seleccionada.");
+  }
+
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  const compressedDataUrl = canvas.toDataURL("image/jpeg", MAINTENANCE_IMAGE_JPEG_QUALITY);
+
+  if (compressedDataUrl.length > MAX_MAINTENANCE_IMAGE_DATA_URL_LENGTH) {
+    throw new Error(getMaintenanceImageSizeMessage());
+  }
+
+  return { dataUrl: compressedDataUrl, mimeType: "image/jpeg" };
+}
+
 function clearMaintenanceImagePreview() {
   if (maintenanceImagePreviewImg) {
     maintenanceImagePreviewImg.src = "";
@@ -3936,7 +4012,8 @@ maintenanceImageInput?.addEventListener("change", async () => {
       return;
     }
 
-    const dataUrl = await fileToDataUrl(selectedImage);
+    const preparedImage = await prepareMaintenanceImageData(selectedImage);
+    const dataUrl = preparedImage.dataUrl;
     if (!dataUrl) {
       clearMaintenanceImagePreview();
       return;

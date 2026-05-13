@@ -5,7 +5,7 @@ const { validateMaintenancePayload } = require("../utils/validation");
 const { buildNotificationPayload, sendPushToUser } = require("../utils/pushNotifications");
 const { buildNotificationIntentUrl } = require("../utils/pushReminders");
 const { logActivity } = require("../utils/activityLog");
-const MAX_IMAGE_BASE64_LENGTH = 2_800_000;
+const MAX_IMAGE_BASE64_LENGTH = 7_000_000;
 const ALLOWED_IMAGE_MIME_TYPES = new Set(["image/png", "image/jpeg"]);
 
 function parseMaintenanceImagePayload(payload = {}) {
@@ -47,7 +47,7 @@ function parseMaintenanceImagePayload(payload = {}) {
 
   if (imageBase64.length > MAX_IMAGE_BASE64_LENGTH) {
     return {
-      error: "La imagen es demasiado grande para guardarla en la base de datos",
+      error: "La imagen es demasiado grande. Proba con una imagen menor a 5 MB.",
       data: null,
     };
   }

@@ -45,6 +45,7 @@ function openUiModal({
   showCancel = false,
   destructive = false,
   showConfirm = true,
+  onConfirm = null,
 }) {
   if (!uiModal) {
     return Promise.resolve(true);
@@ -57,6 +58,7 @@ function openUiModal({
   uiModalCancel.classList.toggle("hidden", !showCancel);
   uiModalConfirm.classList.toggle("hidden", !showConfirm);
   uiModalConfirm.classList.toggle("secondary", destructive);
+  uiModalConfirm._onConfirm = onConfirm;
   uiModal.classList.remove("hidden");
 
   return new Promise((resolve) => {
@@ -67,13 +69,29 @@ function openUiModal({
 function closeUiModal(result) {
   if (!uiModal) return;
   uiModal.classList.add("hidden");
+  if (uiModalConfirm) {
+    uiModalConfirm._onConfirm = null;
+    uiModalConfirm.disabled = false;
+  }
   if (modalResolver) {
     modalResolver(result);
     modalResolver = null;
   }
 }
 
-uiModalConfirm?.addEventListener("click", () => closeUiModal(true));
+uiModalConfirm?.addEventListener("click", async () => {
+  if (typeof uiModalConfirm._onConfirm === "function") {
+    uiModalConfirm.disabled = true;
+    try {
+      const shouldClose = await uiModalConfirm._onConfirm();
+      if (shouldClose === false) return;
+    } finally {
+      uiModalConfirm.disabled = false;
+    }
+  }
+
+  closeUiModal(true);
+});
 uiModalCancel?.addEventListener("click", () => closeUiModal(false));
 uiModalClose?.addEventListener("click", () => closeUiModal(false));
 uiModal?.addEventListener("click", (event) => {
