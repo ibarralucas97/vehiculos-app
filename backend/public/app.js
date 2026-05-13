@@ -250,6 +250,13 @@ const ICONS = {
       <path d="M14.7 4.2l1.2-1.2a2 2 0 0 1 2.8 0l2 2a2 2 0 0 1 0 2.8l-1.2 1.2" />
     </svg>
   `,
+  more: `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="5" r="1.7" />
+      <circle cx="12" cy="12" r="1.7" />
+      <circle cx="12" cy="19" r="1.7" />
+    </svg>
+  `,
   delete: `
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="M4 7h16" />
@@ -511,7 +518,7 @@ function renderVehicleVisualSelectors() {
         title="${item.label}"
       >
         <span class="vehicle-color-chip-swatch" style="--vehicle-color:${item.hex}"></span>
-        <span>${item.label}</span>
+        <span class="sr-only">${item.label}</span>
       </button>
     `).join("");
   }
@@ -593,9 +600,11 @@ function setVehicleWizardStep(nextStep) {
   }
   if (vehicleWizardNextButton) {
     vehicleWizardNextButton.classList.toggle("hidden", safeStep === VEHICLE_WIZARD_STEPS.length);
+    vehicleWizardNextButton.toggleAttribute("hidden", safeStep === VEHICLE_WIZARD_STEPS.length);
   }
   if (vehicleSaveButton) {
     vehicleSaveButton.classList.toggle("hidden", safeStep !== VEHICLE_WIZARD_STEPS.length);
+    vehicleSaveButton.toggleAttribute("hidden", safeStep !== VEHICLE_WIZARD_STEPS.length);
     if (!vehicleSaveButton.classList.contains("hidden")) {
       vehicleSaveButton.textContent = editingVehicleId ? "Guardar vehiculo" : "Crear vehiculo";
     }
@@ -2259,7 +2268,7 @@ function setLatestRecordsState(state, detail = "") {
       body: buildEmptyStateMarkup({
         icon: "maintenance",
         title: "Todavia no se consultaron registros",
-        body: "Abre este modulo o toca actualizar para traer los ultimos mantenimientos.",
+        body: "Abre este modulo para traer los ultimos mantenimientos del vehiculo actual.",
       }),
     },
     loading: {
@@ -2402,6 +2411,10 @@ function buildMaintenanceDetailMarkup(item) {
           : '<div class="empty">Sin imagen adjunta</div>'
       }
     </div>
+    <div class="maintenance-detail-actions-footer">
+      <button class="ghost maintenance-card-button" type="button" onclick="editMaintenance(${Number(item.id)})">Editar</button>
+      <button class="ghost maintenance-card-button danger" type="button" onclick="deleteMaintenance(${Number(item.id)})">Eliminar</button>
+    </div>
   `;
 }
 
@@ -2499,13 +2512,15 @@ async function refreshMaintenanceViewsAfterMutation() {
   }
 }
 
-function renderMaintenanceCards(items, container) {
+function renderMaintenanceCards(items, container, options = {}) {
   cacheMaintenanceItems(items);
   if (!container) return;
 
   if (items.length === 0) {
     return;
   }
+
+  const detailOnly = options.detailOnly === true;
 
   container.innerHTML = items
     .map(
@@ -2531,8 +2546,14 @@ function renderMaintenanceCards(items, container) {
           </div>
           <div class="maintenance-card-actions">
             <button class="ghost maintenance-card-button" type="button" onclick="openMaintenanceDetail(${Number(item.id)})">Ver detalle</button>
+            ${
+              detailOnly
+                ? ""
+                : `
             <button class="ghost maintenance-card-button" type="button" onclick="editMaintenance(${Number(item.id)})">Editar</button>
             <button class="ghost maintenance-card-button danger" type="button" onclick="deleteMaintenance(${Number(item.id)})">Eliminar</button>
+            `
+            }
           </div>
         </article>
       `
@@ -2555,7 +2576,7 @@ function renderLatestMaintenance(items) {
     return;
   }
 
-  renderMaintenanceCards(items, latestMaintenanceList);
+  renderMaintenanceCards(items, latestMaintenanceList, { detailOnly: true });
   if (latestStatusPill) {
     latestStatusPill.textContent = `${items.length} registros`;
   }
@@ -2654,6 +2675,63 @@ async function loadVehiclesScreen() {
   </article>
 `).join("");
 }
+
+buildVehicleIdentityMarkup = function patchedBuildVehicleIdentityMarkup(vehicle = {}) {
+  const typeConfig = getVehicleTypeConfig(vehicle.vehicle_type);
+  const colorConfig = getVehicleColorConfig(vehicle.vehicle_color);
+  const modelLabel = vehicle.modelo ? escapeHtml(vehicle.modelo) : "";
+  const plateLabel = vehicle.patente ? escapeHtml(vehicle.patente) : "Sin patente";
+  const showColor = normalizeVehicleColor(vehicle.vehicle_color) !== DEFAULT_VEHICLE_COLOR;
+
+  return `
+    <div class="vehicle-card-shell" style="--vehicle-color:${colorConfig.hex}">
+      <div class="vehicle-card-head">
+        <div class="vehicle-card-icon" aria-hidden="true">${buildIconMarkup(typeConfig.icon)}</div>
+        <div class="vehicle-card-copy">
+          <strong>${escapeHtml(vehicle.nombre || "Vehiculo")}</strong>
+          ${modelLabel ? `<span class="vehicle-card-model">${modelLabel}</span>` : ""}
+        </div>
+      </div>
+      <div class="vehicle-card-meta">
+        ${showColor ? `<span class="vehicle-card-color-dot" aria-label="Color ${colorConfig.label}" title="${colorConfig.label}"></span>` : ""}
+        <span class="vehicle-card-plate">${plateLabel}</span>
+      </div>
+    </div>
+  `;
+};
+
+loadVehiclesScreen = async function patchedLoadVehiclesScreen() {
+  const session = getSession();
+
+  const vehicles = (await fetchJson(`/vehicles?user_id=${session.id}`)).map(normalizeVehicleRecord);
+  currentVehicles = vehicles;
+
+  const container = document.getElementById("vehicles-grid");
+
+  if (vehicles.length === 0) {
+    container.innerHTML = buildEmptyStateMarkup({
+      icon: "vehicle",
+      title: "Todavia no hay vehiculos",
+      body: "Crea tu primer vehiculo para empezar a registrar kilometraje y mantenimientos.",
+      actionLabel: "Crear vehiculo",
+      action: "openVehiclesModal()",
+    });
+    return;
+  }
+
+  container.innerHTML = vehicles.map((v) => `
+    <article class="vehicle-card card border-0 shadow-sm">
+      <div class="vehicle-card-layout">
+        <button class="vehicle-card-main" type="button" onclick="selectVehicle(${v.id})" aria-label="Abrir ${escapeHtml(v.nombre || "vehiculo")}">
+          ${buildVehicleIdentityMarkup(v)}
+        </button>
+        <button class="vehicle-card-quick-action" type="button" onclick="editVehicle(${v.id})" aria-label="Abrir opciones de ${escapeHtml(v.nombre || "vehiculo")}">
+          ${buildIconMarkup("more")}
+        </button>
+      </div>
+    </article>
+  `).join("");
+};
 
 function selectVehicle(id, origin = "selectVehicle") {
   logNavigation(origin, "dashboard", { vehicleId: id });
