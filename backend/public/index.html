@@ -387,9 +387,9 @@
           <div class="vehicle-wizard-actions">
             <button id="vehicle-wizard-back" class="ghost" type="button">Volver</button>
             <button id="vehicle-wizard-next" type="button">Siguiente</button>
-            <button id="vehicle-save-button" type="submit" class="hidden">Guardar vehiculo</button>
+            <button id="vehicle-save-button" type="submit" class="hidden" hidden>Guardar vehiculo</button>
           </div>
-          <div id="vehicle-form-danger-zone" class="vehicle-form-danger-zone hidden">
+          <div id="vehicle-form-danger-zone" class="vehicle-form-danger-zone hidden" hidden>
             <button id="vehicle-delete-button" class="ghost vehicle-delete-button" type="button">Eliminar vehiculo</button>
           </div>
           <p id="vehicle-form-message" class="message"></p>
@@ -722,7 +722,12 @@
       </div>
     </div>
 
-
+    <div id="refresh-feedback" class="refresh-feedback hidden" aria-live="polite" aria-atomic="true">
+      <div class="refresh-feedback-pill">
+        <span class="refresh-feedback-spinner" aria-hidden="true"></span>
+        <span id="refresh-feedback-text">Actualizando datos...</span>
+      </div>
+    </div>
     <div id="toast-stack" class="toast-stack" aria-live="polite" aria-atomic="false"></div>
 
     <div id="app-loading" class="hidden">

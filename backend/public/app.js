@@ -163,6 +163,8 @@ const notificationsToggleButton = document.getElementById("notifications-toggle-
 const notificationsTestButton = document.getElementById("notifications-test-button");
 const pwaInstallBanner = document.getElementById("pwa-install-banner");
 const pwaInstallDismiss = document.getElementById("pwa-install-dismiss");
+const refreshFeedback = document.getElementById("refresh-feedback");
+const refreshFeedbackText = document.getElementById("refresh-feedback-text");
 const toastStack = document.getElementById("toast-stack");
 
 const THEME_PREFERENCE_KEY = "mygarage_theme";
@@ -228,6 +230,7 @@ let touchGestureState = {
 };
 let touchScrollResetTimer = null;
 let isTouchScrolling = false;
+let refreshFeedbackTimer = null;
 const TOUCH_SCROLL_THRESHOLD = 8;
 
 const ICONS = {
@@ -761,6 +764,31 @@ function showToast(message, { tone = "info", duration = 2600 } = {}) {
   window.setTimeout(() => dismissToast(id), duration);
 }
 
+function showRefreshFeedback(message = "Actualizando datos...") {
+  if (!refreshFeedback || !refreshFeedbackText) return;
+  if (refreshFeedbackTimer) {
+    window.clearTimeout(refreshFeedbackTimer);
+    refreshFeedbackTimer = null;
+  }
+  refreshFeedbackText.textContent = message;
+  refreshFeedback.classList.remove("hidden", "is-success", "is-error");
+  refreshFeedback.classList.add("is-visible");
+}
+
+function hideRefreshFeedback({ tone = "", delay = 900 } = {}) {
+  if (!refreshFeedback) return;
+  refreshFeedback.classList.toggle("is-success", tone === "success");
+  refreshFeedback.classList.toggle("is-error", tone === "error");
+  if (refreshFeedbackTimer) {
+    window.clearTimeout(refreshFeedbackTimer);
+  }
+  refreshFeedbackTimer = window.setTimeout(() => {
+    refreshFeedback.classList.remove("is-visible", "is-success", "is-error");
+    refreshFeedback.classList.add("hidden");
+    refreshFeedbackTimer = null;
+  }, delay);
+}
+
 function isModalOpen(id) {
   const modal = document.getElementById(id);
   return Boolean(modal && !modal.classList.contains("hidden"));
@@ -894,6 +922,7 @@ async function refreshCurrentContext({ silent = false } = {}) {
 
   topbarTitleAction?.classList.add("is-refreshing");
   if (!silent) {
+    showRefreshFeedback("Actualizando datos...");
     showToast("Actualizando datos...", { tone: "info", duration: 1800 });
   }
 
@@ -943,10 +972,14 @@ async function refreshCurrentContext({ silent = false } = {}) {
     }
 
     if (!silent) {
+      showRefreshFeedback("Datos actualizados");
+      hideRefreshFeedback({ tone: "success", delay: 860 });
       showToast("Datos actualizados", { tone: "success" });
     }
   } catch (error) {
     console.error(error);
+    showRefreshFeedback("No se pudieron actualizar los datos");
+    hideRefreshFeedback({ tone: "error", delay: 1400 });
     showToast("No se pudieron actualizar los datos", { tone: "error", duration: 3400 });
   } finally {
     window.setTimeout(() => topbarTitleAction?.classList.remove("is-refreshing"), 320);
@@ -2747,9 +2780,6 @@ async function loadVehiclesScreen() {
     <button class="vehicle-card-main" type="button" onclick="selectVehicle(${v.id})" aria-label="Abrir ${escapeHtml(v.nombre || "vehiculo")}">
       ${buildVehicleIdentityMarkup(v)}
     </button>
-    <button class="vehicle-card-quick-action" type="button" onclick="editVehicle(${v.id})" aria-label="Editar ${escapeHtml(v.nombre || "vehiculo")}">
-      ${buildIconMarkup("edit")}
-    </button>
   </article>
 `).join("");
 }
@@ -2799,14 +2829,9 @@ loadVehiclesScreen = async function patchedLoadVehiclesScreen() {
 
   container.innerHTML = vehicles.map((v) => `
     <article class="vehicle-card card border-0 shadow-sm">
-      <div class="vehicle-card-layout">
-        <button class="vehicle-card-main" type="button" onclick="selectVehicle(${v.id})" aria-label="Abrir ${escapeHtml(v.nombre || "vehiculo")}">
-          ${buildVehicleIdentityMarkup(v)}
-        </button>
-        <button class="vehicle-card-quick-action" type="button" onclick="editVehicle(${v.id})" aria-label="Abrir opciones de ${escapeHtml(v.nombre || "vehiculo")}">
-          ${buildIconMarkup("more")}
-        </button>
-      </div>
+      <button class="vehicle-card-main" type="button" onclick="selectVehicle(${v.id})" aria-label="Abrir ${escapeHtml(v.nombre || "vehiculo")}">
+        ${buildVehicleIdentityMarkup(v)}
+      </button>
     </article>
   `).join("");
 };
