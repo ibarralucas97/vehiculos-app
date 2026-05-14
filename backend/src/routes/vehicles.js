@@ -338,6 +338,8 @@ router.patch("/:id/reminders", async (req, res) => {
 });
 
 router.delete("/:id", async (req, res) => {
+  const client = await pool.connect();
+
   try {
     const userId = Number(req.query.user_id);
     const id = Number(req.params.id);
@@ -346,29 +348,85 @@ router.delete("/:id", async (req, res) => {
       return res.status(400).json({ error: "user_id requerido" });
     }
 
-    const result = await pool.query(
-      "DELETE FROM vehiculos WHERE id = $1 AND user_id = $2 RETURNING id, nombre, patente",
+    if (!id) {
+      return res.status(400).json({ error: "vehicle_id invalido" });
+    }
+
+    await client.query("BEGIN");
+
+    const vehicleResult = await client.query(
+      "SELECT id, nombre, patente FROM vehiculos WHERE id = $1 AND user_id = $2 FOR UPDATE",
       [id, userId]
     );
 
-    if (result.rowCount === 0) {
+    if (vehicleResult.rowCount === 0) {
+      await client.query("ROLLBACK");
       return res.status(404).json({ error: "Vehiculo no encontrado" });
     }
+
+    const vehicle = vehicleResult.rows[0];
+
+    const maintenanceResult = await client.query(
+      "SELECT id FROM mantenimiento WHERE vehiculo_id = $1 AND user_id = $2",
+      [id, userId]
+    );
+    const maintenanceIds = maintenanceResult.rows.map((row) => row.id);
+
+    await client.query(
+      `DELETE FROM push_notification_events
+       WHERE user_id = $1
+         AND (
+           vehicle_id = $2
+           OR maintenance_id = ANY($3::int[])
+         )`,
+      [userId, id, maintenanceIds]
+    );
+
+    await client.query(
+      `DELETE FROM maintenance_images mi
+       USING mantenimiento m
+       WHERE mi.maintenance_id = m.id
+         AND m.vehiculo_id = $1
+         AND m.user_id = $2`,
+      [id, userId]
+    );
+
+    await client.query(
+      "DELETE FROM mantenimiento WHERE vehiculo_id = $1 AND user_id = $2",
+      [id, userId]
+    );
+
+    await client.query(
+      "DELETE FROM vehiculos WHERE id = $1 AND user_id = $2",
+      [id, userId]
+    );
+
+    await client.query("COMMIT");
 
     await recordActivity({
       userId,
       action: "vehicle.delete",
       entityType: "vehicle",
-      entityId: result.rows[0].id,
+      entityId: vehicle.id,
       title: "Vehiculo eliminado",
-      description: `Eliminaste el vehiculo "${result.rows[0].nombre}" (${formatPlateLabel(result.rows[0].patente)}).`,
-      metadata: { patente: result.rows[0].patente || null },
+      description: `Eliminaste el vehiculo "${vehicle.nombre}" (${formatPlateLabel(vehicle.patente)}).`,
+      metadata: {
+        patente: vehicle.patente || null,
+        maintenance_count: maintenanceIds.length,
+      },
     });
 
     res.json({ ok: true });
   } catch (error) {
+    try {
+      await client.query("ROLLBACK");
+    } catch (_rollbackError) {
+      // Ignore rollback failures and return the original error below.
+    }
     console.error(error);
     res.status(500).json({ error: "Error al eliminar vehiculo" });
+  } finally {
+    client.release();
   }
 });
 

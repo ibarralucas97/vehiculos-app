@@ -318,6 +318,13 @@ button {
   background: rgba(215, 76, 76, 0.08);
   color: #9c2f2f;
   border: 1px solid rgba(215, 76, 76, 0.16);
+  box-shadow: none;
+}
+
+.menu-panel .menu-danger-button:hover {
+  background: rgba(215, 76, 76, 0.13);
+  border-color: rgba(215, 76, 76, 0.28);
+  color: #842727;
 }
 
 .menu-section-logout {
@@ -467,6 +474,13 @@ button.secondary {
   background: #1f2a3d;
   color: #fff;
   box-shadow: 0 12px 24px rgba(31, 42, 61, 0.18);
+}
+
+#ui-modal-confirm.secondary {
+  background: #b33838;
+  color: #ffffff;
+  border: 1px solid rgba(179, 56, 56, 0.22);
+  box-shadow: 0 12px 24px rgba(179, 56, 56, 0.18);
 }
 
 button.ghost {
@@ -1495,25 +1509,6 @@ body.modal-open {
   font-size: 0.92rem;
 }
 
-.vehicle-form-danger-zone {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 8px;
-  padding-top: 4px;
-}
-
-.vehicle-delete-button {
-  border-color: rgba(155, 61, 61, 0.2);
-  color: #9b3d3d;
-  background: rgba(155, 61, 61, 0.08);
-}
-
-.vehicle-delete-button:hover,
-.vehicle-delete-button:active {
-  border-color: rgba(155, 61, 61, 0.34);
-  background: rgba(155, 61, 61, 0.14);
-}
-
 .helper-copy {
   margin: 0;
   font-size: 0.86rem;
@@ -1533,6 +1528,85 @@ body.modal-open {
 
 .modal-body-copy strong {
   color: var(--text);
+}
+
+.vehicle-delete-warning {
+  display: grid;
+  gap: 16px;
+}
+
+.vehicle-delete-warning p {
+  margin: 0;
+}
+
+.vehicle-delete-warning ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.vehicle-delete-section {
+  display: grid;
+  gap: 8px;
+}
+
+.vehicle-delete-alert {
+  padding: 14px;
+  border: 1px solid rgba(179, 56, 56, 0.18);
+  border-radius: 12px;
+  background: rgba(179, 56, 56, 0.06);
+}
+
+.vehicle-delete-summary {
+  padding: 14px;
+  border: 1px solid rgba(80, 109, 132, 0.14);
+  border-radius: 12px;
+  background: rgba(80, 109, 132, 0.06);
+}
+
+.vehicle-delete-summary span {
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.vehicle-delete-summary strong {
+  font-size: 1.05rem;
+}
+
+.vehicle-delete-backup {
+  padding: 14px;
+  border: 1px solid rgba(15, 168, 171, 0.22);
+  border-radius: 12px;
+  background: rgba(15, 168, 171, 0.08);
+}
+
+.vehicle-delete-export-button {
+  justify-self: stretch;
+  min-height: 48px;
+  padding: 12px 14px;
+  background: linear-gradient(90deg, #0f8f92, #197fb9);
+  color: #ffffff;
+  border: 1px solid rgba(15, 143, 146, 0.24);
+  border-radius: 12px;
+  box-shadow: 0 12px 24px rgba(15, 143, 146, 0.16);
+}
+
+.vehicle-delete-confirmation label {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.vehicle-delete-error {
+  margin: 0;
+  color: #9c2f2f;
+  font-weight: 700;
+}
+
+.vehicle-delete-status {
+  color: #286f54;
+  font-weight: 700;
 }
 
 .modal-actions {
@@ -1995,6 +2069,18 @@ body[data-theme="dark"] .menu-panel::before {
   background: #1b2531;
 }
 
+body[data-theme="dark"] .menu-panel .menu-danger-button {
+  background: rgba(248, 113, 113, 0.12);
+  color: #fecaca;
+  border-color: rgba(248, 113, 113, 0.28);
+}
+
+body[data-theme="dark"] .menu-panel .menu-danger-button:hover {
+  background: rgba(248, 113, 113, 0.18);
+  color: #ffffff;
+  border-color: rgba(248, 113, 113, 0.42);
+}
+
 
 body[data-theme="dark"] .hero-title,
 body[data-theme="dark"] .item-info span,
@@ -2020,6 +2106,36 @@ body[data-theme="dark"] .modal-close:hover {
   background: rgba(255, 255, 255, 0.08);
 }
 
+body[data-theme="dark"] .vehicle-delete-error {
+  color: #fecaca;
+}
+
+body[data-theme="dark"] .vehicle-delete-alert {
+  background: rgba(248, 113, 113, 0.11);
+  border-color: rgba(248, 113, 113, 0.24);
+}
+
+body[data-theme="dark"] .vehicle-delete-summary {
+  background: rgba(139, 184, 212, 0.08);
+  border-color: rgba(139, 184, 212, 0.18);
+}
+
+body[data-theme="dark"] .vehicle-delete-backup {
+  background: rgba(45, 212, 191, 0.1);
+  border-color: rgba(45, 212, 191, 0.24);
+}
+
+body[data-theme="dark"] .vehicle-delete-export-button {
+  background: linear-gradient(90deg, #0f766e, #2563eb);
+  color: #ffffff;
+  border-color: rgba(45, 212, 191, 0.28);
+  box-shadow: 0 12px 24px rgba(2, 8, 20, 0.28);
+}
+
+body[data-theme="dark"] .vehicle-delete-status {
+  color: #99f6e4;
+}
+
 body[data-theme="dark"] button.ghost,
 body[data-theme="dark"] .btn-secondary,
 body[data-theme="dark"] .btn-outline-secondary,
@@ -2041,6 +2157,13 @@ body[data-theme="dark"] #vehicle-wizard-next {
   color: #f1f8ff;
   border: 1px solid rgba(143, 217, 255, 0.28);
   box-shadow: 0 12px 24px rgba(2, 8, 20, 0.3);
+}
+
+body[data-theme="dark"] #ui-modal-confirm.secondary {
+  background: #b91c1c;
+  color: #ffffff;
+  border-color: rgba(248, 113, 113, 0.42);
+  box-shadow: 0 12px 24px rgba(127, 29, 29, 0.36);
 }
 
 body[data-theme="dark"] button.ghost:hover,

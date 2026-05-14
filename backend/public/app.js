@@ -97,8 +97,6 @@ const vehicleWizardNextButton = document.getElementById("vehicle-wizard-next");
 const vehicleFormSteps = Array.from(document.querySelectorAll(".vehicle-form-step"));
 const vehiclesModalTitle = document.getElementById("vehicles-modal-title");
 const vehiclesModalCopy = document.getElementById("vehicles-modal-copy");
-const vehicleFormDangerZone = document.getElementById("vehicle-form-danger-zone");
-const vehicleDeleteButton = document.getElementById("vehicle-delete-button");
 const vehiclesListModal = document.getElementById("vehicles-list-modal");
 const filtersSubmitButton = document.getElementById("filters-submit");
 const latestButton = document.getElementById("latest-button");
@@ -123,6 +121,7 @@ const menuCurrentPlacesButton = document.getElementById("menu-current-places");
 const menuCurrentRemindersButton = document.getElementById("menu-current-reminders");
 const menuCurrentActivityButton = document.getElementById("menu-current-activity");
 const menuCurrentEditButton = document.getElementById("menu-current-edit");
+const menuCurrentDeleteButton = document.getElementById("menu-current-delete");
 const menuCurrentSettingsButton = document.getElementById("menu-current-settings");
 const currentVehicleName = document.getElementById("current-vehicle-name");
 const currentVehicleKm = document.getElementById("current-vehicle-km");
@@ -623,11 +622,6 @@ function setVehicleWizardStep(nextStep) {
     if (!vehicleSaveButton.classList.contains("hidden")) {
       vehicleSaveButton.textContent = editingVehicleId ? "Guardar cambios" : "Crear vehiculo";
     }
-  }
-  if (vehicleFormDangerZone) {
-    const showDangerZone = Boolean(editingVehicleId) && safeStep === VEHICLE_WIZARD_STEPS.length;
-    vehicleFormDangerZone.classList.toggle("hidden", !showDangerZone);
-    vehicleFormDangerZone.toggleAttribute("hidden", !showDangerZone);
   }
 
   buildVehicleWizardStepper();
@@ -1384,10 +1378,6 @@ function resetVehicleFormState() {
   if (vehiclesModalCopy) {
     vehiclesModalCopy.textContent = "Completa los datos y guarda un nuevo vehiculo.";
   }
-  if (vehicleFormDangerZone) {
-    vehicleFormDangerZone.classList.add("hidden");
-    vehicleFormDangerZone.setAttribute("hidden", "");
-  }
   if (vehiclesListModal) {
     vehiclesListModal.classList.add("hidden");
     vehiclesListModal.setAttribute("aria-hidden", "true");
@@ -1412,11 +1402,6 @@ function setVehicleModalMode(mode, vehicle = null) {
   }
   if (vehicleSaveButton) {
     vehicleSaveButton.textContent = isEditMode ? "Guardar cambios" : "Crear vehiculo";
-  }
-  if (vehicleFormDangerZone) {
-    const showDangerZone = isEditMode && currentVehicleWizardStep === VEHICLE_WIZARD_STEPS.length;
-    vehicleFormDangerZone.classList.toggle("hidden", !showDangerZone);
-    vehicleFormDangerZone.toggleAttribute("hidden", !showDangerZone);
   }
   if (vehiclesListModal) {
     vehiclesListModal.classList.add("hidden");
@@ -3037,7 +3022,7 @@ async function loadVehiclesList() {
       <div class="item-actions">
         ${buildItemActionButton({ action: `viewVehicle(${v.id})`, icon: "view", label: "Ver vehiculo" })}
         ${buildItemActionButton({ action: `openVehicleEditModal(${v.id})`, icon: "edit", label: "Editar vehiculo" })}
-        ${buildItemActionButton({ action: `deleteVehicle(${v.id})`, icon: "delete", label: "Eliminar vehiculo", variant: "danger" })}
+        ${buildItemActionButton({ action: `openVehicleDeleteModal(${v.id})`, icon: "delete", label: "Eliminar vehiculo", variant: "danger" })}
       </div>
 
     </div>
@@ -3427,6 +3412,12 @@ menuCurrentEditButton?.addEventListener("click", () => {
     openVehicleEditModal(vehicle.id);
   }
 });
+menuCurrentDeleteButton?.addEventListener("click", () => {
+  const vehicle = getSelectedVehicle();
+  if (vehicle) {
+    openVehicleDeleteModal(vehicle.id);
+  }
+});
 menuCurrentSettingsButton?.addEventListener("click", openCurrentVehicleSettings);
 vehicleNavDashboardButton?.addEventListener("click", openCurrentVehicleDashboard);
 vehicleNavMaintenanceButton?.addEventListener("click", openCurrentVehicleMaintenance);
@@ -3452,15 +3443,6 @@ vehicleWizardBackButton?.addEventListener("click", () => {
 
 vehicleWizardNextButton?.addEventListener("click", () => {
   goToVehicleWizardStep(currentVehicleWizardStep + 1);
-});
-
-vehicleDeleteButton?.addEventListener("click", async () => {
-  if (!editingVehicleId) return;
-  try {
-    await deleteVehicle(editingVehicleId);
-  } catch (_error) {
-    // Error modal already shown above.
-  }
 });
 
 vehicleForm?.addEventListener("submit", async (e) => {
@@ -3728,42 +3710,206 @@ async function deleteMaintenance(id) {
   }
 }
 
-async function deleteVehicle(id) {
+function setVehicleDeleteModalError(message) {
+  const errorNode = document.getElementById("vehicle-delete-modal-error");
+  if (errorNode) {
+    errorNode.textContent = message || "";
+  }
+}
+
+function setVehicleDeleteModalStatus(message) {
+  const statusNode = document.getElementById("vehicle-delete-modal-status");
+  if (statusNode) {
+    statusNode.textContent = message || "";
+  }
+}
+
+function syncVehicleDeleteConfirmation() {
+  const input = document.getElementById("vehicle-delete-confirm-input");
+  const confirmButton = document.getElementById("ui-modal-confirm");
+  if (!input || !confirmButton) return;
+
+  confirmButton.disabled = input.value.trim() !== "ELIMINAR";
+}
+
+function buildCsvValue(value) {
+  return `"${String(value ?? "").replace(/"/g, '""')}"`;
+}
+
+async function exportMaintenanceToCsv({ vehicleId = selectedVehicleId } = {}) {
   const session = getSession();
+  const effectiveVehicleId = Number(vehicleId);
+  const vehicle = currentVehicles.find((item) => Number(item.id) === effectiveVehicleId) || getSelectedVehicle();
 
-  const confirmed = typeof openUiModal === "function"
-    ? await openUiModal({
-        title: "Eliminar vehiculo",
-        bodyHtml: "<p>Esta accion no se puede deshacer.</p>",
-        confirmLabel: "Eliminar",
-        cancelLabel: "Cancelar",
-        showCancel: true,
-        destructive: true,
-      })
-    : true;
+  if (!session?.id || !vehicle || !effectiveVehicleId) {
+    return false;
+  }
 
-  if (!confirmed) return;
+  const items = await fetchJson(`/maintenance?user_id=${session.id}&vehiculo_id=${effectiveVehicleId}`);
+  const sortedItems = [...items].sort((a, b) => {
+    const dateDiff = new Date(a.fecha).getTime() - new Date(b.fecha).getTime();
+    if (dateDiff !== 0) return dateDiff;
+    return Number(a.id) - Number(b.id);
+  });
+  const headers = ["fecha", "accion_mantenimiento", "km", "costo", "lugar_taller", "observaciones", "patente", "vehiculo"];
+  const rows = sortedItems.map((item) => [
+    item.fecha ? String(item.fecha).slice(0, 10) : "",
+    item.accion || "",
+    item.km ?? "",
+    item.cost ?? "",
+    item.lugar || "",
+    item.observaciones || item.observacion || "",
+    item.patente || vehicle.patente || "",
+    `${item.vehiculo || vehicle.nombre || ""}${item.modelo || vehicle.modelo ? ` - ${item.modelo || vehicle.modelo}` : ""}`,
+  ]);
+  const csv = [headers, ...rows].map((row) => row.map(buildCsvValue).join(",")).join("\n");
+  const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" });
+  const link = document.createElement("a");
+
+  link.href = URL.createObjectURL(blob);
+  link.download = `${sanitizeFileName(vehicle.nombre)}-historial.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(link.href);
+  setStatus("CSV exportado");
+  return true;
+}
+
+async function exportVehicleMaintenanceBeforeDelete(id) {
+  const button = document.getElementById("vehicle-delete-export-button");
+  setVehicleDeleteModalError("");
+  setVehicleDeleteModalStatus("Preparando respaldo...");
+
+  const exported = await exportMaintenanceToPdf({
+    vehicleId: id,
+    triggerButton: button,
+    showModalErrors: false,
+  });
+
+  if (exported) {
+    setVehicleDeleteModalStatus("Respaldo PDF descargado. Podés cancelar o continuar con la eliminación.");
+    return;
+  }
 
   try {
-    showAppLoading("Eliminando vehiculo...");
-
-    await fetchJson(`/vehicles/${id}?user_id=${session.id}`, {
-      method: "DELETE",
-    });
-
-    if (editingVehicleId === Number(id)) {
-      resetVehicleFormState();
-      closeModal("vehicles-modal");
+    setButtonLoading(button, true, "Exportando CSV...");
+    const csvExported = await exportMaintenanceToCsv({ vehicleId: id });
+    if (csvExported) {
+      setVehicleDeleteModalStatus("No se pudo generar PDF, se descargó un respaldo CSV.");
+      return;
     }
-    await refreshAllData();
-    await loadVehiclesScreen();
-    showToast("Vehiculo eliminado correctamente", { tone: "success" });
-
-  } catch (err) {
-    console.error(err);
+    setVehicleDeleteModalError("No se pudo exportar el historial. Revisa tu conexion e intentalo de nuevo.");
+    setVehicleDeleteModalStatus("");
+  } catch (error) {
+    console.error(error);
+    setVehicleDeleteModalError(error.message || "No se pudo exportar el historial. Revisa tu conexion e intentalo de nuevo.");
+    setVehicleDeleteModalStatus("");
   } finally {
-    hideAppLoading();
+    setButtonLoading(button, false, "Exportando CSV...");
   }
+}
+
+async function deleteVehicle(id) {
+  const session = getSession();
+  const shouldLeaveDashboard = Number(selectedVehicleId) === Number(id);
+
+  if (!session?.id) {
+    throw new Error("No hay una sesion activa.");
+  }
+
+  showAppLoading("Eliminando vehiculo...");
+
+  await fetchJson(`/vehicles/${id}?user_id=${session.id}`, {
+    method: "DELETE",
+  });
+
+  if (editingVehicleId === Number(id)) {
+    resetVehicleFormState();
+    closeModal("vehicles-modal");
+  }
+
+  if (shouldLeaveDashboard) {
+    selectedVehicleId = null;
+    persistViewState();
+    resetMaintenanceFormState();
+    if (currentVehicleKm) currentVehicleKm.textContent = "Sin dato";
+    if (updateKmButton) updateKmButton.disabled = true;
+    setView("vehicles", "deleteVehicle");
+  }
+
+  await refreshAllData();
+  await loadVehiclesScreen();
+  showToast("Vehículo eliminado", { tone: "success" });
+}
+
+async function openVehicleDeleteModal(id) {
+  const vehicle = currentVehicles.find((item) => Number(item.id) === Number(id));
+  if (!vehicle) return;
+
+  closeMenu();
+
+  if (typeof openUiModal !== "function") {
+    setStatus("No se pudo abrir la confirmación de eliminación.");
+    showToast("No se pudo abrir la confirmación de eliminación", { tone: "error" });
+    return;
+  }
+
+  await openUiModal({
+    title: "Eliminar vehículo",
+    bodyHtml: `
+      <div class="vehicle-delete-warning">
+        <section class="vehicle-delete-section vehicle-delete-alert">
+          <p><strong>Vas a eliminar este vehículo y toda su información asociada:</strong></p>
+          <ul>
+            <li>Mantenimientos.</li>
+            <li>Imágenes.</li>
+            <li>Historial.</li>
+            <li>Recordatorios.</li>
+          </ul>
+          <p>Esta acción no se puede deshacer.</p>
+        </section>
+        <section class="vehicle-delete-section vehicle-delete-summary">
+          <span>Vehículo</span>
+          <strong>${escapeHtml(vehicle.nombre || "Vehículo")}</strong>
+          <p>${escapeHtml(vehicle.modelo || "Sin modelo")} · ${escapeHtml(vehicle.patente || "Sin patente")}</p>
+        </section>
+        <section class="vehicle-delete-section vehicle-delete-backup">
+          <button id="vehicle-delete-export-button" class="vehicle-delete-export-button" type="button" onclick="exportVehicleMaintenanceBeforeDelete(${Number(id)})">Descargar respaldo antes de eliminar</button>
+          <p>Podés exportar los mantenimientos antes de continuar. No es obligatorio, pero es recomendado.</p>
+          <p id="vehicle-delete-modal-status" class="vehicle-delete-status" role="status"></p>
+        </section>
+        <section class="vehicle-delete-section vehicle-delete-confirmation">
+          <label for="vehicle-delete-confirm-input">Para habilitar la eliminación, escribí <strong>ELIMINAR</strong></label>
+          <input id="vehicle-delete-confirm-input" type="text" autocomplete="off" inputmode="text" placeholder="ELIMINAR" oninput="syncVehicleDeleteConfirmation()" />
+        </section>
+        <p id="vehicle-delete-modal-error" class="vehicle-delete-error" role="alert"></p>
+      </div>
+    `,
+    confirmLabel: "Eliminar definitivamente",
+    cancelLabel: "Cancelar",
+    showCancel: true,
+    destructive: true,
+    confirmDisabled: true,
+    onConfirm: async () => {
+      setVehicleDeleteModalError("");
+      if (document.getElementById("vehicle-delete-confirm-input")?.value.trim() !== "ELIMINAR") {
+        setVehicleDeleteModalError("Escribí ELIMINAR para confirmar la eliminación.");
+        syncVehicleDeleteConfirmation();
+        return false;
+      }
+      try {
+        await deleteVehicle(id);
+        return true;
+      } catch (error) {
+        console.error(error);
+        setVehicleDeleteModalError(error.message || "No se pudo eliminar el vehículo. Intentalo de nuevo.");
+        return false;
+      } finally {
+        hideAppLoading();
+      }
+    },
+  });
 }
 
 function syncModalBodyState() {
@@ -4260,27 +4406,34 @@ function sanitizeFileName(value) {
     .replace(/^-+|-+$/g, "") || "historial-mantenimiento";
 }
 
-async function exportMaintenanceToPdf() {
+async function exportMaintenanceToPdf({
+  vehicleId = selectedVehicleId,
+  triggerButton = exportPdfButton,
+  showModalErrors = true,
+} = {}) {
   const session = getSession();
-  const vehicle = getSelectedVehicle();
+  const effectiveVehicleId = Number(vehicleId);
+  const vehicle = currentVehicles.find((item) => Number(item.id) === effectiveVehicleId) || getSelectedVehicle();
 
-  if (!session?.id || !vehicle || !selectedVehicleId) {
+  if (!session?.id || !vehicle || !effectiveVehicleId) {
     setStatus("Selecciona un vehiculo");
-    return;
+    return false;
   }
 
   if (!window.jspdf?.jsPDF) {
-    await openUiModal({
-      title: "PDF no disponible",
-      bodyHtml: "<p>No se pudo cargar la libreria de exportacion.</p>",
-    });
-    return;
+    if (showModalErrors) {
+      await openUiModal({
+        title: "PDF no disponible",
+        bodyHtml: "<p>No se pudo cargar la libreria de exportacion.</p>",
+      });
+    }
+    return false;
   }
 
-  setButtonLoading(exportPdfButton, true, "Exportando...");
+  setButtonLoading(triggerButton, true, "Exportando...");
 
   try {
-    const items = await fetchJson(`/maintenance?user_id=${session.id}&vehiculo_id=${selectedVehicleId}`);
+    const items = await fetchJson(`/maintenance?user_id=${session.id}&vehiculo_id=${effectiveVehicleId}`);
     const sortedItems = [...items].sort((a, b) => {
       const dateDiff = new Date(a.fecha).getTime() - new Date(b.fecha).getTime();
       if (dateDiff !== 0) return dateDiff;
@@ -4355,13 +4508,17 @@ async function exportMaintenanceToPdf() {
 
     doc.save(`${sanitizeFileName(vehicle.nombre)}-historial.pdf`);
     setStatus("PDF exportado");
+    return true;
   } catch (error) {
-    await openUiModal({
-      title: "No se pudo exportar",
-      bodyHtml: `<p>${error.message}</p>`,
-    });
+    if (showModalErrors) {
+      await openUiModal({
+        title: "No se pudo exportar",
+        bodyHtml: `<p>${error.message}</p>`,
+      });
+    }
+    return false;
   } finally {
-    setButtonLoading(exportPdfButton, false, "Exportando...");
+    setButtonLoading(triggerButton, false, "Exportando...");
   }
 }
 

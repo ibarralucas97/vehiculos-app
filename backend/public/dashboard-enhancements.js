@@ -45,6 +45,7 @@ function openUiModal({
   showCancel = false,
   destructive = false,
   showConfirm = true,
+  confirmDisabled = false,
   onConfirm = null,
 }) {
   if (!uiModal) {
@@ -58,6 +59,7 @@ function openUiModal({
   uiModalCancel.classList.toggle("hidden", !showCancel);
   uiModalConfirm.classList.toggle("hidden", !showConfirm);
   uiModalConfirm.classList.toggle("secondary", destructive);
+  uiModalConfirm.disabled = Boolean(confirmDisabled);
   uiModalConfirm._onConfirm = onConfirm;
   uiModal.classList.remove("hidden");
 
@@ -328,36 +330,14 @@ editVehicle = function patchedEditVehicle(id) {
   openVehiclesModal();
 };
 
-deleteVehicle = async function patchedDeleteVehicle(id) {
-  const session = getSession();
-  const vehicle = currentVehicles.find((item) => item.id === id);
-  const confirmed = await openUiModal({
-    title: "Eliminar vehiculo",
-    bodyHtml: `<p>Vas a eliminar <strong>${vehicle?.nombre || "este vehiculo"}</strong>. Esta accion no se puede deshacer.</p>`,
-    confirmLabel: "Eliminar",
-    cancelLabel: "Cancelar",
-    showCancel: true,
-    destructive: true,
-  });
-
-  if (!confirmed) return;
-
-  try {
-    showAppLoading("Eliminando vehiculo...");
-    await fetchJson(`/vehicles/${id}?user_id=${session.id}`, { method: "DELETE" });
-    if (selectedVehicleId === id) {
-      goBackToVehicles();
-    }
-    await refreshAllData();
-  } catch (error) {
+if (typeof openVehicleDeleteModal !== "function") {
+  window.openVehicleDeleteModal = async function patchedOpenVehicleDeleteModal() {
     await openUiModal({
-      title: "No se pudo eliminar",
-      bodyHtml: `<p>${error.message}</p>`,
+      title: "No se pudo abrir la confirmación",
+      bodyHtml: "<p>Actualizá la aplicación e intentá eliminar el vehículo nuevamente.</p>",
     });
-  } finally {
-    hideAppLoading();
-  }
-};
+  };
+}
 
 deletePlace = async function patchedDeletePlace(id) {
   const session = getSession();
