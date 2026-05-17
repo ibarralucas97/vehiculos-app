@@ -358,6 +358,7 @@ deletePlace = async function patchedDeletePlace(id) {
     await fetchJson(`/places/${id}?user_id=${session.id}`, { method: "DELETE" });
     await refreshAllData();
   } catch (error) {
+    hideAppLoading();
     await openUiModal({
       title: error.status === 409 ? "Lugar en uso" : "No se pudo eliminar",
       bodyHtml: buildPlaceDeleteErrorHtml(error),

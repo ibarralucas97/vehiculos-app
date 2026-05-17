@@ -4040,6 +4040,7 @@ async function deletePlace(id) {
 
   } catch (err) {
     console.error(err);
+    hideAppLoading();
     if (typeof openUiModal === "function") {
       await openUiModal({
         title: err.status === 409 ? "Lugar en uso" : "No se pudo eliminar",
