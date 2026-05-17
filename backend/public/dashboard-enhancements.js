@@ -344,7 +344,7 @@ deletePlace = async function patchedDeletePlace(id) {
   const place = currentPlaces.find((item) => item.id === id);
   const confirmed = await openUiModal({
     title: "Eliminar lugar",
-    bodyHtml: `<p>Vas a eliminar <strong>${place?.nombre || "este lugar"}</strong>. Esta accion no se puede deshacer.</p>`,
+    bodyHtml: `<p>Vas a eliminar <strong>${escapeHtml(place?.nombre || "este lugar")}</strong>. Esta accion no se puede deshacer.</p>`,
     confirmLabel: "Eliminar",
     cancelLabel: "Cancelar",
     showCancel: true,
@@ -359,8 +359,8 @@ deletePlace = async function patchedDeletePlace(id) {
     await refreshAllData();
   } catch (error) {
     await openUiModal({
-      title: "No se pudo eliminar",
-      bodyHtml: `<p>${error.message}</p>`,
+      title: error.status === 409 ? "Lugar en uso" : "No se pudo eliminar",
+      bodyHtml: buildPlaceDeleteErrorHtml(error),
     });
   } finally {
     hideAppLoading();

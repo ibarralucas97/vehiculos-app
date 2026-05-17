@@ -142,36 +142,94 @@ router.put("/:id", async (req, res) => {
 // DELETE /places/:id
 // =====================
 router.delete("/:id", async (req, res) => {
+  const client = await pool.connect();
+
   try {
     const userId = Number(req.query.user_id);
     const id = Number(req.params.id);
+
+    if (!id) {
+      return res.status(400).json({ error: "place_id invalido" });
+    }
 
     if (!userId) {
       return res.status(400).json({ error: "user_id requerido" });
     }
 
-    const result = await pool.query(
+    await client.query("BEGIN");
+
+    const placeResult = await client.query(
+      "SELECT id, nombre FROM lugares WHERE id = $1 AND user_id = $2 FOR UPDATE",
+      [id, userId]
+    );
+
+    if (placeResult.rowCount === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Lugar no encontrado" });
+    }
+
+    const usageResult = await client.query(
+      `SELECT
+         m.id AS maintenance_id,
+         v.nombre AS vehicle_name,
+         v.modelo AS vehicle_model
+       FROM mantenimiento m
+       JOIN vehiculos v ON v.id = m.vehiculo_id
+       WHERE m.lugar_id = $1
+         AND m.user_id = $2
+       ORDER BY v.nombre ASC, v.modelo ASC, m.fecha DESC, m.id DESC`,
+      [id, userId]
+    );
+
+    if (usageResult.rowCount > 0) {
+      await client.query("ROLLBACK");
+
+      const vehicles = [
+        ...new Set(
+          usageResult.rows.map((row) =>
+            [row.vehicle_name, row.vehicle_model].filter(Boolean).join(" · ") || "Vehiculo sin nombre"
+          )
+        ),
+      ];
+
+      return res.status(409).json({
+        error: "Lugar en uso",
+        message: "No se puede eliminar este lugar porque está asociado a mantenimientos existentes.",
+        vehicles,
+      });
+    }
+
+    const deleteResult = await client.query(
       "DELETE FROM lugares WHERE id = $1 AND user_id = $2 RETURNING id, nombre",
       [id, userId]
     );
 
-    if (result.rowCount === 0) {
-      return res.status(404).json({ error: "Lugar no encontrado" });
-    }
-
-    await recordActivity({
+    await logActivity(client, {
       userId,
       action: "place.delete",
       entityType: "place",
-      entityId: result.rows[0].id,
+      entityId: deleteResult.rows[0].id,
       title: "Lugar eliminado",
-      description: `Eliminaste el lugar "${result.rows[0].nombre}".`,
+      description: `Eliminaste el lugar "${deleteResult.rows[0].nombre}".`,
+    }).catch((error) => {
+      console.error("No se pudo registrar la actividad", error);
     });
 
+    await client.query("COMMIT");
     res.json({ ok: true });
   } catch (error) {
+    try {
+      await client.query("ROLLBACK");
+    } catch (_rollbackError) {
+      // Ignore rollback failures and surface the original error below.
+    }
     console.error(error);
-    res.status(500).json({ error: "Error al eliminar lugar" });
+    res.status(500).json({
+      error: "Error al eliminar lugar",
+      message: "No se pudo eliminar el lugar. Intentalo nuevamente.",
+    });
+  } finally {
+    client.release();
   }
 });
 

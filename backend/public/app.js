@@ -1960,11 +1960,28 @@ async function fetchJson(url, options = {}) {
     console.error("[API ERROR]", method, requestUrl, response.status, data);
     const message = Array.isArray(data?.errors)
       ? data.errors.join(", ")
-      : data?.error || (response.status === 413 ? getMaintenanceImageSizeMessage() : `Error ${response.status}`) || "Ocurrio un error";
-    throw new Error(message);
+      : data?.message || data?.error || (response.status === 413 ? getMaintenanceImageSizeMessage() : `Error ${response.status}`) || "Ocurrio un error";
+    const error = new Error(message);
+    error.status = response.status;
+    error.data = data;
+    throw error;
   }
 
   return data;
+}
+
+function buildPlaceDeleteErrorHtml(error) {
+  const data = error?.data || {};
+  const message =
+    data.message ||
+    error?.message ||
+    "No se pudo eliminar este lugar. Intentalo nuevamente.";
+  const vehicles = Array.isArray(data.vehicles) ? data.vehicles.filter(Boolean) : [];
+  const vehicleList = vehicles.length
+    ? `<ul>${vehicles.map((vehicle) => `<li>${escapeHtml(vehicle)}</li>`).join("")}</ul><p>Primero elimina o edita esos mantenimientos y luego intentalo nuevamente.</p>`
+    : "";
+
+  return `<p>${escapeHtml(message)}</p>${vehicleList}`;
 }
 
 function setStatus(text) {
@@ -4023,6 +4040,14 @@ async function deletePlace(id) {
 
   } catch (err) {
     console.error(err);
+    if (typeof openUiModal === "function") {
+      await openUiModal({
+        title: err.status === 409 ? "Lugar en uso" : "No se pudo eliminar",
+        bodyHtml: buildPlaceDeleteErrorHtml(err),
+      });
+    } else {
+      showToast(err.message || "No se pudo eliminar el lugar", { tone: "error", duration: 4200 });
+    }
   } finally {
     hideAppLoading();
   }
