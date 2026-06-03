@@ -231,6 +231,30 @@ label,
   gap: 16px;
 }
 
+.auth-switch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0 4px;
+}
+
+.auth-switch-button {
+  width: auto;
+  min-height: auto;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--primary);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 0.16em;
+  box-shadow: none;
+}
+
+.auth-switch-button:hover {
+  opacity: 0.84;
+}
+
 label {
   display: grid;
   gap: 8px;

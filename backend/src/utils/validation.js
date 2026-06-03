@@ -280,6 +280,49 @@ function validateUserProfilePayload(payload) {
   };
 }
 
+function validateRegisterPayload(payload) {
+  const nombre = normalizeText(payload.nombre);
+  const apellido = normalizeText(payload.apellido);
+  const email = normalizeText(payload.email).toLowerCase();
+  const telefono = normalizeText(payload.telefono);
+  const password = String(payload.password || "").trim();
+  const confirmPassword = String(payload.confirmPassword || "").trim();
+  const errors = [];
+
+  if (!nombre) errors.push("nombre es obligatorio");
+  if (!apellido) errors.push("apellido es obligatorio");
+  if (!email) {
+    errors.push("email es obligatorio");
+  } else if (!isValidEmail(email)) {
+    errors.push("email debe ser valido");
+  }
+  if (!telefono) {
+    errors.push("telefono es obligatorio");
+  } else if (!isValidPhone(telefono)) {
+    errors.push("telefono debe tener un formato valido");
+  }
+  if (!password) {
+    errors.push("password es obligatoria");
+  } else if (password.length < 6) {
+    errors.push("password debe tener al menos 6 caracteres");
+  }
+  if (confirmPassword !== password) {
+    errors.push("confirmPassword debe coincidir con password");
+  }
+
+  return {
+    errors,
+    data: {
+      nombre,
+      apellido,
+      email,
+      telefono,
+      password,
+      confirmPassword,
+    },
+  };
+}
+
 function validateUserPreferencesPayload(payload) {
   const mileageUnit = normalizeText(payload.mileage_unit || "km").toLowerCase();
   const remindersEnabled = normalizeBoolean(payload.reminders_enabled, true);
@@ -332,6 +375,7 @@ module.exports = {
   validateMaintenancePayload,
   validatePasswordChangePayload,
   validatePlacePayload,
+  validateRegisterPayload,
   validateVehicleReminderPayload,
   validateUserPreferencesPayload,
   validateUserProfilePayload,

@@ -96,13 +96,18 @@
         <aside class="login-card">
           <div class="login-card-head">
             <div>
-              <p class="login-kicker">Acceso</p>
-              <h2>Ingresa a tu cuenta</h2>
+              <p id="auth-kicker" class="login-kicker">Acceso</p>
+              <h2 id="auth-title">Ingresa a tu cuenta</h2>
             </div>
             <button id="logout-button" class="ghost hidden" type="button">Cerrar sesion</button>
           </div>
 
           <p id="session-copy" class="section-copy">Ingresa para seguir con tus vehiculos.</p>
+
+          <div class="auth-switch">
+            <button id="show-register-button" class="auth-switch-button" type="button">Crear cuenta</button>
+            <button id="show-login-button" class="auth-switch-button hidden" type="button">Volver al login</button>
+          </div>
 
           <form id="login-form" class="form-stack">
             <label>
@@ -136,6 +141,36 @@
             <button id="login-submit" type="submit">Ingresar</button>
           </form>
 
+          <form id="register-form" class="form-stack hidden">
+            <div class="split-fields">
+              <label>
+                Nombre
+                <input type="text" name="nombre" placeholder="Tu nombre" autocomplete="given-name" required />
+              </label>
+              <label>
+                Apellido
+                <input type="text" name="apellido" placeholder="Tu apellido" autocomplete="family-name" required />
+              </label>
+            </div>
+            <label>
+              Email
+              <input type="email" name="email" placeholder="tu@email.com" autocomplete="email" required />
+            </label>
+            <label>
+              Telefono
+              <input type="tel" name="telefono" placeholder="+54 9 351..." autocomplete="tel" required />
+            </label>
+            <label>
+              Contrasena
+              <input type="password" name="password" placeholder="Minimo 6 caracteres" autocomplete="new-password" required />
+            </label>
+            <label>
+              Confirmar contrasena
+              <input type="password" name="confirmPassword" placeholder="Repite tu contrasena" autocomplete="new-password" required />
+            </label>
+            <button id="register-submit" type="submit">Crear cuenta</button>
+          </form>
+
           <div id="session-box" class="session-box hidden">
             <span class="session-badge">Sesion activa</span>
             <strong id="session-email"></strong>
@@ -143,6 +178,7 @@
           </div>
 
           <p id="login-message" class="message"></p>
+          <p id="register-message" class="message hidden"></p>
         </aside>
       </section>
 

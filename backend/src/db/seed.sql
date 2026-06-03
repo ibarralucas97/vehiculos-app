@@ -1,11 +1,12 @@
-INSERT INTO users (full_name, nombre, apellido, email, telefono, password_hash)
+INSERT INTO users (full_name, nombre, apellido, email, telefono, password_hash, is_approved)
 VALUES (
   'Lucas Demo',
   'Lucas',
   'Demo',
   'lucas@mygarage.app',
   '+54 9 11 5555-5555',
-  '567c0760a4125a2252036835ed28bec8:1b0d50ae8c2c5efb327599a81b203a7c079c37b85ef00bf7f7591479147f29684cc185e3d9ca176f86c8d9d8efdb33fd2df3ac437000b711dc4c8587bef26b55'
+  '567c0760a4125a2252036835ed28bec8:1b0d50ae8c2c5efb327599a81b203a7c079c37b85ef00bf7f7591479147f29684cc185e3d9ca176f86c8d9d8efdb33fd2df3ac437000b711dc4c8587bef26b55',
+  TRUE
 )
 ON CONFLICT (email) DO NOTHING;
 

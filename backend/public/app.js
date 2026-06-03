@@ -62,14 +62,21 @@ const VEHICLE_WIZARD_STEPS = [
 
 const dashboard = document.getElementById("dashboard");
 const loginForm = document.getElementById("login-form");
+const registerForm = document.getElementById("register-form");
 const loginMessage = document.getElementById("login-message");
+const registerMessage = document.getElementById("register-message");
 const sessionBox = document.getElementById("session-box");
 const sessionEmail = document.getElementById("session-email");
 const sessionCopy = document.getElementById("session-copy");
 const logoutButton = document.getElementById("logout-button");
 const loginSubmitButton = document.getElementById("login-submit");
+const registerSubmitButton = document.getElementById("register-submit");
 const passwordInput = document.getElementById("login-password");
 const togglePasswordButton = document.getElementById("toggle-password");
+const authKicker = document.getElementById("auth-kicker");
+const authTitle = document.getElementById("auth-title");
+const showRegisterButton = document.getElementById("show-register-button");
+const showLoginButton = document.getElementById("show-login-button");
 
 const maintenanceList = document.getElementById("maintenance-list");
 const latestMaintenanceList = document.getElementById("latest-maintenance-list");
@@ -214,6 +221,7 @@ let notificationsServerStatus = null;
 let notificationStateLoading = false;
 let notificationsLastSyncAt = null;
 let toastId = 0;
+let authMode = "login";
 let backButtonTouchState = {
   active: false,
   moved: false,
@@ -1558,6 +1566,54 @@ function openCurrentVehicleSettings() {
   openVehicleEditModal(selectedVehicle.id);
 }
 
+function updateAuthModeUI(isLoggedIn = Boolean(normalizeSessionUser(getSession() || {}).email)) {
+  const isRegisterView = !isLoggedIn && authMode === "register";
+
+  loginForm?.classList.toggle("hidden", isLoggedIn || isRegisterView);
+  registerForm?.classList.toggle("hidden", isLoggedIn || !isRegisterView);
+  loginMessage?.classList.toggle("hidden", isLoggedIn || isRegisterView);
+  registerMessage?.classList.toggle("hidden", isLoggedIn || !isRegisterView);
+  showRegisterButton?.classList.toggle("hidden", isLoggedIn || isRegisterView);
+  showLoginButton?.classList.toggle("hidden", isLoggedIn || !isRegisterView);
+
+  if (authKicker) {
+    authKicker.textContent = isRegisterView ? "Registro" : "Acceso";
+  }
+
+  if (authTitle) {
+    authTitle.textContent = isRegisterView ? "Crea tu cuenta" : "Ingresa a tu cuenta";
+  }
+
+  if (!isLoggedIn && sessionCopy) {
+    sessionCopy.textContent = isRegisterView
+      ? "Completa tus datos para solicitar acceso. Te avisaremos cuando la cuenta quede aprobada."
+      : "Ingresa para seguir con tus vehiculos.";
+  }
+}
+
+function setAuthMode(mode, { preserveMessages = false } = {}) {
+  authMode = mode === "register" ? "register" : "login";
+
+  if (!preserveMessages) {
+    if (loginMessage) loginMessage.textContent = "";
+    if (registerMessage) registerMessage.textContent = "";
+  }
+
+  updateAuthModeUI();
+}
+
+function validateRegisterForm(payload) {
+  if (!payload.nombre) return "Completa tu nombre.";
+  if (!payload.apellido) return "Completa tu apellido.";
+  if (!payload.email) return "Completa tu email.";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email)) return "Ingresa un email valido.";
+  if (!payload.telefono) return "Completa tu telefono.";
+  if (!payload.password) return "Completa tu contrasena.";
+  if (payload.password.length < 6) return "La contrasena debe tener al menos 6 caracteres.";
+  if (payload.password !== payload.confirmPassword) return "Las contrasenas no coinciden.";
+  return "";
+}
+
 function updateSessionUI() {
   const session = normalizeSessionUser(getSession() || {});
   const isLoggedIn = Boolean(session?.email);
@@ -1565,9 +1621,9 @@ function updateSessionUI() {
   const hasCurrentVehicle = Boolean(selectedVehicleId) && (currentVehicles.length === 0 || Boolean(getSelectedVehicle()));
 
   topbar?.classList.toggle("hidden", !isLoggedIn);
-  loginForm.classList.toggle("hidden", isLoggedIn);
   sessionBox.classList.toggle("hidden", !isLoggedIn);
   logoutButton.classList.add("hidden");
+  updateAuthModeUI(isLoggedIn);
 
   if (isLoggedIn) {
     const fullName = buildFullName(session);
@@ -1579,6 +1635,9 @@ function updateSessionUI() {
 
     sessionCopy.textContent = "";
     loginMessage.textContent = "";
+    if (registerMessage) {
+      registerMessage.textContent = "";
+    }
 
     if (currentView === "dashboard") {
       if (!hasCurrentVehicle) {
@@ -1597,7 +1656,6 @@ function updateSessionUI() {
       topbarUserName.textContent = "";
       topbarUserName.title = "";
     }
-    sessionCopy.textContent = "Ingresa para continuar.";
     setView("login", "updateSessionUI", null, { reason: "noSession" });
   }
 
@@ -3343,6 +3401,7 @@ loginForm?.addEventListener("submit", async (event) => {
 
   if (!email || !password) {
     loginMessage.textContent = "Completa email y contrasena para ingresar.";
+    showToast("Completa email y contrasena para ingresar.", { tone: "warning" });
     return;
   }
 
@@ -3361,17 +3420,64 @@ loginForm?.addEventListener("submit", async (event) => {
     syncSession(response.user);
     loginMessage.textContent = "";
 
-await loadVehiclesList();
-await loadVehiclesScreen();
+    await loadVehiclesList();
+    await loadVehiclesScreen();
 
-setView("vehicles", "loginSuccess");
+    setView("vehicles", "loginSuccess");
+    showToast("Sesion iniciada correctamente.", { tone: "success" });
   } catch (error) {
     clearSession();
     updateSessionUI();
     loginMessage.textContent = error.message;
     setHistoryState("error", error.message);
+    showToast(error.message, { tone: "error", duration: 3600 });
   } finally {
     setButtonLoading(loginSubmitButton, false, "Ingresando...");
+  }
+});
+
+registerForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  const formData = new FormData(registerForm);
+  const payload = {
+    nombre: String(formData.get("nombre") || "").trim(),
+    apellido: String(formData.get("apellido") || "").trim(),
+    email: String(formData.get("email") || "").trim().toLowerCase(),
+    telefono: String(formData.get("telefono") || "").trim(),
+    password: String(formData.get("password") || "").trim(),
+    confirmPassword: String(formData.get("confirmPassword") || "").trim(),
+  };
+  const validationMessage = validateRegisterForm(payload);
+
+  if (validationMessage) {
+    registerMessage.textContent = validationMessage;
+    showToast(validationMessage, { tone: "warning" });
+    return;
+  }
+
+  setButtonLoading(registerSubmitButton, true, "Creando cuenta...");
+  registerMessage.textContent = "Creando cuenta...";
+
+  try {
+    const response = await fetchJson("/auth/register", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    registerForm.reset();
+    setAuthMode("login", { preserveMessages: true });
+    loginMessage.textContent = response.message || "Cuenta creada. Tu usuario queda pendiente de aprobacion.";
+    registerMessage.textContent = "";
+    showToast(loginMessage.textContent, { tone: "success", duration: 4200 });
+  } catch (error) {
+    registerMessage.textContent = error.message;
+    showToast(error.message, { tone: "error", duration: 3800 });
+  } finally {
+    setButtonLoading(registerSubmitButton, false, "Creando cuenta...");
   }
 });
 
@@ -3379,8 +3485,10 @@ function logout() {
   clearSession();
   selectedVehicleId = null;
   clearViewState();
+  setAuthMode("login", { preserveMessages: true });
   updateSessionUI();
   loginForm.reset();
+  registerForm?.reset();
   profileForm?.reset();
   preferencesForm?.reset();
   passwordForm?.reset();
@@ -3388,6 +3496,7 @@ function logout() {
   togglePasswordButton.setAttribute("aria-pressed", "false");
   togglePasswordButton.setAttribute("aria-label", "Mostrar contrasena");
   loginMessage.textContent = "Sesion cerrada.";
+  if (registerMessage) registerMessage.textContent = "";
   if (profileMessage) profileMessage.textContent = "";
   if (preferencesMessage) preferencesMessage.textContent = "";
   if (passwordMessage) passwordMessage.textContent = "";
@@ -3411,6 +3520,8 @@ function logout() {
 }
 
 
+showRegisterButton?.addEventListener("click", () => setAuthMode("register"));
+showLoginButton?.addEventListener("click", () => setAuthMode("login"));
 logoutButton?.addEventListener("click", logout);
 menuHomeButton?.addEventListener("click", () => goBackToVehicles("menuHome"));
 menuLogoutButton?.addEventListener("click", logout);
