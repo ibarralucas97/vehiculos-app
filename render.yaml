@@ -18,5 +18,7 @@ services:
         sync: false
       - key: PUSH_VAPID_PRIVATE_KEY
         sync: false
+      - key: CRON_SECRET
+        sync: false
       - key: NOTIFICATIONS_CRON_TOKEN
         sync: false

@@ -22,21 +22,33 @@ async function getUserNotificationPreferences(userId) {
 }
 
 function requireCronToken(req, res) {
-  const expectedToken = String(process.env.NOTIFICATIONS_CRON_TOKEN || "").trim();
+  const expectedTokens = [
+    process.env.CRON_SECRET,
+    process.env.NOTIFICATIONS_CRON_TOKEN,
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
 
-  if (!expectedToken) {
-    res.status(503).json({ error: "NOTIFICATIONS_CRON_TOKEN no configurado" });
+  if (expectedTokens.length === 0) {
+    res.status(503).json({ error: "CRON_SECRET / NOTIFICATIONS_CRON_TOKEN no configurado" });
     return false;
   }
 
+  const authorizationHeader = String(req.header("authorization") || "").trim();
+  const bearerToken = authorizationHeader.toLowerCase().startsWith("bearer ")
+    ? authorizationHeader.slice(7).trim()
+    : "";
+
   const providedToken = String(
-    req.header("x-notifications-cron-token") ||
+    req.header("x-cron-secret") ||
+      req.header("x-notifications-cron-token") ||
+      bearerToken ||
       req.body?.token ||
       req.query.token ||
       ""
   ).trim();
 
-  if (!providedToken || providedToken !== expectedToken) {
+  if (!providedToken || !expectedTokens.includes(providedToken)) {
     res.status(401).json({ error: "Token invalido" });
     return false;
   }

@@ -434,23 +434,32 @@
     </div>
 
     <div id="places-modal" class="modal hidden">
-      <div class="modal-content">
+      <div class="modal-content places-modal-content">
         <button class="modal-close" onclick="closeModal('places-modal')" type="button" aria-label="Cerrar"><span class="sr-only">Cerrar</span><svg viewBox="0 0 24 24" aria-hidden="true">
   <path d="M6 6L18 18M18 6L6 18" />
 </svg></button>
 
-        <h2>Lugares</h2>
+        <div class="places-modal-header">
+          <div>
+            <h2 id="places-modal-title">Lugares</h2>
+            <p id="places-modal-copy" class="section-copy">Revisa tus talleres y ubicaciones guardadas. Crea uno nuevo solo cuando lo necesites.</p>
+          </div>
+          <button id="place-create-button" class="secondary" type="button" onclick="openPlaceCreateForm()">+ Crear lugar</button>
+        </div>
 
-        <form id="place-form">
+        <form id="place-form" class="form-stack hidden">
           <input name="nombre" placeholder="Nombre" required />
           <input name="ubicacion" placeholder="Ubicacion" />
           <input name="contacto_nombre" placeholder="Contacto" />
           <input name="contacto_numero" placeholder="Telefono" />
-          <button id="place-save-button" type="submit">Crear</button>
+          <div class="places-form-actions">
+            <button id="place-cancel-button" class="ghost" type="button" onclick="showPlacesListView()">Cancelar</button>
+            <button id="place-save-button" type="submit">Crear</button>
+          </div>
           <p id="place-form-message" class="message"></p>
         </form>
 
-        <div id="places-list"></div>
+        <div id="places-list" class="places-list"></div>
       </div>
     </div>
 

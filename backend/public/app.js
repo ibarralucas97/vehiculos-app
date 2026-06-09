@@ -37,22 +37,53 @@ const VEHICLE_TYPE_OPTIONS = [
 ];
 
 const VEHICLE_COLOR_OPTIONS = [
-  { value: "rojo", label: "Rojo", hex: "#d85a56" },
-  { value: "azul", label: "Azul", hex: "#2f6fdd" },
-  { value: "verde", label: "Verde", hex: "#2f9f6b" },
+  { value: "rojo", label: "Rojo", hex: "#dc2626" },
+  { value: "azul", label: "Azul", hex: "#2563eb" },
+  { value: "verde", label: "Verde", hex: "#16a34a" },
   { value: "negro", label: "Negro", hex: "#1f2937" },
-  { value: "gris", label: "Gris", hex: "#7b8794" },
-  { value: "blanco", label: "Blanco", hex: "#f8fafc" },
-  { value: "amarillo", label: "Amarillo", hex: "#f2c94c" },
-  { value: "naranja", label: "Naranja", hex: "#f2994a" },
-  { value: "violeta", label: "Violeta", hex: "#8b5cf6" },
-  { value: "celeste", label: "Celeste", hex: "#56ccf2" },
+  { value: "gris", label: "Gris", hex: "#6b7280" },
+  { value: "blanco", label: "Blanco", hex: "#e5e7eb" },
+  { value: "amarillo", label: "Amarillo", hex: "#ca8a04" },
+  { value: "naranja", label: "Naranja", hex: "#ea7a2f" },
+  { value: "violeta", label: "Violeta", hex: "#6d5bd0" },
+  { value: "celeste", label: "Celeste", hex: "#5b8dff" },
 ];
+
+const VEHICLE_COLOR_ALIASES = {
+  red: "rojo",
+  rojo: "rojo",
+  blue: "azul",
+  azul: "azul",
+  green: "verde",
+  verde: "verde",
+  dark: "negro",
+  black: "negro",
+  oscuro: "negro",
+  negro: "negro",
+  gray: "gris",
+  grey: "gris",
+  gris: "gris",
+  white: "blanco",
+  blanco: "blanco",
+  yellow: "amarillo",
+  amarillo: "amarillo",
+  orange: "naranja",
+  naranja: "naranja",
+  violet: "violeta",
+  purple: "violeta",
+  violeta: "violeta",
+  sky: "celeste",
+  lightblue: "celeste",
+  celeste: "celeste",
+  neutro: "gris",
+  neutral: "gris",
+};
 
 const VEHICLE_TYPE_MAP = Object.fromEntries(VEHICLE_TYPE_OPTIONS.map((item) => [item.value, item]));
 const VEHICLE_COLOR_MAP = Object.fromEntries(VEHICLE_COLOR_OPTIONS.map((item) => [item.value, item]));
 const DEFAULT_VEHICLE_TYPE = "otro";
 const DEFAULT_VEHICLE_COLOR = "gris";
+const DEFAULT_VEHICLE_COLOR_CONFIG = VEHICLE_COLOR_MAP[DEFAULT_VEHICLE_COLOR];
 const VEHICLE_WIZARD_STEPS = [
   { step: 1, title: "Datos basicos", kicker: "Paso 1 de 4" },
   { step: 2, title: "Tipo de vehiculo", kicker: "Paso 2 de 4" },
@@ -87,6 +118,11 @@ const historyCopy = document.getElementById("history-copy");
 const maintenanceForm = document.getElementById("maintenance-form");
 const vehicleForm = document.getElementById("vehicle-form");
 const placeForm = document.getElementById("place-form");
+const placesList = document.getElementById("places-list");
+const placesModalTitle = document.getElementById("places-modal-title");
+const placesModalCopy = document.getElementById("places-modal-copy");
+const placeCreateButton = document.getElementById("place-create-button");
+const placeCancelButton = document.getElementById("place-cancel-button");
 const filtersForm = document.getElementById("filters-form");
 const formMessage = document.getElementById("form-message");
 const vehicleFormMessage = document.getElementById("vehicle-form-message");
@@ -178,8 +214,8 @@ const refreshFeedbackText = document.getElementById("refresh-feedback-text");
 const toastStack = document.getElementById("toast-stack");
 
 const THEME_PREFERENCE_KEY = "mygarage_theme";
-const LIGHT_THEME_COLOR = "#0f6c8d";
-const DARK_THEME_COLOR = "#121922";
+const LIGHT_THEME_COLOR = "#2D6FEA";
+const DARK_THEME_COLOR = "#020B24";
 const PWA_INSTALL_DISMISS_KEY = "mygarage_pwa_install_dismissed";
 const LOGIN_LOGO_LIGHT_SRC = "/login-logo.png";
 const LOGIN_LOGO_DARK_SRC = "/splash-logo-transparent.png";
@@ -222,6 +258,7 @@ let notificationStateLoading = false;
 let notificationsLastSyncAt = null;
 let toastId = 0;
 let authMode = "login";
+let placesViewMode = "list";
 let backButtonTouchState = {
   active: false,
   moved: false,
@@ -493,14 +530,32 @@ function normalizeVehicleType(value) {
 
 function normalizeVehicleColor(value) {
   const normalized = String(value || "").trim().toLowerCase();
-  return VEHICLE_COLOR_MAP[normalized] ? normalized : DEFAULT_VEHICLE_COLOR;
+  const aliased = VEHICLE_COLOR_ALIASES[normalized] || normalized;
+  return VEHICLE_COLOR_MAP[aliased] ? aliased : DEFAULT_VEHICLE_COLOR;
+}
+
+function resolveVehicleColor(value) {
+  const raw = String(value ?? "").trim().toLowerCase();
+  const normalized = normalizeVehicleColor(raw);
+  const config = VEHICLE_COLOR_MAP[normalized] || DEFAULT_VEHICLE_COLOR_CONFIG;
+
+  return {
+    raw,
+    normalized,
+    label: config?.label || DEFAULT_VEHICLE_COLOR_CONFIG.label,
+    hex: config?.hex || DEFAULT_VEHICLE_COLOR_CONFIG.hex,
+    isFallback: !raw || raw !== normalized,
+    isMissing: !raw,
+  };
 }
 
 function normalizeVehicleRecord(vehicle = {}) {
+  const colorState = resolveVehicleColor(vehicle.vehicle_color);
   return {
     ...vehicle,
     vehicle_type: normalizeVehicleType(vehicle.vehicle_type),
-    vehicle_color: normalizeVehicleColor(vehicle.vehicle_color),
+    vehicle_color: colorState.normalized,
+    vehicle_color_hex: colorState.hex,
   };
 }
 
@@ -509,7 +564,14 @@ function getVehicleTypeConfig(value) {
 }
 
 function getVehicleColorConfig(value) {
-  return VEHICLE_COLOR_MAP[normalizeVehicleColor(value)] || VEHICLE_COLOR_MAP[DEFAULT_VEHICLE_COLOR];
+  const colorState = resolveVehicleColor(value);
+  return {
+    value: colorState.normalized,
+    label: colorState.label,
+    hex: colorState.hex,
+    isFallback: colorState.isFallback,
+    isMissing: colorState.isMissing,
+  };
 }
 
 function renderVehicleVisualSelectors() {
@@ -661,7 +723,6 @@ function buildVehicleIdentityMarkup(vehicle = {}) {
   const modelLabel = vehicle.modelo ? escapeHtml(vehicle.modelo) : "";
   const plateLabel = vehicle.patente ? escapeHtml(vehicle.patente) : "Sin patente";
   const showType = normalizeVehicleType(vehicle.vehicle_type) !== DEFAULT_VEHICLE_TYPE;
-  const showColor = normalizeVehicleColor(vehicle.vehicle_color) !== DEFAULT_VEHICLE_COLOR;
   const subtitle = [modelLabel, showType ? typeConfig.label : ""].filter(Boolean).join(" · ");
 
   return `
@@ -675,7 +736,12 @@ function buildVehicleIdentityMarkup(vehicle = {}) {
         </div>
       </div>
       <div class="vehicle-card-meta">
-        ${showColor ? `<span class="vehicle-card-color-badge">${colorConfig.label}</span>` : ""}
+        <span
+          class="vehicle-card-color-dot"
+          aria-label="Color ${colorConfig.label}"
+          title="Color ${colorConfig.label}"
+          style="--vehicle-color:${colorConfig.hex}"
+        ></span>
         <span class="vehicle-card-plate">${plateLabel}</span>
       </div>
     </div>
@@ -685,17 +751,17 @@ function buildVehicleIdentityMarkup(vehicle = {}) {
 function buildVehicleListSummaryMarkup(vehicle = {}) {
   const typeConfig = getVehicleTypeConfig(vehicle.vehicle_type);
   const colorConfig = getVehicleColorConfig(vehicle.vehicle_color);
-  const showType = normalizeVehicleType(vehicle.vehicle_type) !== DEFAULT_VEHICLE_TYPE;
-  const showColor = normalizeVehicleColor(vehicle.vehicle_color) !== DEFAULT_VEHICLE_COLOR;
-  const summaryMeta = [showType ? typeConfig.label : "", escapeHtml(vehicle.patente || "Sin patente")].filter(Boolean).join(" · ");
   return `
-    <div class="vehicle-list-summary">
+    <div class="vehicle-list-summary" style="--vehicle-color:${colorConfig.hex}">
       <span class="vehicle-list-summary-icon" style="--vehicle-color:${colorConfig.hex}" aria-hidden="true">${buildIconMarkup(typeConfig.icon)}</span>
       <div class="vehicle-list-summary-copy">
         <strong>${escapeHtml(vehicle.nombre || "Vehiculo")}</strong>
         <span>${typeConfig.label} · ${escapeHtml(vehicle.patente || "Sin patente")}</span>
       </div>
-      <span class="vehicle-list-summary-color">${colorConfig.label}</span>
+      <span class="vehicle-list-summary-color">
+        <span class="vehicle-list-summary-color-dot" aria-hidden="true"></span>
+        ${colorConfig.label}
+      </span>
     </div>
   `;
 }
@@ -1457,11 +1523,47 @@ function resetPlaceFormState() {
   editingPlaceId = null;
   placeForm?.reset();
   if (placeSaveButton) {
-    placeSaveButton.textContent = "Crear";
+    placeSaveButton.textContent = "Crear lugar";
   }
   if (placeFormMessage) {
     placeFormMessage.textContent = "";
   }
+}
+
+function setPlacesViewMode(mode = "list", { editing = false } = {}) {
+  placesViewMode = mode === "form" ? "form" : "list";
+  const isFormView = placesViewMode === "form";
+
+  placeForm?.classList.toggle("hidden", !isFormView);
+  placesList?.classList.toggle("hidden", isFormView);
+  placeCreateButton?.classList.toggle("hidden", isFormView);
+  placeCancelButton?.classList.toggle("hidden", !isFormView);
+
+  if (placesModalTitle) {
+    placesModalTitle.textContent = isFormView
+      ? editing
+        ? "Editar lugar"
+        : "Crear lugar"
+      : "Lugares";
+  }
+
+  if (placesModalCopy) {
+    placesModalCopy.textContent = isFormView
+      ? editing
+        ? "Actualiza los datos del lugar seleccionado y luego vuelve al listado."
+        : "Completa el formulario para guardar un nuevo taller o ubicación."
+      : "Revisa tus talleres y ubicaciones guardadas. Crea uno nuevo solo cuando lo necesites.";
+  }
+}
+
+function openPlaceCreateForm() {
+  resetPlaceFormState();
+  setPlacesViewMode("form");
+}
+
+function showPlacesListView() {
+  resetPlaceFormState();
+  setPlacesViewMode("list");
 }
 
 function resetMaintenanceFormState() {
@@ -2805,10 +2907,10 @@ async function loadPlacesList() {
   if (places.length === 0) {
     container.innerHTML = buildEmptyStateMarkup({
       icon: "place",
-      title: "No hay lugares registrados",
-      body: "Agrega talleres o ubicaciones frecuentes para ahorrar tiempo al cargar mantenimientos.",
+      title: "Todavia no cargaste lugares.",
+      body: "Cuando agregues talleres o ubicaciones frecuentes, apareceran primero aqui para que elijas o edites sin friccion.",
       actionLabel: "Crear lugar",
-      action: "openPlacesModal()",
+      action: "openPlaceCreateForm()",
     });
     return;
   }
@@ -2867,7 +2969,6 @@ buildVehicleIdentityMarkup = function patchedBuildVehicleIdentityMarkup(vehicle 
   const colorConfig = getVehicleColorConfig(vehicle.vehicle_color);
   const modelLabel = vehicle.modelo ? escapeHtml(vehicle.modelo) : "";
   const plateLabel = vehicle.patente ? escapeHtml(vehicle.patente) : "Sin patente";
-  const showColor = normalizeVehicleColor(vehicle.vehicle_color) !== DEFAULT_VEHICLE_COLOR;
 
   return `
     <div class="vehicle-card-shell" style="--vehicle-color:${colorConfig.hex}">
@@ -2879,7 +2980,6 @@ buildVehicleIdentityMarkup = function patchedBuildVehicleIdentityMarkup(vehicle 
         </div>
       </div>
       <div class="vehicle-card-meta">
-        ${showColor ? `<span class="vehicle-card-color-dot" aria-label="Color ${colorConfig.label}" title="${colorConfig.label}"></span>` : ""}
         <span class="vehicle-card-plate">${plateLabel}</span>
       </div>
     </div>
@@ -2905,13 +3005,23 @@ loadVehiclesScreen = async function patchedLoadVehiclesScreen() {
     return;
   }
 
-  container.innerHTML = vehicles.map((v) => `
-    <article class="vehicle-card card border-0 shadow-sm">
-      <button class="vehicle-card-main" type="button" onclick="selectVehicle(${v.id})" aria-label="Abrir ${escapeHtml(v.nombre || "vehiculo")}">
+  container.innerHTML = vehicles.map((v) => {
+    const colorConfig = getVehicleColorConfig(v.vehicle_color);
+    const accessibleName = escapeHtml(v.nombre || "vehiculo");
+    return `
+    <article class="vehicle-card card border-0 shadow-sm" style="--vehicle-color:${colorConfig.hex}">
+      <button
+        class="vehicle-card-main"
+        type="button"
+        onclick="selectVehicle(${v.id})"
+        aria-label="Abrir ${accessibleName}. Color ${colorConfig.label}"
+        title="Color ${colorConfig.label}"
+      >
         ${buildVehicleIdentityMarkup(v)}
       </button>
     </article>
-  `).join("");
+  `;
+  }).join("");
 };
 
 function selectVehicle(id, origin = "selectVehicle") {
@@ -3115,8 +3225,7 @@ function openVehicleConfigurationModal(id) {
   const typeConfig = getVehicleTypeConfig(vehicle.vehicle_type);
   const colorConfig = getVehicleColorConfig(vehicle.vehicle_color);
   const showType = normalizeVehicleType(vehicle.vehicle_type) !== DEFAULT_VEHICLE_TYPE;
-  const showColor = normalizeVehicleColor(vehicle.vehicle_color) !== DEFAULT_VEHICLE_COLOR;
-  const identityMeta = [showType ? typeConfig.label : "", showColor ? colorConfig.label : ""].filter(Boolean).join(" · ");
+  const identityMeta = [showType ? typeConfig.label : "", colorConfig.label].filter(Boolean).join(" · ");
 
   openUiModal({
     title: "Configuracion del vehiculo",
@@ -3668,7 +3777,7 @@ placeForm?.addEventListener("submit", async (e) => {
 
     await refreshAllData();
     resetPlaceFormState();
-    closeModal("places-modal");
+    setPlacesViewMode("list");
     setStatus(isEditing ? "Lugar actualizado" : "Lugar creado");
     showToast(isEditing ? "Lugar actualizado correctamente" : "Lugar creado correctamente", { tone: "success" });
   } catch (err) {
@@ -4115,12 +4224,13 @@ function editPlace(id) {
   editingPlaceId = id;
 
   if (placeSaveButton) {
-    placeSaveButton.textContent = "Guardar";
+    placeSaveButton.textContent = "Guardar cambios";
   }
   if (placeFormMessage) {
     placeFormMessage.textContent = "Editando lugar seleccionado.";
   }
   openModal("places-modal");
+  setPlacesViewMode("form", { editing: true });
 }
 
 async function deletePlace(id) {
@@ -4214,6 +4324,19 @@ function openVehiclesModal() {
 function openPlacesModal() {
   resetPlaceFormState();
   openModal("places-modal");
+  setPlacesViewMode("list");
+  loadPlacesList().catch((error) => {
+    console.error(error);
+    if (placesList) {
+      placesList.innerHTML = buildEmptyStateMarkup({
+        icon: "place",
+        title: "No se pudieron cargar los lugares",
+        body: error.message,
+        actionLabel: "Crear lugar",
+        action: "openPlaceCreateForm()",
+      });
+    }
+  });
   closeMenu();
 }
 

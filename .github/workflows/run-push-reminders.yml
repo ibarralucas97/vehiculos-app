@@ -1,0 +1,67 @@
+name: Run Push Reminders
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+jobs:
+  run-push-reminders:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Trigger reminder sweep
+        env:
+          RENDER_APP_URL: ${{ secrets.RENDER_APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$RENDER_APP_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "Missing RENDER_APP_URL or CRON_SECRET secret"
+            exit 1
+          fi
+
+          endpoint="${RENDER_APP_URL%/}/notifications/run-reminders"
+          echo "Calling $endpoint"
+
+          response_file="$(mktemp)"
+          http_code="$(curl --silent --show-error \
+            --connect-timeout 20 \
+            --max-time 180 \
+            --retry 2 \
+            --retry-delay 10 \
+            --retry-connrefused \
+            -o "$response_file" \
+            -w "%{http_code}" \
+            -X POST \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            -H "x-cron-secret: $CRON_SECRET" \
+            "$endpoint")"
+
+          echo "HTTP $http_code"
+          cat "$response_file"
+
+          if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
+            echo "Reminder sweep failed"
+            exit 1
+          fi
+
+          python3 - "$response_file" <<'PY'
+          import json
+          import sys
+
+          with open(sys.argv[1], "r", encoding="utf-8") as fh:
+              payload = json.load(fh)
+
+          summary = payload.get("summary", {})
+          print(
+              "summary:",
+              {
+                  "users": summary.get("users"),
+                  "candidates": summary.get("candidates"),
+                  "sent": summary.get("sent"),
+                  "failed": summary.get("failed"),
+                  "cooldownSkipped": summary.get("cooldownSkipped"),
+                  "pruned": summary.get("pruned"),
+              },
+          )
+          PY
