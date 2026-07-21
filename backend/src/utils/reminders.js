@@ -26,6 +26,15 @@ function normalizePositiveInteger(value, fallback = null) {
   return parsed;
 }
 
+function parseTimestamp(value) {
+  if (!value) {
+    return null;
+  }
+
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 function buildTimeReminder({ lastServiceDate, intervalMonths, notifyDaysBefore }) {
   if (intervalMonths === null) {
     return {
@@ -149,18 +158,77 @@ function buildKmReminder({ currentKm, lastServiceKm, intervalKm, notifyKmBefore 
   };
 }
 
-function buildKmUpdateReminder({ intervalKm, currentKm, kmUpdateReminderDays }) {
-  const enabled = intervalKm !== null && kmUpdateReminderDays !== null;
-  const needsUpdate = enabled && currentKm === null;
+function buildKmUpdateReminder({
+  currentKm,
+  kmUpdatedAt,
+  kmUpdateReminderDays,
+  now = new Date(),
+}) {
+  const enabled = kmUpdateReminderDays !== null;
+
+  if (!enabled) {
+    return {
+      enabled,
+      needsUpdate: false,
+      intervalDays: kmUpdateReminderDays,
+      dueAt: null,
+      dueSnapshot: null,
+      reason: "disabled",
+    };
+  }
+
+  if (currentKm === null) {
+    return {
+      enabled,
+      needsUpdate: true,
+      intervalDays: kmUpdateReminderDays,
+      dueAt: null,
+      dueSnapshot: "missing-current-km",
+      reason: "missing_current_km",
+    };
+  }
+
+  const updatedAt = parseTimestamp(kmUpdatedAt);
+
+  if (!updatedAt) {
+    return {
+      enabled,
+      needsUpdate: true,
+      intervalDays: kmUpdateReminderDays,
+      dueAt: null,
+      dueSnapshot: "missing-km-updated-at",
+      reason: "missing_km_updated_at",
+    };
+  }
+
+  const intervalMs = kmUpdateReminderDays * MS_PER_DAY;
+  const elapsedMs = now.getTime() - updatedAt.getTime();
+
+  if (elapsedMs < intervalMs) {
+    return {
+      enabled,
+      needsUpdate: false,
+      intervalDays: kmUpdateReminderDays,
+      dueAt: new Date(updatedAt.getTime() + intervalMs),
+      dueSnapshot: null,
+      reason: "waiting",
+    };
+  }
+
+  const elapsedPeriods = Math.floor(elapsedMs / intervalMs);
+  const dueAt = new Date(updatedAt.getTime() + elapsedPeriods * intervalMs);
 
   return {
     enabled,
-    needsUpdate,
+    needsUpdate: true,
     intervalDays: kmUpdateReminderDays,
+    dueAt,
+    dueSnapshot: dueAt.toISOString(),
+    reason: "stale_km",
   };
 }
 
-function normalizeReminder(vehicle) {
+function normalizeReminder(vehicle, { now = new Date() } = {}) {
   const latestKm = vehicle.latest_km === null ? null : Number(vehicle.latest_km);
   const currentKm = vehicle.km_actual === null ? latestKm : Number(vehicle.km_actual);
   const lastServiceKm = vehicle.ultimo_service_km === null ? latestKm : Number(vehicle.ultimo_service_km);
@@ -178,7 +246,7 @@ function normalizeReminder(vehicle) {
   );
   const kmUpdateReminderDays = normalizePositiveInteger(
     vehicle.km_update_reminder_days,
-    DEFAULT_KM_UPDATE_REMINDER_DAYS
+    null
   );
 
   const timeReminder = buildTimeReminder({
@@ -195,9 +263,10 @@ function normalizeReminder(vehicle) {
   });
 
   const kmUpdateReminder = buildKmUpdateReminder({
-    intervalKm,
     currentKm,
+    kmUpdatedAt: vehicle.km_updated_at,
     kmUpdateReminderDays,
+    now,
   });
 
   const statusLabels = {
@@ -279,6 +348,7 @@ function normalizeReminder(vehicle) {
 }
 
 module.exports = {
+  buildKmUpdateReminder,
   DEFAULT_KM_UPDATE_REMINDER_DAYS,
   DEFAULT_NOTIFY_DAYS_BEFORE,
   DEFAULT_NOTIFY_KM_BEFORE,

@@ -26,6 +26,7 @@ router.get("/overview", async (req, res) => {
         v.modelo,
         v.patente,
         v.km_actual,
+        v.km_updated_at,
         v.ultimo_service_km,
         v.intervalo_km,
         v.fecha_ultimo_service,
@@ -49,7 +50,7 @@ router.get("/overview", async (req, res) => {
       [userId]
     );
 
-    const reminders = vehiclesResult.rows.map(normalizeReminder);
+    const reminders = vehiclesResult.rows.map((vehicle) => normalizeReminder(vehicle));
     const selectedReminder = vehicleId
       ? reminders.find((item) => item.vehicleId === vehicleId) || null
       : null;

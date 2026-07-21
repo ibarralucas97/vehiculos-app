@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS vehiculos (
   vehicle_type TEXT NOT NULL DEFAULT 'otro',
   vehicle_color TEXT NOT NULL DEFAULT 'neutro',
   km_actual INTEGER,
+  km_updated_at TIMESTAMPTZ,
   ultimo_service_km INTEGER,
   intervalo_km INTEGER,
   fecha_ultimo_service DATE,
@@ -46,6 +47,14 @@ ALTER TABLE vehiculos
 
 ALTER TABLE vehiculos
   ADD COLUMN IF NOT EXISTS km_update_reminder_days INTEGER NOT NULL DEFAULT 7;
+
+ALTER TABLE vehiculos
+  ADD COLUMN IF NOT EXISTS km_updated_at TIMESTAMPTZ;
+
+UPDATE vehiculos
+SET km_updated_at = NOW()
+WHERE km_actual IS NOT NULL
+  AND km_updated_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS lugares (
   id SERIAL PRIMARY KEY,

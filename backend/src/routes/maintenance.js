@@ -122,9 +122,13 @@ router.post("/", async (req, res) => {
     await client.query(
       `UPDATE vehiculos
        SET km_actual = CASE
-         WHEN km_actual IS NULL OR km_actual < $1 THEN $1
-         ELSE km_actual
-       END
+             WHEN km_actual IS NULL OR km_actual < $1 THEN $1
+             ELSE km_actual
+           END,
+           km_updated_at = CASE
+             WHEN km_actual IS NULL OR km_actual < $1 THEN NOW()
+             ELSE km_updated_at
+           END
        WHERE id = $2 AND user_id = $3`,
       [data.km, data.vehiculo_id, userId]
     );
@@ -417,9 +421,13 @@ router.put("/:id", async (req, res) => {
     await client.query(
       `UPDATE vehiculos
        SET km_actual = CASE
-         WHEN km_actual IS NULL OR km_actual < $1 THEN $1
-         ELSE km_actual
-       END
+             WHEN km_actual IS NULL OR km_actual < $1 THEN $1
+             ELSE km_actual
+           END,
+           km_updated_at = CASE
+             WHEN km_actual IS NULL OR km_actual < $1 THEN NOW()
+             ELSE km_updated_at
+           END
        WHERE id = $2 AND user_id = $3`,
       [data.km, data.vehiculo_id, userId]
     );

@@ -7,6 +7,7 @@ const {
   validateVehicleReminderPayload,
 } = require("../utils/validation");
 const { logActivity } = require("../utils/activityLog");
+const { didMileageChange } = require("../utils/vehicleMileage");
 
 const VEHICLE_RETURNING_FIELDS = `
   id,
@@ -16,6 +17,7 @@ const VEHICLE_RETURNING_FIELDS = `
   vehicle_type,
   vehicle_color,
   km_actual,
+  km_updated_at,
   ultimo_service_km,
   intervalo_km,
   fecha_ultimo_service,
@@ -55,6 +57,7 @@ router.get("/", async (req, res) => {
         vehicle_type,
         vehicle_color,
         km_actual,
+        km_updated_at,
         ultimo_service_km,
         intervalo_km,
         fecha_ultimo_service,
@@ -105,12 +108,13 @@ router.post("/", async (req, res) => {
         vehicle_color,
         user_id,
         km_actual,
+        km_updated_at,
         ultimo_service_km,
         intervalo_km,
         fecha_ultimo_service,
         intervalo_tiempo
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       RETURNING ${VEHICLE_RETURNING_FIELDS}`,
       [
         data.nombre,
@@ -120,6 +124,7 @@ router.post("/", async (req, res) => {
         data.vehicle_color,
         userId,
         data.km_actual,
+        data.km_actual === null ? null : new Date().toISOString(),
         data.ultimo_service_km,
         data.intervalo_km,
         data.fecha_ultimo_service,
@@ -158,6 +163,17 @@ router.put("/:id", async (req, res) => {
       return res.status(400).json({ error: "user_id requerido" });
     }
 
+    const currentResult = await pool.query(
+      "SELECT km_actual FROM vehiculos WHERE id = $1 AND user_id = $2",
+      [id, userId]
+    );
+
+    if (currentResult.rowCount === 0) {
+      return res.status(404).json({ error: "Vehiculo no encontrado" });
+    }
+
+    const kmChanged = didMileageChange(currentResult.rows[0].km_actual, data.km_actual);
+
     const result = await pool.query(
       `UPDATE vehiculos
        SET nombre = $1,
@@ -166,11 +182,16 @@ router.put("/:id", async (req, res) => {
            vehicle_type = $4,
            vehicle_color = $5,
            km_actual = $6,
+           km_updated_at = CASE
+             WHEN $11 = FALSE THEN km_updated_at
+             WHEN $6 IS NULL THEN NULL
+             ELSE NOW()
+           END,
            ultimo_service_km = $7,
            intervalo_km = $8,
            fecha_ultimo_service = $9,
            intervalo_tiempo = $10
-       WHERE id = $11 AND user_id = $12
+       WHERE id = $12 AND user_id = $13
        RETURNING ${VEHICLE_RETURNING_FIELDS}`,
       [
         data.nombre,
@@ -183,14 +204,11 @@ router.put("/:id", async (req, res) => {
         data.intervalo_km,
         data.fecha_ultimo_service,
         data.intervalo_tiempo,
+        kmChanged,
         id,
         userId,
       ]
     );
-
-    if (result.rowCount === 0) {
-      return res.status(404).json({ error: "Vehiculo no encontrado" });
-    }
 
     await recordActivity({
       userId,
@@ -239,6 +257,7 @@ router.patch("/:id/km", async (req, res) => {
     }
 
     const currentKm = currentResult.rows[0].km_actual;
+    const kmChanged = didMileageChange(currentKm, kmActual);
 
     if (currentKm !== null && Number(kmActual) < Number(currentKm)) {
       return res.status(400).json({ error: "No puedes bajar el kilometraje actual" });
@@ -246,10 +265,14 @@ router.patch("/:id/km", async (req, res) => {
 
     const result = await pool.query(
       `UPDATE vehiculos
-       SET km_actual = $1
+       SET km_actual = $1,
+           km_updated_at = CASE
+             WHEN $4 = FALSE THEN km_updated_at
+             ELSE NOW()
+           END
        WHERE id = $2 AND user_id = $3
        RETURNING ${VEHICLE_RETURNING_FIELDS}`,
-      [kmActual, id, userId]
+      [kmActual, id, userId, kmChanged]
     );
 
     await recordActivity({
@@ -383,12 +406,8 @@ router.delete("/:id", async (req, res) => {
     );
 
     await client.query(
-      `DELETE FROM maintenance_images mi
-       USING mantenimiento m
-       WHERE mi.maintenance_id = m.id
-         AND m.vehiculo_id = $1
-         AND m.user_id = $2`,
-      [id, userId]
+      "DELETE FROM maintenance_images WHERE maintenance_id = ANY($1::int[])",
+      [maintenanceIds]
     );
 
     await client.query(
@@ -410,18 +429,15 @@ router.delete("/:id", async (req, res) => {
       entityId: vehicle.id,
       title: "Vehiculo eliminado",
       description: `Eliminaste el vehiculo "${vehicle.nombre}" (${formatPlateLabel(vehicle.patente)}).`,
-      metadata: {
-        patente: vehicle.patente || null,
-        maintenance_count: maintenanceIds.length,
-      },
+      metadata: { patente: vehicle.patente || null },
     });
 
-    res.json({ ok: true });
+    res.json({ ok: true, id: vehicle.id });
   } catch (error) {
     try {
       await client.query("ROLLBACK");
     } catch (_rollbackError) {
-      // Ignore rollback failures and return the original error below.
+      // Ignore rollback failures and surface the original error below.
     }
     console.error(error);
     res.status(500).json({ error: "Error al eliminar vehiculo" });

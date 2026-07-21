@@ -21,6 +21,7 @@ async function fetchUserReminderRows(pool, userId) {
       v.modelo,
       v.patente,
       v.km_actual,
+      v.km_updated_at,
       v.ultimo_service_km,
       v.intervalo_km,
       v.fecha_ultimo_service,
@@ -140,8 +141,8 @@ function buildReminderCandidates(reminder) {
     candidates.push({
       type: "km_update_needed",
       stage: "needs_update",
-      dueSnapshot: `km-update:${reminder.intervalKm ?? "na"}`,
-      dedupeKey: `km_update_needed:${reminder.vehicleId}:${reminder.intervalKm ?? "na"}`,
+      dueSnapshot: `km-update:${reminder.kmUpdateReminder.dueSnapshot || "missing"}`,
+      dedupeKey: `km_update_needed:${reminder.vehicleId}:${reminder.kmUpdateReminder.dueSnapshot || "missing"}`,
       cooldownDays: reminder.kmUpdateReminder.intervalDays || DEFAULT_REPEAT_DAYS,
       notification: buildNotificationPayload({
         title: "Actualiza el kilometraje",
@@ -253,7 +254,7 @@ async function runReminderSweep(pool) {
 
   for (const row of usersResult.rows) {
     const reminderRows = await fetchUserReminderRows(pool, row.id);
-    const reminders = reminderRows.map(normalizeReminder);
+    const reminders = reminderRows.map((vehicle) => normalizeReminder(vehicle));
 
     for (const reminder of reminders) {
       const candidates = buildReminderCandidates(reminder);
@@ -315,5 +316,6 @@ async function runReminderSweep(pool) {
 module.exports = {
   buildNotificationIntentUrl,
   buildReminderCandidates,
+  fetchUserReminderRows,
   runReminderSweep,
 };
