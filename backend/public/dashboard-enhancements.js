@@ -4,6 +4,7 @@ const overviewMonthlyTotal = document.getElementById("overview-monthly-total");
 const overviewTotalInvested = document.getElementById("overview-total-invested");
 const overviewNextService = document.getElementById("overview-next-service");
 const remindersList = document.getElementById("reminders-list");
+const detailRemindersCount = document.getElementById("detail-reminders-count");
 const uiModal = document.getElementById("ui-modal");
 const uiModalTitle = document.getElementById("ui-modal-title");
 const uiModalBody = document.getElementById("ui-modal-body");
@@ -37,6 +38,15 @@ function statusModifier(status) {
   return `is-${String(status || "sin_configurar").replace(/[^a-z_]/g, "")}`;
 }
 
+function renderReminderCount(count) {
+  const value = Number(count) || 0;
+  [detailRemindersCount].forEach((element) => {
+    if (!element) return;
+    element.textContent = value > 0 ? String(value) : "";
+    element.classList.toggle("hidden", value === 0);
+  });
+}
+
 function openUiModal({
   title,
   bodyHtml,
@@ -62,6 +72,9 @@ function openUiModal({
   uiModalConfirm.disabled = Boolean(confirmDisabled);
   uiModalConfirm._onConfirm = onConfirm;
   uiModal.classList.remove("hidden");
+  if (typeof syncModalBodyState === "function") {
+    syncModalBodyState();
+  }
 
   return new Promise((resolve) => {
     modalResolver = resolve;
@@ -71,6 +84,9 @@ function openUiModal({
 function closeUiModal(result) {
   if (!uiModal) return;
   uiModal.classList.add("hidden");
+  if (typeof syncModalBodyState === "function") {
+    syncModalBodyState();
+  }
   if (uiModalConfirm) {
     uiModalConfirm._onConfirm = null;
     uiModalConfirm.disabled = false;
@@ -127,17 +143,23 @@ function renderReminderMeta(reminder) {
 function clearOverview() {
   if (!hasOverviewUi) return;
   overviewStatusLabel.textContent = "Sin datos";
+  overviewStatusLabel.className = "vehicle-detail-status";
   overviewStatusCopy.textContent = "Selecciona un vehiculo para ver el proximo mantenimiento.";
   overviewMonthlyTotal.textContent = formatCurrency(0);
   overviewTotalInvested.textContent = formatCurrency(0);
   overviewNextService.textContent = "Sin calculo";
-  remindersList.innerHTML = '<div class="empty">Selecciona un vehiculo para cargar recordatorios y gastos.</div>';
+  remindersList.innerHTML = '<div class="vehicle-detail-empty">Selecciona un vehiculo para cargar recordatorios.</div>';
+  renderReminderCount(0);
 }
 
 function renderOverview(data) {
   if (!hasOverviewUi) return;
   const reminder = data.selectedReminder;
   const remindersEnabled = data.remindersEnabled !== false;
+
+  overviewStatusLabel.className = `vehicle-detail-status ${statusModifier(
+    !remindersEnabled ? "pausado" : reminder?.status
+  )}`;
 
   overviewMonthlyTotal.textContent = formatCurrency(data.monthlySpend);
   overviewTotalInvested.textContent = formatCurrency(data.totalSpend);
@@ -156,58 +178,62 @@ function renderOverview(data) {
     overviewNextService.textContent = "Sin calculo";
   } else {
     overviewStatusLabel.textContent = reminder.statusLabel;
-    overviewStatusCopy.textContent = reminder.message;
-
-    if (reminder.nextKm !== null || reminder.nextDate) {
-      const pieces = [];
-      if (reminder.nextKm !== null) pieces.push(`${Number(reminder.nextKm).toLocaleString("es-AR")} km`);
-      if (reminder.nextDate) pieces.push(formatDateLabel(reminder.nextDate));
-      overviewNextService.textContent = `Proximo: ${pieces.join(" / ")}`;
-    } else {
-      overviewNextService.textContent = "Configura intervalos";
-    }
+    overviewNextService.textContent = reminder.kmRemaining !== null && reminder.kmRemaining !== undefined
+      ? `Faltan ${Number(reminder.kmRemaining).toLocaleString("es-AR")} km`
+      : reminder.nextKm !== null && reminder.nextKm !== undefined
+        ? `Proximo a ${Number(reminder.nextKm).toLocaleString("es-AR")} km`
+        : "Sin kilometraje programado";
+    overviewStatusCopy.textContent = reminder.nextDate
+      ? `o antes del ${formatDateLabel(reminder.nextDate)}`
+      : reminder.message || "Sin fecha programada.";
   }
 
   const alerts = data.alerts || [];
 
   if (!remindersEnabled) {
-    remindersList.innerHTML = '<div class="empty">Activa los recordatorios desde Configuracion para ver alertas aqui.</div>';
+    remindersList.innerHTML = '<div class="vehicle-detail-empty">Activa los recordatorios desde Configuracion para ver alertas aqui.</div>';
+    renderReminderCount(0);
     return;
   }
 
   if (alerts.length === 0 && reminder) {
     remindersList.innerHTML = `
-      <article class="reminder-alert is-normal">
-        <div class="reminder-title-row">
+        <article class="vehicle-detail-reminder is-normal">
+        <div class="vehicle-detail-reminder-icon" aria-hidden="true">⌁</div>
+        <div class="vehicle-detail-reminder-copy">
           <h3>${reminder.vehicleName}</h3>
-          <span class="status-badge is-normal">Todo al dia</span>
+          <p>${reminder.message}</p>
+          <div class="vehicle-detail-reminder-meta">${renderReminderMeta(reminder)}</div>
         </div>
-        <p class="section-copy">${reminder.message}</p>
-        <div class="reminder-meta">${renderReminderMeta(reminder)}</div>
-      </article>
-    `;
+        <span class="vehicle-detail-reminder-state">Todo al dia</span>
+        </article>
+      `;
+    renderReminderCount(0);
     return;
   }
 
   if (alerts.length === 0) {
-    remindersList.innerHTML = '<div class="empty">No hay alertas activas para mostrar.</div>';
+    remindersList.innerHTML = '<div class="vehicle-detail-empty">No hay recordatorios activos para mostrar.</div>';
+    renderReminderCount(0);
     return;
   }
 
   remindersList.innerHTML = alerts
     .map(
       (item) => `
-        <article class="reminder-alert ${statusModifier(item.status)}">
-          <div class="reminder-title-row">
+        <article class="vehicle-detail-reminder ${statusModifier(item.status)}">
+          <div class="vehicle-detail-reminder-icon" aria-hidden="true">⌁</div>
+          <div class="vehicle-detail-reminder-copy">
             <h3>${item.vehicleName}</h3>
-            <span class="status-badge ${statusModifier(item.status)}">${item.statusLabel}</span>
+            <p>${item.message}</p>
+            <div class="vehicle-detail-reminder-meta">${renderReminderMeta(item)}</div>
           </div>
-          <p class="section-copy">${item.message}</p>
-          <div class="reminder-meta">${renderReminderMeta(item)}</div>
+          <span class="vehicle-detail-reminder-state ${statusModifier(item.status)}">${item.statusLabel}</span>
         </article>
       `
     )
     .join("");
+  renderReminderCount(alerts.length);
 }
 
 async function loadDashboardOverview() {
@@ -220,6 +246,7 @@ async function loadDashboardOverview() {
   }
 
   overviewStatusLabel.textContent = "Cargando...";
+  overviewStatusLabel.className = "vehicle-detail-status";
   overviewStatusCopy.textContent = "Calculando recordatorios y gastos...";
   overviewNextService.textContent = "Calculando";
 
@@ -228,9 +255,11 @@ async function loadDashboardOverview() {
     renderOverview(data);
   } catch (error) {
     overviewStatusLabel.textContent = "Error";
+    overviewStatusLabel.className = "vehicle-detail-status is-atrasado";
     overviewStatusCopy.textContent = error.message;
     overviewNextService.textContent = "Sin calculo";
-    remindersList.innerHTML = `<div class="empty">${error.message}</div>`;
+    remindersList.innerHTML = `<div class="vehicle-detail-empty">${error.message}</div>`;
+    renderReminderCount(0);
   }
 }
 

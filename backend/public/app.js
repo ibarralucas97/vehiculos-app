@@ -110,8 +110,6 @@ const showRegisterButton = document.getElementById("show-register-button");
 const showLoginButton = document.getElementById("show-login-button");
 
 const maintenanceList = document.getElementById("maintenance-list");
-const latestMaintenanceList = document.getElementById("latest-maintenance-list");
-const latestStatusPill = document.getElementById("latest-status-pill");
 const statusPill = document.getElementById("status-pill");
 const historyTitle = document.getElementById("history-title");
 const historyCopy = document.getElementById("history-copy");
@@ -142,7 +140,6 @@ const vehiclesModalTitle = document.getElementById("vehicles-modal-title");
 const vehiclesModalCopy = document.getElementById("vehicles-modal-copy");
 const vehiclesListModal = document.getElementById("vehicles-list-modal");
 const filtersSubmitButton = document.getElementById("filters-submit");
-const latestButton = document.getElementById("latest-button");
 const exportPdfButton = document.getElementById("export-pdf-button");
 const maintenanceSubmitButton = document.getElementById("maintenance-submit");
 const vehicleSaveButton = document.getElementById("vehicle-save-button");
@@ -151,6 +148,7 @@ const vehicleSelect = document.getElementById("vehiculo_id");
 const placeSelect = document.getElementById("lugar_id");
 const menuButton = document.getElementById("menu-toggle");
 const menuPanel = document.getElementById("menu-panel");
+const menuBackdrop = document.getElementById("menu-backdrop");
 const menuHomeButton = document.getElementById("menu-home");
 const menuLogoutButton = document.getElementById("menu-logout");
 const menuProfileButton = document.getElementById("menu-profile");
@@ -168,6 +166,9 @@ const menuCurrentDeleteButton = document.getElementById("menu-current-delete");
 const menuCurrentSettingsButton = document.getElementById("menu-current-settings");
 const currentVehicleName = document.getElementById("current-vehicle-name");
 const currentVehicleKm = document.getElementById("current-vehicle-km");
+const vehicleKmOdometer = document.getElementById("vehicle-km-odometer");
+const vehicleDetailType = document.getElementById("vehicle-detail-type");
+const detailRemindersButton = document.getElementById("detail-reminders-button");
 const updateKmButton = document.getElementById("update-km-button");
 const vehicleNavDashboardButton = document.getElementById("vehicle-nav-dashboard");
 const vehicleNavMaintenanceButton = document.getElementById("vehicle-nav-maintenance");
@@ -184,9 +185,14 @@ const welcomeScreen = document.getElementById("welcome-screen");
 const topbar = document.getElementById("app-topbar");
 const topbarTitleAction = document.getElementById("topbar-title-action");
 const topbarUserName = document.getElementById("topbar-user-name");
+const topbarNotificationsButton = document.getElementById("topbar-notifications-button");
+const notificationsInboxClose = document.getElementById("notifications-inbox-close");
+const heroMaintenanceButton = document.getElementById("hero-maintenance-button");
+const heroHistoryButton = document.getElementById("hero-history-button");
+const currentVehicleMeta = document.getElementById("current-vehicle-meta");
+const vehicleHeroIllustration = document.getElementById("vehicle-hero-illustration");
 const topbarBackButton = document.getElementById("topbar-back-button");
 const maintenanceSection = document.getElementById("maintenance-section");
-const latestRecordsSection = document.getElementById("latest-records-section");
 const historySection = document.getElementById("history-section");
 const profileForm = document.getElementById("profile-form");
 const profileMessage = document.getElementById("profile-message");
@@ -251,7 +257,6 @@ const vehicleRemindersSummaryNote = document.getElementById("vehicle-reminders-s
 const themeColorMeta = document.querySelector('meta[name="theme-color"]');
 
 let maintenanceImageRefs = getMaintenanceImageRefs();
-let latestRecordsLoaded = false;
 let currentMaintenanceRecords = new Map();
 let notificationsServerStatus = null;
 let notificationStateLoading = false;
@@ -362,6 +367,44 @@ const ICONS = {
       <circle cx="10" cy="11" r="1" />
       <circle cx="13" cy="14" r="1" />
       <circle cx="17" cy="8" r="1" />
+    </svg>
+  `,
+  menu: `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 7h16" />
+      <path d="M4 12h16" />
+      <path d="M4 17h16" />
+    </svg>
+  `,
+  bell: `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 4a4 4 0 0 1 4 4v2.4c0 1.2.4 2.4 1.2 3.3l1.1 1.4H5.7l1.1-1.4A5 5 0 0 0 8 10.4V8a4 4 0 0 1 4-4Z" />
+      <path d="M9.5 18a2.5 2.5 0 0 0 5 0" />
+    </svg>
+  `,
+  home: `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 10.5 12 4l8 6.5" />
+      <path d="M6.5 9.8V20h11V9.8" />
+    </svg>
+  `,
+  account: `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="8" r="3.2" />
+      <path d="M5 19a7 7 0 0 1 14 0" />
+    </svg>
+  `,
+  settings: `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="3.2" />
+      <path d="M19.2 15a1 1 0 0 0 .2 1.1l.1.1a1 1 0 0 1 0 1.4l-1 1a1 1 0 0 1-1.4 0l-.1-.1a1 1 0 0 0-1.1-.2 1 1 0 0 0-.6.9V20a1 1 0 0 1-1 1h-1.4a1 1 0 0 1-1-1v-.2a1 1 0 0 0-.7-.9 1 1 0 0 0-1.1.2l-.1.1a1 1 0 0 1-1.4 0l-1-1a1 1 0 0 1 0-1.4l.1-.1a1 1 0 0 0 .2-1.1 1 1 0 0 0-.9-.6H4a1 1 0 0 1-1-1v-1.4a1 1 0 0 1 1-1h.2a1 1 0 0 0 .9-.7 1 1 0 0 0-.2-1.1l-.1-.1a1 1 0 0 1 0-1.4l1-1a1 1 0 0 1 1.4 0l.1.1a1 1 0 0 0 1.1.2 1 1 0 0 0 .6-.9V4a1 1 0 0 1 1-1h1.4a1 1 0 0 1 1 1v.2a1 1 0 0 0 .7.9 1 1 0 0 0 1.1-.2l.1-.1a1 1 0 0 1 1.4 0l1 1a1 1 0 0 1 0 1.4l-.1.1a1 1 0 0 0-.2 1.1 1 1 0 0 0 .9.6H20a1 1 0 0 1 1 1v1.4a1 1 0 0 1-1 1h-.2a1 1 0 0 0-.9.7" />
+    </svg>
+  `,
+  logout: `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M10 5H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4" />
+      <path d="M13 8l4 4-4 4" />
+      <path d="M9 12h8" />
     </svg>
   `,
   vehicleMoto: `
@@ -882,10 +925,7 @@ function syncSelectedVehicleContext() {
 }
 
 function openMaintenanceComposer() {
-  if (maintenanceSection && !maintenanceSection.classList.contains("open")) {
-    maintenanceSection.classList.add("open");
-  }
-  maintenanceForm?.scrollIntoView({ behavior: "smooth", block: "start" });
+  focusDashboardSection(maintenanceSection);
 }
 
 function renderReminderSettingsSummary(session = getSession(), status = notificationsServerStatus) {
@@ -1013,10 +1053,6 @@ async function refreshCurrentContext({ silent = false } = {}) {
 
       if (typeof loadDashboardOverview === "function") {
         await loadDashboardOverview();
-      }
-
-      if (isCollapsibleSectionOpen(latestRecordsSection) || latestRecordsLoaded) {
-        await loadLatestRecords();
       }
 
       if (isCollapsibleSectionOpen(historySection) && hasActiveFilters()) {
@@ -1582,10 +1618,9 @@ function resetMaintenanceFormState() {
 const vehiclesScreen = document.getElementById("vehicles-screen");
 
 function updateTopbarContext() {
-  if (!topbarBackButton) return;
   const inVehicleDetail = getCurrentView() === "dashboard";
-  topbarBackButton.disabled = !inVehicleDetail;
-  topbarBackButton.classList.toggle("is-inactive", !inVehicleDetail);
+  topbarBackButton?.classList.toggle("hidden", !inVehicleDetail);
+  topbarBackButton?.toggleAttribute("disabled", !inVehicleDetail);
 }
 
 function getSelectedVehicle() {
@@ -1594,7 +1629,7 @@ function getSelectedVehicle() {
 
 function updateMenuContext() {
   const selectedVehicle = getSelectedVehicle();
-  const hasCurrentVehicle = Boolean(selectedVehicle) && getCurrentView() === "dashboard";
+  const hasCurrentVehicle = Boolean(selectedVehicle);
 
   menuCurrentVehicleGroup?.classList.toggle("hidden", !hasCurrentVehicle);
 
@@ -1605,7 +1640,11 @@ function updateMenuContext() {
   }
 
   menuHomeButton?.classList.toggle("hidden", getCurrentView() === "vehicles");
+
+  decorateMenuButtons();
+  updateNotificationsButtonState();
 }
+
 
 function updateVehicleContextTabs(activeTab = "dashboard") {
   const tabs = [
@@ -1624,9 +1663,26 @@ function updateVehicleContextTabs(activeTab = "dashboard") {
 
 function focusDashboardSection(section) {
   if (!section) return;
+  [maintenanceSection, historySection].forEach((candidate) => {
+    if (candidate && candidate !== section) {
+      candidate.classList.remove("open");
+      candidate.setAttribute("aria-hidden", "true");
+    }
+  });
   section.classList.add("open");
+  section.setAttribute("aria-hidden", "false");
   updateVehicleContextTabs(section === maintenanceSection ? "maintenance" : "dashboard");
-  section.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function closeDashboardSections() {
+  [maintenanceSection, historySection].forEach((section) => {
+    if (!section) return;
+    section.classList.remove("open");
+    section.setAttribute("aria-hidden", "true");
+  });
+  if (getCurrentView() === "dashboard") {
+    updateVehicleContextTabs("dashboard");
+  }
 }
 
 function openCurrentVehicleDashboard() {
@@ -1845,6 +1901,12 @@ function scheduleTouchScrollReset() {
   }, 160);
 }
 
+function syncVehicleDetailPageState(view = getCurrentView()) {
+  const isVehicleDetail = view === "dashboard" && Boolean(selectedVehicleId);
+  dashboard?.classList.toggle("vehicle-detail-page", isVehicleDetail);
+  topbar?.classList.toggle("vehicle-detail-page", isVehicleDetail);
+}
+
 function setView(nextView, source, event = null, extra = {}) {
   const previousView = getCurrentView();
 
@@ -1876,6 +1938,7 @@ function setView(nextView, source, event = null, extra = {}) {
   }
 
   activeView = nextView;
+  syncVehicleDetailPageState(nextView);
   updateTopbarContext();
   updateMenuContext();
   updateDebugCurrentView(nextView);
@@ -1981,6 +2044,7 @@ function goBackToVehicles(origin = "goBackToVehicles") {
     return;
   }
   closeMenu();
+  closeDashboardSections();
 
   if (currentVehicleKm) currentVehicleKm.textContent = "Sin dato";
   if (updateKmButton) updateKmButton.disabled = true;
@@ -1994,6 +2058,8 @@ function goBackToVehicles(origin = "goBackToVehicles") {
 function closeMenu() {
   if (!menuPanel) return;
   menuPanel.classList.add("hidden");
+  menuBackdrop?.classList.add("hidden");
+  document.documentElement.classList.remove("menu-open");
   if (menuButton) menuButton.setAttribute("aria-expanded", "false");
 }
 
@@ -2041,6 +2107,11 @@ async function openSettingsModal() {
   }
 }
 
+function openGlobalNotificationsModal() {
+  closeMenu();
+  openModal("notifications-inbox-modal");
+}
+
 function showNotAvailable() {
   setStatus("No disponible");
   closeMenu();
@@ -2082,6 +2153,8 @@ function toggleMenu() {
   if (!menuPanel) return;
   const willOpen = menuPanel.classList.contains("hidden");
   menuPanel.classList.toggle("hidden");
+  menuBackdrop?.classList.toggle("hidden", !willOpen);
+  document.documentElement.classList.toggle("menu-open", willOpen);
   if (menuButton) menuButton.setAttribute("aria-expanded", String(willOpen));
 }
 
@@ -2545,59 +2618,6 @@ function setHistoryState(state, detail = "") {
   maintenanceList.innerHTML = config.body;
 }
 
-function setLatestRecordsState(state, detail = "") {
-  if (!latestStatusPill || !latestMaintenanceList) {
-    return;
-  }
-
-  const states = {
-    initial: {
-      pill: "Sin consulta",
-      body: buildEmptyStateMarkup({
-        icon: "maintenance",
-        title: "Todavia no se consultaron registros",
-        body: "Abre este modulo para traer los ultimos mantenimientos del vehiculo actual.",
-      }),
-    },
-    loading: {
-      pill: "Cargando",
-      body: buildEmptyStateMarkup({
-        icon: "maintenance",
-        title: "Cargando ultimos registros",
-        body: "Estamos trayendo los mantenimientos mas recientes del vehiculo seleccionado.",
-      }),
-    },
-    empty: {
-      pill: "Sin resultados",
-      body: buildEmptyStateMarkup({
-        icon: "maintenance",
-        title: "No hay mantenimientos todavia",
-        body: "Crea tu primer mantenimiento para empezar a ver este resumen.",
-        actionLabel: "Cargar mantenimiento",
-        action: "openMaintenanceComposer()",
-      }),
-    },
-    error: {
-      pill: "Error",
-      body: buildEmptyStateMarkup({
-        icon: "maintenance",
-        title: "No se pudieron cargar los registros",
-        body: detail || "Ocurrio un error",
-      }),
-    },
-  };
-
-  const config = states[state];
-
-  if (!config) {
-    latestStatusPill.textContent = detail;
-    return;
-  }
-
-  latestStatusPill.textContent = config.pill;
-  latestMaintenanceList.innerHTML = config.body;
-}
-
 function optionMarkup(items, labelKey) {
   return items
     .map((item) => `<option value="${item.id}">${item[labelKey]}</option>`)
@@ -2785,22 +2805,9 @@ function editMaintenance(id) {
     formMessage.textContent = "Editando mantenimiento seleccionado.";
   }
   focusDashboardSection(maintenanceSection);
-  maintenanceForm.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 async function refreshMaintenanceViewsAfterMutation() {
-  latestRecordsLoaded = false;
-
-  if (selectedVehicleId) {
-    try {
-      await loadLatestRecords();
-    } catch (error) {
-      setLatestRecordsState("error", error.message);
-    }
-  } else {
-    setLatestRecordsState("initial");
-  }
-
   if (hasActiveFilters()) {
     try {
       await loadMaintenance();
@@ -2859,18 +2866,6 @@ function renderMaintenance(items) {
   }
 
   renderMaintenanceCards(items, maintenanceList);
-}
-
-function renderLatestMaintenance(items) {
-  if (items.length === 0) {
-    setLatestRecordsState("empty");
-    return;
-  }
-
-  renderMaintenanceCards(items, latestMaintenanceList);
-  if (latestStatusPill) {
-    latestStatusPill.textContent = `${items.length} registros`;
-  }
 }
 
 async function loadSelects() {
@@ -3035,6 +3030,7 @@ function selectVehicle(id, origin = "selectVehicle") {
   }
   renderCurrentVehicleKm();
   updateVehicleContextTabs("dashboard");
+  closeDashboardSections();
 
   if (!setView("dashboard", origin)) {
     return;
@@ -3042,8 +3038,6 @@ function selectVehicle(id, origin = "selectVehicle") {
   closeMenu();
 
   refreshAllData();
-  latestRecordsLoaded = false;
-  setLatestRecordsState("initial");
   setHistoryState("initial");
 }
 
@@ -3059,122 +3053,14 @@ if (menuButton && menuPanel) {
   });
 }
 
+menuBackdrop?.addEventListener("click", closeMenu);
+
 document.addEventListener("click", (e) => {
   if (!menuPanel || !menuButton) return;
 
   if (!menuPanel.contains(e.target) && !menuButton.contains(e.target)) {
     closeMenu();
   }
-});
-
-topbarBackButton?.addEventListener("touchstart", (event) => {
-  if (event.touches.length !== 1) {
-    backButtonTouchState.active = false;
-    backButtonTouchState.armed = false;
-    return;
-  }
-
-  backButtonTouchState = {
-    active: true,
-    moved: false,
-    cancelled: false,
-    armed: false,
-    startX: event.touches[0].clientX,
-    startY: event.touches[0].clientY,
-    lastTouchEndAt: 0,
-  };
-}, { passive: true });
-
-topbarBackButton?.addEventListener("touchmove", (event) => {
-  if (!backButtonTouchState.active || event.touches.length !== 1) {
-    return;
-  }
-
-  const deltaX = event.touches[0].clientX - backButtonTouchState.startX;
-  const deltaY = event.touches[0].clientY - backButtonTouchState.startY;
-
-  if (Math.abs(deltaX) > BACK_BUTTON_MOVE_THRESHOLD || Math.abs(deltaY) > BACK_BUTTON_MOVE_THRESHOLD) {
-    backButtonTouchState.moved = true;
-    backButtonTouchState.armed = false;
-  }
-}, { passive: true });
-
-topbarBackButton?.addEventListener("touchend", (event) => {
-  backButtonTouchState.active = false;
-  backButtonTouchState.lastTouchEndAt = Date.now();
-  backButtonTouchState.armed = !backButtonTouchState.moved && !backButtonTouchState.cancelled;
-  logNavigation("topbarBackButton:touchend", "vehicles", {
-    ignored: !backButtonTouchState.armed,
-    moved: backButtonTouchState.moved,
-    cancelled: backButtonTouchState.cancelled,
-    armed: backButtonTouchState.armed,
-    eventType: event.type,
-    currentView: getCurrentView(),
-    targetElement: getEventLabel(event.target),
-    currentTarget: getEventLabel(event.currentTarget),
-  });
-}, { passive: true });
-
-topbarBackButton?.addEventListener("touchcancel", (event) => {
-  backButtonTouchState.active = false;
-  backButtonTouchState.cancelled = true;
-  backButtonTouchState.armed = false;
-  backButtonTouchState.lastTouchEndAt = Date.now();
-  logNavigation("topbarBackButton:touchcancel", "vehicles", {
-    ignored: true,
-    moved: backButtonTouchState.moved,
-    cancelled: true,
-    armed: false,
-    eventType: event.type,
-    currentView: getCurrentView(),
-    targetElement: getEventLabel(event.target),
-    currentTarget: getEventLabel(event.currentTarget),
-  });
-}, { passive: true });
-
-topbarBackButton?.addEventListener("click", (event) => {
-  const timeSinceTouchEnd = backButtonTouchState.lastTouchEndAt
-    ? Date.now() - backButtonTouchState.lastTouchEndAt
-    : null;
-  const isTouchDevice = isTouchCapableDevice();
-  const isArmedTouchClick = Boolean(
-    isTouchDevice &&
-      backButtonTouchState.armed &&
-      timeSinceTouchEnd !== null &&
-      timeSinceTouchEnd <= BACK_BUTTON_GHOST_CLICK_WINDOW_MS
-  );
-  const shouldIgnoreClick = Boolean(
-    topbarBackButton.disabled ||
-      (isTouchDevice && !isArmedTouchClick)
-  );
-
-  logNavigation("topbarBackButton:click", "vehicles", {
-    ignored: shouldIgnoreClick,
-    moved: backButtonTouchState.moved,
-    cancelled: backButtonTouchState.cancelled,
-    armed: backButtonTouchState.armed,
-    isTouchDevice,
-    timeSinceTouchEnd,
-    eventType: event.type,
-    eventDetail: event.detail,
-    currentView: getCurrentView(),
-    targetElement: getEventLabel(event.target),
-    currentTarget: getEventLabel(event.currentTarget),
-  });
-
-  if (shouldIgnoreClick) {
-    event.preventDefault();
-    event.stopPropagation();
-    backButtonTouchState.moved = false;
-    backButtonTouchState.cancelled = false;
-    backButtonTouchState.armed = false;
-    return;
-  }
-
-  backButtonTouchState.moved = false;
-  backButtonTouchState.cancelled = false;
-  backButtonTouchState.armed = false;
-  goBackToVehicles("topbarBackButton:click");
 });
 
 async function loadVehiclesList() {
@@ -3266,27 +3152,6 @@ function viewVehicle(id) {
 }
 
 
-
-async function loadLatestRecords() {
-  if (!selectedVehicleId) {
-    setLatestRecordsState("error", "Primero selecciona un vehiculo.");
-    return;
-  }
-
-  setLatestRecordsState("loading");
-
-  const session = getSession();
-  const params = new URLSearchParams({
-    user_id: String(session.id),
-    vehiculo_id: String(selectedVehicleId),
-    limit: "3",
-  });
-  const items = await fetchJson(`/maintenance?${params.toString()}`);
-
-  persistMaintenanceImages(items);
-  latestRecordsLoaded = true;
-  renderLatestMaintenance(items);
-}
 
 async function loadMaintenance() {
   if (!selectedVehicleId) {
@@ -3486,7 +3351,6 @@ await loadSelects();
 await loadVehiclesList();
 await loadPlacesList();
 setHistoryState("initial");
-setLatestRecordsState("initial");
 }
 
 if (togglePasswordButton && passwordInput) {
@@ -3613,13 +3477,6 @@ function logout() {
   maintenanceList.innerHTML = '<div class="empty">Selecciona un vehiculo para comenzar.</div>';
   historyTitle.textContent = "Historial";
   historyCopy.textContent = "Busca mantenimientos por texto o rango de fechas.";
-  if (latestMaintenanceList) {
-    latestMaintenanceList.innerHTML = '<div class="empty">Selecciona un vehiculo para ver sus ultimos registros.</div>';
-  }
-  if (latestStatusPill) {
-    latestStatusPill.textContent = "Sin consulta";
-  }
-  latestRecordsLoaded = false;
   if (currentVehicleName) currentVehicleName.textContent = "Sin seleccion";
   if (currentVehicleKm) currentVehicleKm.textContent = "Sin dato";
   if (updateKmButton) updateKmButton.disabled = true;
@@ -3846,7 +3703,6 @@ maintenanceForm?.addEventListener("submit", async (event) => {
 
     resetMaintenanceFormState();
     await refreshAllData();
-    await loadLatestRecords();
     if (hasActiveFilters()) {
       await loadMaintenance();
     }
@@ -3886,17 +3742,6 @@ filtersForm?.addEventListener("submit", async (event) => {
 
 
 updateKmButton?.addEventListener("click", openKmUpdateModal);
-
-latestButton?.addEventListener("click", async () => {
-  setButtonLoading(latestButton, true, "Cargando...");
-  try {
-    await loadLatestRecords();
-  } catch (error) {
-    setLatestRecordsState("error", error.message);
-  } finally {
-    setButtonLoading(latestButton, false, "Cargando...");
-  }
-});
 
 filtersResetButton?.addEventListener("click", () => {
   setHistoryState("initial");
@@ -4187,6 +4032,8 @@ notificationsTestButton?.addEventListener("click", () => {
     showToast(error.message, { tone: "error", duration: 3400 });
   });
 });
+
+notificationsInboxClose?.addEventListener("click", () => closeModal("notifications-inbox-modal"));
 pwaInstallDismiss?.addEventListener("click", dismissPwaInstallBanner);
 
 function viewPlace(id) {
@@ -4209,7 +4056,7 @@ function viewPlace(id) {
     return;
   }
 
-  console.log(place);
+  showToast("No se pudo abrir el detalle del lugar.", { tone: "error" });
 }
 
 function editPlace(id) {
@@ -4296,6 +4143,13 @@ async function refreshAllData() {
 }
 
 document.addEventListener("click", (e) => {
+  const secondaryViewClose = e.target.closest("[data-secondary-view-close]");
+  if (secondaryViewClose) {
+    e.preventDefault();
+    closeDashboardSections();
+    return;
+  }
+
   const modals = document.querySelectorAll(".modal");
 
   modals.forEach((modal) => {
@@ -4305,17 +4159,18 @@ document.addEventListener("click", (e) => {
   });
 });
 
-function toggleSection(header, options = {}) {
-  const section = header.closest(".collapsible");
-  const willOpen = !section.classList.contains("open");
-  section.classList.toggle("open");
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
 
-  if (willOpen && options.loadOnOpen === "latest" && !latestRecordsLoaded) {
-    loadLatestRecords().catch((error) => {
-      setLatestRecordsState("error", error.message);
-    });
-  }
-}
+  const secondaryViewOpen = [maintenanceSection, historySection]
+    .some((section) => section?.classList.contains("open"));
+  const modalOpen = Array.from(document.querySelectorAll(".modal"))
+    .some((modal) => !modal.classList.contains("hidden"));
+
+  if (!secondaryViewOpen || modalOpen) return;
+  event.preventDefault();
+  closeDashboardSections();
+});
 
 function openVehiclesModal() {
   openVehicleCreateModal();
@@ -4848,3 +4703,194 @@ function registerServiceWorker() {
 
   updateDebugCurrentView();
 })();
+
+
+function buildVehicleIllustrationMarkup(vehicle = {}) {
+  const type = getVehicleTypeConfig(vehicle.vehicle_type).value;
+  const color = getVehicleColorConfig(vehicle.vehicle_color).hex;
+  const frames = {
+    auto: `
+      <svg viewBox="0 0 320 180" aria-hidden="true">
+        <g class="vehicle-illustration-frame">
+          <ellipse cx="96" cy="140" rx="30" ry="30" />
+          <ellipse cx="232" cy="140" rx="30" ry="30" />
+          <path class="vehicle-illustration-body" d="M58 124c6-31 22-49 45-58 17-7 83-8 109 0 19 6 31 23 39 58H58Z" style="fill:${color}" />
+          <path class="vehicle-illustration-cabin" d="M111 69h70c19 0 29 8 41 31H92c4-15 10-24 19-31Z" />
+          <path d="M70 122h180" />
+          <path d="M101 75h88" />
+        </g>
+      </svg>
+    `,
+    camioneta: `
+      <svg viewBox="0 0 320 180" aria-hidden="true">
+        <g class="vehicle-illustration-frame">
+          <ellipse cx="88" cy="140" rx="29" ry="29" />
+          <ellipse cx="236" cy="140" rx="29" ry="29" />
+          <path class="vehicle-illustration-body" d="M42 122h130V82h53c23 0 37 13 49 40H42Z" style="fill:${color}" />
+          <path class="vehicle-illustration-cabin" d="M120 88h52c12 0 26 5 37 16h-89Z" />
+          <path d="M66 122h184" />
+        </g>
+      </svg>
+    `,
+    moto: `
+      <svg viewBox="0 0 320 180" aria-hidden="true">
+        <g class="vehicle-illustration-frame">
+          <ellipse cx="90" cy="141" rx="28" ry="28" />
+          <ellipse cx="232" cy="141" rx="28" ry="28" />
+          <path class="vehicle-illustration-body" d="M126 95h41l23 23-17 16-31-22h-24l-16 22H84l25-39 17-1Z" style="fill:${color}" />
+          <path d="M166 95h32l18 19" />
+          <path d="M137 113l-19-28" />
+        </g>
+      </svg>
+    `,
+    bicicleta: `
+      <svg viewBox="0 0 320 180" aria-hidden="true">
+        <g class="vehicle-illustration-frame">
+          <ellipse cx="93" cy="141" rx="29" ry="29" />
+          <ellipse cx="229" cy="141" rx="29" ry="29" />
+          <path class="vehicle-illustration-body" d="M132 92h32l27 49h-32l-27-49Z" style="fill:${color}" />
+          <path d="M93 141 137 92l25 0" />
+          <path d="M156 141 196 108l28 0" />
+          <path d="M161 92 182 70" />
+        </g>
+      </svg>
+    `,
+    otro: `
+      <svg viewBox="0 0 320 180" aria-hidden="true">
+        <g class="vehicle-illustration-frame">
+          <ellipse cx="92" cy="141" rx="28" ry="28" />
+          <ellipse cx="230" cy="141" rx="28" ry="28" />
+          <path class="vehicle-illustration-body" d="M52 122c9-24 26-43 52-53h74c27 8 45 27 55 53H52Z" style="fill:${color}" />
+          <path class="vehicle-illustration-cabin" d="M112 76h83c14 6 24 14 31 26H93c4-11 11-20 19-26Z" />
+          <path d="M74 122h174" />
+        </g>
+      </svg>
+    `,
+  };
+
+  if (type === 'camion') return frames.otro;
+  return frames[type] || frames.otro;
+}
+
+function updateNotificationsButtonState() {
+  if (!topbarNotificationsButton) return;
+  topbarNotificationsButton.disabled = false;
+  topbarNotificationsButton.classList.remove('is-disabled');
+  topbarNotificationsButton.setAttribute('aria-label', 'Abrir notificaciones');
+}
+
+function decorateMenuButtons() {
+  if (menuButton && !menuButton.dataset.iconReady) {
+    menuButton.innerHTML = buildIconMarkup('menu');
+    menuButton.dataset.iconReady = 'true';
+  }
+
+  if (topbarNotificationsButton && !topbarNotificationsButton.dataset.iconReady) {
+    topbarNotificationsButton.innerHTML = buildIconMarkup('bell');
+    topbarNotificationsButton.dataset.iconReady = 'true';
+  }
+
+  const iconMap = [
+    [menuHomeButton, 'home', 'Inicio'],
+    [menuProfileButton, 'account', 'Mi perfil'],
+    [menuSettingsButton, 'settings', 'Ajustes de la app'],
+    [menuActivityButton, 'activity', 'Actividad'],
+    [menuCurrentPlacesButton, 'place', 'Lugares'],
+    [menuCurrentRemindersButton, 'bell', 'Recordatorios'],
+    [menuCurrentEditButton, 'edit', 'Editar vehiculo'],
+    [menuCurrentDeleteButton, 'delete', 'Eliminar vehiculo'],
+    [menuLogoutButton, 'logout', 'Cerrar sesion'],
+  ];
+
+  iconMap.forEach(([button, icon, label]) => {
+    if (!button || button.dataset.iconReady) return;
+    button.innerHTML = `<span class="menu-button-icon" aria-hidden="true">${buildIconMarkup(icon)}</span><span class="menu-button-label">${label}</span>`;
+    button.dataset.iconReady = 'true';
+  });
+
+}
+
+function renderVehicleHero() {
+  const vehicle = getSelectedVehicle();
+  const typeConfig = getVehicleTypeConfig(vehicle?.vehicle_type);
+  const colorConfig = getVehicleColorConfig(vehicle?.vehicle_color);
+
+  if (currentVehicleMeta) {
+    currentVehicleMeta.textContent = vehicle
+      ? [vehicle.patente || 'Sin patente', colorConfig.label].filter(Boolean).join(' · ')
+      : 'Selecciona un vehiculo para ver su resumen.';
+  }
+
+  if (vehicleDetailType) {
+    vehicleDetailType.textContent = vehicle ? typeConfig.label : 'Vehiculo';
+  }
+
+  if (vehicleKmOdometer) {
+    const km = Number(vehicle?.km_actual);
+    const digits = Number.isFinite(km) && km >= 0
+      ? String(Math.floor(km)).padStart(6, '0').slice(-6)
+      : '------';
+    vehicleKmOdometer.innerHTML = digits
+      .split('')
+      .map((digit) => `<span>${digit}</span>`)
+      .join('');
+  }
+
+  if (vehicleHeroIllustration) {
+    vehicleHeroIllustration.innerHTML = vehicle ? buildVehicleIllustrationMarkup(vehicle) : '';
+    vehicleHeroIllustration.style.setProperty('--vehicle-color', colorConfig.hex);
+  }
+
+  updateNotificationsButtonState();
+}
+
+const originalRenderCurrentVehicleKm = renderCurrentVehicleKm;
+renderCurrentVehicleKm = function patchedRenderCurrentVehicleKm() {
+  originalRenderCurrentVehicleKm();
+  renderVehicleHero();
+};
+
+const originalLoadVehiclesScreen = loadVehiclesScreen;
+loadVehiclesScreen = async function redesignedLoadVehiclesScreen() {
+  await originalLoadVehiclesScreen();
+  renderVehicleHero();
+};
+
+const originalUpdateSessionUI = updateSessionUI;
+updateSessionUI = function patchedUpdateSessionUI() {
+  const result = originalUpdateSessionUI();
+  decorateMenuButtons();
+  renderVehicleHero();
+  return result;
+};
+
+heroMaintenanceButton?.addEventListener('click', () => {
+  focusDashboardSection(maintenanceSection);
+});
+
+heroHistoryButton?.addEventListener('click', async () => {
+  focusDashboardSection(historySection);
+  try {
+    await loadMaintenance();
+  } catch (error) {
+    setHistoryState('error', error.message);
+  }
+});
+
+detailRemindersButton?.addEventListener('click', () => {
+  openCurrentVehicleReminders();
+});
+
+topbarNotificationsButton?.addEventListener('click', () => {
+  openGlobalNotificationsModal();
+});
+
+topbarBackButton?.addEventListener('click', (event) => {
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  goBackToVehicles('topbarBackButton:reliableClick');
+}, true);
+
+decorateMenuButtons();
+renderVehicleHero();
+updateNotificationsButtonState();

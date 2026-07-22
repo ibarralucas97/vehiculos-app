@@ -46,20 +46,25 @@
 
     <main class="app-shell">
       <header id="app-topbar" class="app-topbar hidden">
-        <div class="topbar-left">
-          <button
-            id="topbar-back-button"
-            class="topbar-back-button"
-            type="button"
-            aria-label="Volver a mis vehiculos"
-          >
-            ←
-          </button>
-          <h1 id="topbar-title-action" class="app-title app-title-action" role="button" tabindex="0" aria-label="Actualizar datos visibles">Rodado Control</h1>
+        <div class="topbar-navigation">
+          <button id="menu-toggle" class="menu-btn topbar-icon-button" type="button" aria-expanded="false" aria-label="Abrir menu"></button>
+          <button id="topbar-back-button" class="topbar-back-button hidden" type="button" aria-label="Volver a mis vehiculos">Volver</button>
         </div>
-        <span id="topbar-user-name" class="topbar-user-name"></span>
+        <button id="topbar-title-action" class="app-title app-title-action" type="button" aria-label="Actualizar datos visibles">
+          <span class="app-title-mark" aria-hidden="true">RC</span>
+          <span class="app-title-copy">
+            <strong><span>Rodado</span> <span>Control</span></strong>
+            <span>Tablero de mantenimiento</span>
+          </span>
+        </button>
+        <div class="topbar-actions">
+          <span class="vehicle-detail-notification-wrap">
+            <button id="topbar-notifications-button" class="topbar-icon-button" type="button" aria-label="Abrir recordatorios"></button>
+            <span id="topbar-reminders-count" class="vehicle-detail-topbar-count hidden" aria-label="Cantidad de recordatorios pendientes"></span>
+          </span>
+          <span id="topbar-user-name" class="topbar-user-name"></span>
+        </div>
         <div class="topbar-menu">
-          <button id="menu-toggle" class="menu-btn" type="button" aria-expanded="false">☰</button>
           <div id="menu-panel" class="menu-panel hidden">
             <div class="menu-section">
               <p class="menu-section-label">General</p>
@@ -86,6 +91,7 @@
           </div>
         </div>
       </header>
+      <button id="menu-backdrop" class="menu-backdrop hidden" type="button" aria-label="Cerrar menu"></button>
 
       <section class="hero-card" id="welcome-screen">
         <div class="hero-copy">
@@ -193,30 +199,72 @@
       </section>
 
       <section id="dashboard" class="hidden">
-        <section class="panel vehicle-context-panel">
-          <div class="section-head mb-0 vehicle-context-head">
-            <div>
-              <p class="vehicle-context-label">Vehiculo actual</p>
+        <section class="vehicle-detail-shell" aria-label="Detalle del vehiculo">
+          <div class="vehicle-detail-km-card">
+            <div class="vehicle-detail-gauge" aria-hidden="true">
+              <span class="vehicle-detail-gauge-mark mark-1"></span><span class="vehicle-detail-gauge-mark mark-2"></span><span class="vehicle-detail-gauge-mark mark-3"></span><span class="vehicle-detail-gauge-mark mark-4"></span><span class="vehicle-detail-gauge-mark mark-5"></span>
+            </div>
+            <p class="vehicle-detail-kicker">Kilometraje actual</p>
+            <strong id="current-vehicle-km" class="vehicle-detail-km">Sin dato</strong>
+            <span class="vehicle-detail-km-unit">km</span>
+            <div id="vehicle-km-odometer" class="vehicle-km-odometer" aria-label="Odometro"></div>
+          </div>
+
+          <article class="vehicle-detail-car-card">
+            <div class="vehicle-detail-car-copy">
+              <p class="vehicle-detail-section-title">Mi auto</p>
+              <span id="vehicle-detail-type" class="vehicle-detail-type">Vehiculo</span>
               <h2 id="current-vehicle-name">Sin seleccion</h2>
+              <p id="current-vehicle-meta" class="vehicle-detail-meta">Selecciona un vehiculo para ver su resumen.</p>
             </div>
-            <div class="km-panel">
-              <p class="km-panel-label">Kilometraje actual</p>
-              <div class="km-panel-row">
-                <strong id="current-vehicle-km">Sin dato</strong>
-                <button id="update-km-button" class="ghost" type="button">Actualizar</button>
-              </div>
+            <div id="vehicle-hero-illustration" class="vehicle-detail-illustration" aria-hidden="true"></div>
+          </article>
+
+          <article class="vehicle-detail-service-card">
+            <div class="vehicle-detail-service-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m14.7 6.3 3-3a4.2 4.2 0 0 1-5.4 5.4l-7.8 7.8a2 2 0 1 0 2.8 2.8l7.8-7.8a4.2 4.2 0 0 1 5.4-5.4l-3 3"/></svg></div>
+            <div class="vehicle-detail-service-copy">
+              <p>Próximo service</p>
+              <strong id="overview-next-service">Sin calculo</strong>
+              <span id="overview-status-copy">Selecciona un vehiculo para ver el proximo mantenimiento.</span>
             </div>
+            <span id="overview-status-label" class="vehicle-detail-status">Sin datos</span>
+          </article>
+
+          <section class="vehicle-detail-reminders" aria-labelledby="vehicle-detail-reminders-title">
+            <div class="vehicle-detail-reminders-head">
+              <span class="vehicle-detail-reminders-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 4a4 4 0 0 1 4 4v2.4c0 1.2.4 2.4 1.2 3.3l1.1 1.4H5.7l1.1-1.4A5 5 0 0 0 8 10.4V8a4 4 0 0 1 4-4Z"/><path d="M9.5 18a2.5 2.5 0 0 0 5 0"/></svg></span>
+              <h2 id="vehicle-detail-reminders-title">Recordatorios</h2>
+              <span id="detail-reminders-count" class="vehicle-detail-reminders-count hidden" aria-label="Cantidad de recordatorios"></span>
+              <button id="detail-reminders-button" class="vehicle-detail-reminders-open" type="button" aria-label="Abrir recordatorios"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>
+            </div>
+            <div id="reminders-list" class="vehicle-detail-reminders-list">
+              <div class="vehicle-detail-empty">Selecciona un vehiculo para cargar recordatorios.</div>
+            </div>
+          </section>
+
+          <div class="vehicle-detail-actions" aria-label="Acciones del vehiculo">
+            <button id="update-km-button" class="vehicle-detail-action" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 2.6-6.4"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/></svg><span>Actualizar km</span></button>
+            <button id="hero-maintenance-button" class="vehicle-detail-action vehicle-detail-action-main" type="button"><span class="vehicle-detail-action-plus" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span><span>Cargar mantenimiento</span></button>
+            <button id="hero-history-button" class="vehicle-detail-action" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/></svg><span>Ver historial</span></button>
+          </div>
+
+          <div class="vehicle-detail-legacy-data" aria-hidden="true">
+            <span id="overview-monthly-total">$0</span>
+            <span id="overview-total-invested">$0</span>
           </div>
         </section>
 
         <section class="dashboard-grid">
-          <section id="maintenance-section" class="panel dashboard-section dashboard-section-maintenance collapsible">
-            <div class="section-head section-head-stack collapsible-header" onclick="toggleSection(this)">
+          <section id="maintenance-section" class="panel dashboard-section dashboard-section-maintenance collapsible" role="dialog" aria-modal="true" aria-labelledby="maintenance-section-title" aria-hidden="true">
+            <div class="section-head section-head-stack secondary-view-header">
               <div>
-                <h2>Cargar mantenimiento</h2>
+                <h2 id="maintenance-section-title">Cargar mantenimiento</h2>
                 <p class="section-copy">Carga un service nuevo en pocos pasos y sin perder contexto.</p>
               </div>
-              <span class="section-chevron arrow" aria-hidden="true">⌄</span>
+              <button class="modal-close secondary-view-close" type="button" data-secondary-view-close aria-label="Cerrar">
+                <span class="sr-only">Cerrar</span>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6L18 18M18 6L6 18" /></svg>
+              </button>
             </div>
 
             <div class="collapsible-content">
@@ -256,28 +304,8 @@
             </div>
           </section>
 
-          <section id="latest-records-section" class="panel dashboard-section dashboard-section-latest collapsible">
-            <div class="section-head collapsible-header" onclick="toggleSection(this, { loadOnOpen: 'latest' })">
-              <div class="history-header-copy">
-                <h2>Ultimos registros</h2>
-                <p class="section-copy">Vista rapida de los 3 mantenimientos mas recientes del vehiculo actual.</p>
-              </div>
-
-              <div class="history-header-meta">
-                <span id="latest-status-pill" class="pill">Sin consulta</span>
-                <span class="section-chevron arrow" aria-hidden="true">⌄</span>
-              </div>
-            </div>
-
-            <div class="collapsible-content">
-              <div id="latest-maintenance-list" class="cards">
-                <div class="empty">Abri este modulo para cargar los ultimos registros del vehiculo actual.</div>
-              </div>
-            </div>
-          </section>
-
-          <section id="history-section" class="panel dashboard-section dashboard-section-history collapsible">
-            <div class="section-head collapsible-header" onclick="toggleSection(this)">
+          <section id="history-section" class="panel dashboard-section dashboard-section-history collapsible" role="dialog" aria-modal="true" aria-labelledby="history-title" aria-hidden="true">
+            <div class="section-head secondary-view-header">
               <div class="history-header-copy">
                 <h2 id="history-title">Historial</h2>
                 <p id="history-copy" class="section-copy">Busca por texto o acota por fechas para encontrar algo rapido.</p>
@@ -285,7 +313,10 @@
 
               <div class="history-header-meta">
                 <span id="status-pill" class="pill">Sin consulta</span>
-                <span class="section-chevron arrow" aria-hidden="true">⌄</span>
+                <button class="modal-close secondary-view-close" type="button" data-secondary-view-close aria-label="Cerrar">
+                  <span class="sr-only">Cerrar</span>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6L18 18M18 6L6 18" /></svg>
+                </button>
               </div>
             </div>
 
@@ -762,6 +793,14 @@
           <button id="ui-modal-cancel" class="ghost hidden" type="button">Cancelar</button>
           <button id="ui-modal-confirm" type="button">Aceptar</button>
         </div>
+      </div>
+    </div>
+
+    <div id="notifications-inbox-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="notifications-inbox-title">
+      <div class="modal-content notifications-inbox-content">
+        <button class="modal-close" id="notifications-inbox-close" type="button" aria-label="Cerrar"><span class="sr-only">Cerrar</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6 18 18M18 6 6 18" /></svg></button>
+        <h2 id="notifications-inbox-title">Notificaciones</h2>
+        <p id="notifications-inbox-empty" class="section-copy">No hay notificaciones.</p>
       </div>
     </div>
 

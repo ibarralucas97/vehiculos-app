@@ -1,3 +1,8 @@
 backend/node_modules/
 backend/.env
 .DS_Store
+
+# Referencias visuales locales, fuera de los assets del producto.
+/design-reference.png
+/mis_vechiculos.png
+*:Zone.Identifier
