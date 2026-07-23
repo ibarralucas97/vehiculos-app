@@ -199,7 +199,7 @@ function renderOverview(data) {
   if (alerts.length === 0 && reminder) {
     remindersList.innerHTML = `
         <article class="vehicle-detail-reminder is-normal">
-        <div class="vehicle-detail-reminder-icon" aria-hidden="true">⌁</div>
+        <div class="vehicle-detail-reminder-icon" aria-hidden="true">${buildIconMarkup("bell")}</div>
         <div class="vehicle-detail-reminder-copy">
           <h3>${reminder.vehicleName}</h3>
           <p>${reminder.message}</p>
@@ -222,7 +222,7 @@ function renderOverview(data) {
     .map(
       (item) => `
         <article class="vehicle-detail-reminder ${statusModifier(item.status)}">
-          <div class="vehicle-detail-reminder-icon" aria-hidden="true">⌁</div>
+          <div class="vehicle-detail-reminder-icon" aria-hidden="true">${buildIconMarkup("bell")}</div>
           <div class="vehicle-detail-reminder-copy">
             <h3>${item.vehicleName}</h3>
             <p>${item.message}</p>

@@ -6,6 +6,8 @@ let vehicleModalMode = "create";
 let editingVehicleReminderId = null;
 let editingPlaceId = null;
 let editingMaintenanceId = null;
+let reopenHistoryAfterMaintenanceDetail = false;
+let maintenanceDetailTrigger = null;
 const SESSION_KEY = "mygarage_session";
 const MAINTENANCE_IMAGES_KEY = "mygarage_maintenance_images";
 const VIEW_STATE_KEY = "mygarage_view_state";
@@ -35,6 +37,25 @@ const VEHICLE_TYPE_OPTIONS = [
   { value: "camioneta", label: "Camioneta", icon: "vehicleCamioneta" },
   { value: "otro", label: "Otros", icon: "vehicleOtro" },
 ];
+
+const VEHICLE_TYPE_CONFIGS = [
+  ...VEHICLE_TYPE_OPTIONS,
+  { value: "camion", label: "Camion", icon: "vehicleCamion" },
+  { value: "colectivo", label: "Colectivo", icon: "vehicleColectivo" },
+];
+
+const VEHICLE_TYPE_ALIASES = {
+  automobile: "auto",
+  car: "auto",
+  motorcycle: "moto",
+  bike: "bicicleta",
+  bicycle: "bicicleta",
+  pickup: "camioneta",
+  "pick-up": "camioneta",
+  "pick up": "camioneta",
+  truck: "camion",
+  bus: "colectivo",
+};
 
 const VEHICLE_COLOR_OPTIONS = [
   { value: "rojo", label: "Rojo", hex: "#dc2626" },
@@ -79,7 +100,7 @@ const VEHICLE_COLOR_ALIASES = {
   neutral: "gris",
 };
 
-const VEHICLE_TYPE_MAP = Object.fromEntries(VEHICLE_TYPE_OPTIONS.map((item) => [item.value, item]));
+const VEHICLE_TYPE_MAP = Object.fromEntries(VEHICLE_TYPE_CONFIGS.map((item) => [item.value, item]));
 const VEHICLE_COLOR_MAP = Object.fromEntries(VEHICLE_COLOR_OPTIONS.map((item) => [item.value, item]));
 const DEFAULT_VEHICLE_TYPE = "otro";
 const DEFAULT_VEHICLE_COLOR = "gris";
@@ -167,7 +188,12 @@ const menuCurrentSettingsButton = document.getElementById("menu-current-settings
 const currentVehicleName = document.getElementById("current-vehicle-name");
 const currentVehicleKm = document.getElementById("current-vehicle-km");
 const vehicleKmOdometer = document.getElementById("vehicle-km-odometer");
-const vehicleDetailType = document.getElementById("vehicle-detail-type");
+const vehicleDetailTypeIcon = document.getElementById("vehicle-detail-type-icon");
+const vehicleDetailServiceIcon = document.getElementById("vehicle-detail-service-icon");
+const vehicleDetailRemindersIcon = document.getElementById("vehicle-detail-reminders-icon");
+const vehicleDetailOdometerIcon = document.getElementById("vehicle-detail-odometer-icon");
+const vehicleDetailMaintenanceIcon = document.getElementById("vehicle-detail-maintenance-icon");
+const vehicleDetailHistoryIcon = document.getElementById("vehicle-detail-history-icon");
 const detailRemindersButton = document.getElementById("detail-reminders-button");
 const updateKmButton = document.getElementById("update-km-button");
 const vehicleNavDashboardButton = document.getElementById("vehicle-nav-dashboard");
@@ -190,7 +216,6 @@ const notificationsInboxClose = document.getElementById("notifications-inbox-clo
 const heroMaintenanceButton = document.getElementById("hero-maintenance-button");
 const heroHistoryButton = document.getElementById("hero-history-button");
 const currentVehicleMeta = document.getElementById("current-vehicle-meta");
-const vehicleHeroIllustration = document.getElementById("vehicle-hero-illustration");
 const topbarBackButton = document.getElementById("topbar-back-button");
 const maintenanceSection = document.getElementById("maintenance-section");
 const historySection = document.getElementById("history-section");
@@ -286,185 +311,40 @@ let isTouchScrolling = false;
 let refreshFeedbackTimer = null;
 const TOUCH_SCROLL_THRESHOLD = 8;
 
+const tablerIcon = (paths) => `
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>
+`;
+
+// Tabler Icons v3.44.0 Outline. Original local SVG assets live in assets/icons/tabler/.
 const ICONS = {
-  themeDark: `
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" />
-    </svg>
-  `,
-  themeLight: `
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <circle cx="12" cy="12" r="4.2" />
-      <path d="M12 2.5v2.2M12 19.3v2.2M4.9 4.9l1.5 1.5M17.6 17.6l1.5 1.5M2.5 12h2.2M19.3 12h2.2M4.9 19.1l1.5-1.5M17.6 6.4l1.5-1.5" />
-    </svg>
-  `,
-  view: `
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M2.5 12s3.4-6 9.5-6 9.5 6 9.5 6-3.4 6-9.5 6-9.5-6-9.5-6Z" />
-      <circle cx="12" cy="12" r="3.2" />
-    </svg>
-  `,
-  edit: `
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M4 20h4.2l9.9-9.9-4.2-4.2L4 15.8V20Z" />
-      <path d="M12.8 6.1l4.2 4.2" />
-      <path d="M14.7 4.2l1.2-1.2a2 2 0 0 1 2.8 0l2 2a2 2 0 0 1 0 2.8l-1.2 1.2" />
-    </svg>
-  `,
-  more: `
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <circle cx="12" cy="5" r="1.7" />
-      <circle cx="12" cy="12" r="1.7" />
-      <circle cx="12" cy="19" r="1.7" />
-    </svg>
-  `,
-  delete: `
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M4 7h16" />
-      <path d="M9.5 3.5h5L15 7H9l.5-3.5Z" />
-      <path d="M7.5 7l1 13h7l1-13" />
-      <path d="M10 10.5v6M14 10.5v6" />
-    </svg>
-  `,
-  refresh: `
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M20 11a8 8 0 1 0 1.3 4.4" />
-      <path d="M20 4v6h-6" />
-    </svg>
-  `,
-  vehicle: `
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M5 15l1.5-5h11L19 15" />
-      <path d="M4 15h16" />
-      <circle cx="7.5" cy="17.5" r="1.5" />
-      <circle cx="16.5" cy="17.5" r="1.5" />
-    </svg>
-  `,
-  place: `
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M12 21s6-5.7 6-11a6 6 0 1 0-12 0c0 5.3 6 11 6 11Z" />
-      <circle cx="12" cy="10" r="2.2" />
-    </svg>
-  `,
-  maintenance: `
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M14.5 5.5a3 3 0 0 0 4 4l-9 9-4 1 1-4 9-9Z" />
-      <path d="M13 7l4 4" />
-    </svg>
-  `,
-  history: `
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M3 12a9 9 0 1 0 3-6.7" />
-      <path d="M3 4v5h5" />
-      <path d="M12 7v5l3 2" />
-    </svg>
-  `,
-  activity: `
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M4 19h16" />
-      <path d="M7 15l3-4 3 3 4-6" />
-      <circle cx="7" cy="15" r="1" />
-      <circle cx="10" cy="11" r="1" />
-      <circle cx="13" cy="14" r="1" />
-      <circle cx="17" cy="8" r="1" />
-    </svg>
-  `,
-  menu: `
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M4 7h16" />
-      <path d="M4 12h16" />
-      <path d="M4 17h16" />
-    </svg>
-  `,
-  bell: `
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M12 4a4 4 0 0 1 4 4v2.4c0 1.2.4 2.4 1.2 3.3l1.1 1.4H5.7l1.1-1.4A5 5 0 0 0 8 10.4V8a4 4 0 0 1 4-4Z" />
-      <path d="M9.5 18a2.5 2.5 0 0 0 5 0" />
-    </svg>
-  `,
-  home: `
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M4 10.5 12 4l8 6.5" />
-      <path d="M6.5 9.8V20h11V9.8" />
-    </svg>
-  `,
-  account: `
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <circle cx="12" cy="8" r="3.2" />
-      <path d="M5 19a7 7 0 0 1 14 0" />
-    </svg>
-  `,
-  settings: `
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <circle cx="12" cy="12" r="3.2" />
-      <path d="M19.2 15a1 1 0 0 0 .2 1.1l.1.1a1 1 0 0 1 0 1.4l-1 1a1 1 0 0 1-1.4 0l-.1-.1a1 1 0 0 0-1.1-.2 1 1 0 0 0-.6.9V20a1 1 0 0 1-1 1h-1.4a1 1 0 0 1-1-1v-.2a1 1 0 0 0-.7-.9 1 1 0 0 0-1.1.2l-.1.1a1 1 0 0 1-1.4 0l-1-1a1 1 0 0 1 0-1.4l.1-.1a1 1 0 0 0 .2-1.1 1 1 0 0 0-.9-.6H4a1 1 0 0 1-1-1v-1.4a1 1 0 0 1 1-1h.2a1 1 0 0 0 .9-.7 1 1 0 0 0-.2-1.1l-.1-.1a1 1 0 0 1 0-1.4l1-1a1 1 0 0 1 1.4 0l.1.1a1 1 0 0 0 1.1.2 1 1 0 0 0 .6-.9V4a1 1 0 0 1 1-1h1.4a1 1 0 0 1 1 1v.2a1 1 0 0 0 .7.9 1 1 0 0 0 1.1-.2l.1-.1a1 1 0 0 1 1.4 0l1 1a1 1 0 0 1 0 1.4l-.1.1a1 1 0 0 0-.2 1.1 1 1 0 0 0 .9.6H20a1 1 0 0 1 1 1v1.4a1 1 0 0 1-1 1h-.2a1 1 0 0 0-.9.7" />
-    </svg>
-  `,
-  logout: `
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M10 5H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4" />
-      <path d="M13 8l4 4-4 4" />
-      <path d="M9 12h8" />
-    </svg>
-  `,
-  vehicleMoto: `
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <circle cx="6.2" cy="16.8" r="2.4" />
-      <circle cx="17.8" cy="16.8" r="2.4" />
-      <path d="M7.8 16.8h4.4l2.3-5.3h2.7l1.8 2.1" />
-      <path d="M10 10.8h3.2l1.2 1.6" />
-      <path d="M12.6 16.8l-1.9-4h-2.4" />
-    </svg>
-  `,
-  vehicleAuto: `
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M5 15l1.6-4.8h10.8L19 15" />
-      <path d="M4.2 15h15.6" />
-      <path d="M8 10.2h8" />
-      <circle cx="7.5" cy="17.2" r="1.6" />
-      <circle cx="16.5" cy="17.2" r="1.6" />
-    </svg>
-  `,
-  vehicleCamioneta: `
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M3.8 14.5h11.5V9.5H9.5L7.8 12H3.8Z" />
-      <path d="M15.3 11.2h3.3l1.6 2.3v1h-4.9" />
-      <circle cx="7.1" cy="17.1" r="1.7" />
-      <circle cx="17.4" cy="17.1" r="1.7" />
-    </svg>
-  `,
-  vehicleCamion: `
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M3.5 8.8h11.8v6.3H3.5Z" />
-      <path d="M15.3 11h3.1l2.1 2.7v1.4h-5.2" />
-      <circle cx="7.3" cy="17.2" r="1.8" />
-      <circle cx="17.5" cy="17.2" r="1.8" />
-    </svg>
-  `,
-  vehicleBicicleta: `
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <circle cx="6.4" cy="16.8" r="2.5" />
-      <circle cx="17.7" cy="16.8" r="2.5" />
-      <path d="M8.7 9.6h3l2.4 7.2" />
-      <path d="M10.2 16.8h3.5l3.2-4.4" />
-      <path d="M12.2 9.6l2.2 2.6h3" />
-    </svg>
-  `,
-  vehicleColectivo: `
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M5 6.5h14v8.5H5Z" />
-      <path d="M7.2 9.2h2.8M11 9.2h2.8M14.8 9.2h2.2" />
-      <circle cx="8" cy="17.3" r="1.5" />
-      <circle cx="16" cy="17.3" r="1.5" />
-    </svg>
-  `,
-  vehicleOtro: `
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M12 3.8l7.2 4.1v8.2L12 20.2 4.8 16.1V7.9Z" />
-      <path d="M12 8.4v4.5" />
-      <circle cx="12" cy="15.9" r="0.8" />
-    </svg>
-  `,
+  themeDark: tablerIcon('<path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454l0 .008" />'),
+  themeLight: tablerIcon('<path d="M8 12a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" /><path d="M3 12h1m8 -9v1m8 8h1m-9 8v1m-6.4 -15.4l.7 .7m12.1 -.7l-.7 .7m0 11.4l.7 .7m-12.1 -.7l-.7 .7" />'),
+  view: tablerIcon('<path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" /><path d="M21 12c-2.4 4 -5.4 6 -9 6c-3.6 0 -6.6 -2 -9 -6c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6" />'),
+  edit: tablerIcon('<path d="M7 7h-1a2 2 0 0 0 -2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2 -2v-1" /><path d="M20.385 6.585a2.1 2.1 0 0 0 -2.97 -2.97l-8.415 8.385v3h3l8.385 -8.415" /><path d="M16 5l3 3" />'),
+  more: tablerIcon('<path d="M11 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" /><path d="M11 19a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" /><path d="M11 5a1 1 0 1 0 2 0a1 1 0 0 0 -2 0" />'),
+  delete: tablerIcon('<path d="M4 7l16 0" /><path d="M10 11l0 6" /><path d="M14 11l0 6" /><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" /><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" />'),
+  refresh: tablerIcon('<path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" /><path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" />'),
+  vehicle: tablerIcon('<path d="M5 17a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /><path d="M15 17a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /><path d="M5 17h-2v-6l2 -5h9l4 5h1a2 2 0 0 1 2 2v4h-2m-4 0h-6m-6 -6h15m-6 0v-5" />'),
+  place: tablerIcon('<path d="M9 11a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" /><path d="M17.657 16.657l-4.243 4.243a2 2 0 0 1 -2.827 0l-4.244 -4.243a8 8 0 1 1 11.314 0" />'),
+  maintenance: tablerIcon('<path d="M7 10h3v-3l-3.5 -3.5a6 6 0 0 1 8 8l6 6a2 2 0 0 1 -3 3l-6 -6a6 6 0 0 1 -8 -8l3.5 3.5" />'),
+  history: tablerIcon('<path d="M14 3v4a1 1 0 0 0 1 1h4" /><path d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2" /><path d="M9 17h6" /><path d="M9 13h6" />'),
+  odometer: tablerIcon('<path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" /><path d="M11 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" /><path d="M13.41 10.59l2.59 -2.59" /><path d="M7 12a5 5 0 0 1 5 -5" />'),
+  serviceDue: tablerIcon('<path d="M7 10h3v-3l-3.5 -3.5a6 6 0 0 1 8 8l6 6a2 2 0 0 1 -3 3l-6 -6a6 6 0 0 1 -8 -8l3.5 3.5" />'),
+  activity: tablerIcon('<path d="M4 19l16 0" /><path d="M4 15l4 -6l4 2l4 -5l4 4" />'),
+  menu: tablerIcon('<path d="M4 6l16 0" /><path d="M4 12l16 0" /><path d="M4 18l16 0" />'),
+  bell: tablerIcon('<path d="M10 5a2 2 0 1 1 4 0a7 7 0 0 1 4 6v3a4 4 0 0 0 2 3h-16a4 4 0 0 0 2 -3v-3a7 7 0 0 1 4 -6" /><path d="M9 17v1a3 3 0 0 0 6 0v-1" />'),
+  home: tablerIcon('<path d="M5 12l-2 0l9 -9l9 9l-2 0" /><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-7" /><path d="M9 21v-6a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v6" />'),
+  account: tablerIcon('<path d="M8 7a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" /><path d="M6 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2" />'),
+  settings: tablerIcon('<path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065" /><path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0" />'),
+  logout: tablerIcon('<path d="M14 8v-2a2 2 0 0 0 -2 -2h-7a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h7a2 2 0 0 0 2 -2v-2" /><path d="M9 12h12l-3 -3" /><path d="M18 15l3 -3" />'),
+  vehicleMoto: tablerIcon('<path d="M2 16a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" /><path d="M16 16a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" /><path d="M7.5 14h5l4 -4h-10.5m1.5 4l4 -4" /><path d="M13 6h2l1.5 3l2 4" />'),
+  vehicleAuto: tablerIcon('<path d="M5 17a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /><path d="M15 17a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /><path d="M5 17h-2v-6l2 -5h9l4 5h1a2 2 0 0 1 2 2v4h-2m-4 0h-6m-6 -6h15m-6 0v-5" />'),
+  vehicleCamioneta: tablerIcon('<path d="M5 17a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /><path d="M15 17a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /><path d="M5 17h-2v-11a1 1 0 0 1 1 -1h9v12m-4 0h6m4 0h2v-6h-8m0 -5h5l3 5" />'),
+  vehicleCamion: tablerIcon('<path d="M5 17a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /><path d="M15 17a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /><path d="M5 17h-2v-11a1 1 0 0 1 1 -1h9v12m-4 0h6m4 0h2v-6h-8m0 -5h5l3 5" />'),
+  vehicleBicicleta: tablerIcon('<path d="M2 18a3 3 0 1 0 6 0a3 3 0 0 0 -6 0" /><path d="M16 18a3 3 0 1 0 6 0a3 3 0 0 0 -6 0" /><path d="M12 19v-4l-3 -3l5 -4l2 3h3" /><path d="M13.007 5a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" />'),
+  vehicleColectivo: tablerIcon('<path d="M4 17a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /><path d="M16 17a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /><path d="M4 17h-2v-11a1 1 0 0 1 1 -1h14a5 7 0 0 1 5 7v5h-2m-4 0h-8" /><path d="M16 5l1.5 7l4.5 0" /><path d="M2 10l15 0" /><path d="M7 5l0 5" /><path d="M12 5l0 5" />'),
+  vehicleOtro: tablerIcon('<path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" /><path d="M10 12a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /><path d="M12 14l0 7" /><path d="M10 12l-6.75 -2" /><path d="M14 12l6.75 -2" />'),
+  plus: tablerIcon('<path d="M12 5l0 14" /><path d="M5 12l14 0" />'),
 };
 
 function buildFullName(user = {}) {
@@ -567,8 +447,9 @@ function buildIconMarkup(name) {
 
 
 function normalizeVehicleType(value) {
-  const normalized = String(value || "").trim().toLowerCase();
-  return VEHICLE_TYPE_MAP[normalized] ? normalized : DEFAULT_VEHICLE_TYPE;
+  const normalized = String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+  const aliased = VEHICLE_TYPE_ALIASES[normalized] || normalized;
+  return VEHICLE_TYPE_MAP[aliased] ? aliased : DEFAULT_VEHICLE_TYPE;
 }
 
 function normalizeVehicleColor(value) {
@@ -2758,15 +2639,32 @@ function openMaintenanceDetail(id) {
   const item = getMaintenanceRecord(id);
   if (!item || !maintenanceDetailModal || !maintenanceDetailBody) return;
 
+  maintenanceDetailTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  reopenHistoryAfterMaintenanceDetail = Boolean(historySection?.classList.contains("open"));
+  if (reopenHistoryAfterMaintenanceDetail) {
+    closeDashboardSections();
+  }
+
   maintenanceDetailTitle.textContent = item.accion || "Detalle de mantenimiento";
   maintenanceDetailBody.innerHTML = buildMaintenanceDetailMarkup(item);
   openModal("maintenance-detail-modal");
+  window.requestAnimationFrame(() => maintenanceDetailClose?.focus());
 }
 
 function closeMaintenanceDetail() {
   closeModal("maintenance-detail-modal");
   if (maintenanceDetailBody) {
     maintenanceDetailBody.innerHTML = "";
+  }
+
+  const shouldReopenHistory = reopenHistoryAfterMaintenanceDetail;
+  const trigger = maintenanceDetailTrigger;
+  reopenHistoryAfterMaintenanceDetail = false;
+  maintenanceDetailTrigger = null;
+
+  if (shouldReopenHistory && getCurrentView() === "dashboard") {
+    focusDashboardSection(historySection);
+    window.requestAnimationFrame(() => trigger?.focus());
   }
 }
 
@@ -2784,6 +2682,33 @@ function closeMaintenanceImageLightbox() {
     maintenanceImageLightboxImg.removeAttribute("src");
   }
   closeModal("maintenance-image-lightbox");
+}
+
+function trapFocusWithinModal(event, modal) {
+  if (event.key !== "Tab" || !modal || modal.classList.contains("hidden")) {
+    return false;
+  }
+
+  const focusable = Array.from(
+    modal.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')
+  ).filter((element) => !element.closest(".hidden"));
+
+  if (focusable.length === 0) return false;
+
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+    return true;
+  }
+  if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+    return true;
+  }
+
+  return false;
 }
 
 function editMaintenance(id) {
@@ -2808,7 +2733,7 @@ function editMaintenance(id) {
 }
 
 async function refreshMaintenanceViewsAfterMutation() {
-  if (hasActiveFilters()) {
+  if (hasActiveFilters() || isCollapsibleSectionOpen(historySection)) {
     try {
       await loadMaintenance();
     } catch (error) {
@@ -2887,6 +2812,14 @@ const [vehicles, places] = await Promise.all([
 function hasActiveFilters() {
   const formData = new FormData(filtersForm);
   return Array.from(formData.values()).some((value) => String(value).trim() !== "");
+}
+
+function sortMaintenanceByMostRecent(items) {
+  return [...items].sort((first, second) => {
+    const firstDate = Date.parse(first?.fecha || "") || 0;
+    const secondDate = Date.parse(second?.fecha || "") || 0;
+    return secondDate - firstDate;
+  });
 }
 
 
@@ -3184,10 +3117,7 @@ async function loadMaintenance() {
     historyCopy.textContent = "Resultados segun los filtros aplicados al vehiculo seleccionado.";
   } else {
     historyTitle.textContent = "Historial";
-    historyCopy.textContent = "Busca mantenimientos por texto o rango de fechas.";
-    maintenanceList.innerHTML = '<div class="empty">No hay consulta activa.</div>';
-    setStatus("Listo");
-    return;
+    historyCopy.textContent = "Cargando los ultimos mantenimientos del vehiculo seleccionado.";
   }
 
   const query = params.toString();
@@ -3200,9 +3130,15 @@ async function loadMaintenance() {
     return;
   }
 
-  renderMaintenance(items);
-  historyCopy.textContent = "Resultados segun los filtros aplicados al vehiculo seleccionado.";
-  setStatus(`${items.length} registros`);
+  const displayedItems = usingFilters
+    ? items
+    : sortMaintenanceByMostRecent(items).slice(0, 3);
+
+  renderMaintenance(displayedItems);
+  historyCopy.textContent = usingFilters
+    ? "Resultados segun los filtros aplicados al vehiculo seleccionado."
+    : `Mostrando los ultimos ${displayedItems.length} mantenimientos.`;
+  setStatus(`${displayedItems.length} registros`);
 }
 
 function sanitizeNumericValue(rawValue, { allowDecimal = false } = {}) {
@@ -4154,12 +4090,38 @@ document.addEventListener("click", (e) => {
 
   modals.forEach((modal) => {
     if (!modal.classList.contains("hidden") && e.target === modal) {
+      if (modal.id === "maintenance-image-lightbox") {
+        closeMaintenanceImageLightbox();
+        return;
+      }
+      if (modal.id === "maintenance-detail-modal") {
+        closeMaintenanceDetail();
+        return;
+      }
       closeModal(modal.id);
     }
   });
 });
 
 document.addEventListener("keydown", (event) => {
+  if (isModalOpen("maintenance-image-lightbox")) {
+    if (trapFocusWithinModal(event, maintenanceImageLightbox)) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeMaintenanceImageLightbox();
+    }
+    return;
+  }
+
+  if (isModalOpen("maintenance-detail-modal")) {
+    if (trapFocusWithinModal(event, maintenanceDetailModal)) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeMaintenanceDetail();
+    }
+    return;
+  }
+
   if (event.key !== "Escape") return;
 
   const secondaryViewOpen = [maintenanceSection, historySection]
@@ -4705,73 +4667,6 @@ function registerServiceWorker() {
 })();
 
 
-function buildVehicleIllustrationMarkup(vehicle = {}) {
-  const type = getVehicleTypeConfig(vehicle.vehicle_type).value;
-  const color = getVehicleColorConfig(vehicle.vehicle_color).hex;
-  const frames = {
-    auto: `
-      <svg viewBox="0 0 320 180" aria-hidden="true">
-        <g class="vehicle-illustration-frame">
-          <ellipse cx="96" cy="140" rx="30" ry="30" />
-          <ellipse cx="232" cy="140" rx="30" ry="30" />
-          <path class="vehicle-illustration-body" d="M58 124c6-31 22-49 45-58 17-7 83-8 109 0 19 6 31 23 39 58H58Z" style="fill:${color}" />
-          <path class="vehicle-illustration-cabin" d="M111 69h70c19 0 29 8 41 31H92c4-15 10-24 19-31Z" />
-          <path d="M70 122h180" />
-          <path d="M101 75h88" />
-        </g>
-      </svg>
-    `,
-    camioneta: `
-      <svg viewBox="0 0 320 180" aria-hidden="true">
-        <g class="vehicle-illustration-frame">
-          <ellipse cx="88" cy="140" rx="29" ry="29" />
-          <ellipse cx="236" cy="140" rx="29" ry="29" />
-          <path class="vehicle-illustration-body" d="M42 122h130V82h53c23 0 37 13 49 40H42Z" style="fill:${color}" />
-          <path class="vehicle-illustration-cabin" d="M120 88h52c12 0 26 5 37 16h-89Z" />
-          <path d="M66 122h184" />
-        </g>
-      </svg>
-    `,
-    moto: `
-      <svg viewBox="0 0 320 180" aria-hidden="true">
-        <g class="vehicle-illustration-frame">
-          <ellipse cx="90" cy="141" rx="28" ry="28" />
-          <ellipse cx="232" cy="141" rx="28" ry="28" />
-          <path class="vehicle-illustration-body" d="M126 95h41l23 23-17 16-31-22h-24l-16 22H84l25-39 17-1Z" style="fill:${color}" />
-          <path d="M166 95h32l18 19" />
-          <path d="M137 113l-19-28" />
-        </g>
-      </svg>
-    `,
-    bicicleta: `
-      <svg viewBox="0 0 320 180" aria-hidden="true">
-        <g class="vehicle-illustration-frame">
-          <ellipse cx="93" cy="141" rx="29" ry="29" />
-          <ellipse cx="229" cy="141" rx="29" ry="29" />
-          <path class="vehicle-illustration-body" d="M132 92h32l27 49h-32l-27-49Z" style="fill:${color}" />
-          <path d="M93 141 137 92l25 0" />
-          <path d="M156 141 196 108l28 0" />
-          <path d="M161 92 182 70" />
-        </g>
-      </svg>
-    `,
-    otro: `
-      <svg viewBox="0 0 320 180" aria-hidden="true">
-        <g class="vehicle-illustration-frame">
-          <ellipse cx="92" cy="141" rx="28" ry="28" />
-          <ellipse cx="230" cy="141" rx="28" ry="28" />
-          <path class="vehicle-illustration-body" d="M52 122c9-24 26-43 52-53h74c27 8 45 27 55 53H52Z" style="fill:${color}" />
-          <path class="vehicle-illustration-cabin" d="M112 76h83c14 6 24 14 31 26H93c4-11 11-20 19-26Z" />
-          <path d="M74 122h174" />
-        </g>
-      </svg>
-    `,
-  };
-
-  if (type === 'camion') return frames.otro;
-  return frames[type] || frames.otro;
-}
-
 function updateNotificationsButtonState() {
   if (!topbarNotificationsButton) return;
   topbarNotificationsButton.disabled = false;
@@ -4810,19 +4705,48 @@ function decorateMenuButtons() {
 
 }
 
+function renderVehicleDetailFunctionalIcons() {
+  if (vehicleDetailServiceIcon) {
+    vehicleDetailServiceIcon.innerHTML = buildIconMarkup("serviceDue");
+  }
+  if (vehicleDetailRemindersIcon) {
+    vehicleDetailRemindersIcon.innerHTML = buildIconMarkup("bell");
+  }
+  if (vehicleDetailOdometerIcon) {
+    vehicleDetailOdometerIcon.innerHTML = buildIconMarkup("odometer");
+  }
+  if (vehicleDetailMaintenanceIcon) {
+    vehicleDetailMaintenanceIcon.innerHTML = buildIconMarkup("plus");
+  }
+  if (vehicleDetailHistoryIcon) {
+    vehicleDetailHistoryIcon.innerHTML = buildIconMarkup("history");
+  }
+}
+
 function renderVehicleHero() {
   const vehicle = getSelectedVehicle();
   const typeConfig = getVehicleTypeConfig(vehicle?.vehicle_type);
-  const colorConfig = getVehicleColorConfig(vehicle?.vehicle_color);
+  const identity = [vehicle?.nombre, vehicle?.modelo]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .join(" - ");
+
+  if (currentVehicleName) {
+    currentVehicleName.textContent = vehicle
+      ? identity || "Vehiculo sin nombre"
+      : "Sin seleccion";
+  }
 
   if (currentVehicleMeta) {
     currentVehicleMeta.textContent = vehicle
-      ? [vehicle.patente || 'Sin patente', colorConfig.label].filter(Boolean).join(' · ')
+      ? vehicle.patente
+        ? `(${vehicle.patente})`
+        : "Sin patente"
       : 'Selecciona un vehiculo para ver su resumen.';
   }
 
-  if (vehicleDetailType) {
-    vehicleDetailType.textContent = vehicle ? typeConfig.label : 'Vehiculo';
+  if (vehicleDetailTypeIcon) {
+    vehicleDetailTypeIcon.innerHTML = vehicle ? buildIconMarkup(typeConfig.icon) : "";
   }
 
   if (vehicleKmOdometer) {
@@ -4834,11 +4758,6 @@ function renderVehicleHero() {
       .split('')
       .map((digit) => `<span>${digit}</span>`)
       .join('');
-  }
-
-  if (vehicleHeroIllustration) {
-    vehicleHeroIllustration.innerHTML = vehicle ? buildVehicleIllustrationMarkup(vehicle) : '';
-    vehicleHeroIllustration.style.setProperty('--vehicle-color', colorConfig.hex);
   }
 
   updateNotificationsButtonState();
@@ -4892,5 +4811,6 @@ topbarBackButton?.addEventListener('click', (event) => {
 }, true);
 
 decorateMenuButtons();
+renderVehicleDetailFunctionalIcons();
 renderVehicleHero();
 updateNotificationsButtonState();

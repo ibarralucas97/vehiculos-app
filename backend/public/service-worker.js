@@ -1,4 +1,4 @@
-const CACHE_NAME = "rodado-control-v15";
+const CACHE_NAME = "rodado-control-v18";
 const APP_SHELL = [
   "/",
   "/index.html",
@@ -14,6 +14,34 @@ const APP_SHELL = [
   "/apple-touch-icon.png",
   "/login-logo.png",
   "/splash-vertical.png",
+  "/assets/icons/tabler/arrow-left.svg",
+  "/assets/icons/tabler/bell.svg",
+  "/assets/icons/tabler/bike.svg",
+  "/assets/icons/tabler/bus.svg",
+  "/assets/icons/tabler/car.svg",
+  "/assets/icons/tabler/chart-line.svg",
+  "/assets/icons/tabler/chevron-right.svg",
+  "/assets/icons/tabler/dots-vertical.svg",
+  "/assets/icons/tabler/edit.svg",
+  "/assets/icons/tabler/eye.svg",
+  "/assets/icons/tabler/file-description.svg",
+  "/assets/icons/tabler/gauge.svg",
+  "/assets/icons/tabler/home.svg",
+  "/assets/icons/tabler/logout.svg",
+  "/assets/icons/tabler/map-pin.svg",
+  "/assets/icons/tabler/menu-2.svg",
+  "/assets/icons/tabler/moon.svg",
+  "/assets/icons/tabler/motorbike.svg",
+  "/assets/icons/tabler/plus.svg",
+  "/assets/icons/tabler/refresh.svg",
+  "/assets/icons/tabler/settings.svg",
+  "/assets/icons/tabler/steering-wheel.svg",
+  "/assets/icons/tabler/sun.svg",
+  "/assets/icons/tabler/tool.svg",
+  "/assets/icons/tabler/trash.svg",
+  "/assets/icons/tabler/truck.svg",
+  "/assets/icons/tabler/user.svg",
+  "/assets/icons/tabler/x.svg",
 ];
 
 self.addEventListener("install", (event) => {
