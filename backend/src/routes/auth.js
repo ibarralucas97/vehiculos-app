@@ -2,7 +2,18 @@ const express = require("express");
 const router = express.Router();
 const pool = require("../db/connection");
 const { createPasswordHash, verifyPassword } = require("../utils/password");
-const { validateRegisterPayload } = require("../utils/validation");
+const {
+  clearSessionCookie,
+  issueSession,
+  validateNumericPassword,
+  validateUsername,
+} = require("../utils/auth");
+const { requireAuth } = require("../middleware/auth");
+
+const LOGIN_ATTEMPTS = new Map();
+const MAX_FAILED_LOGIN_ATTEMPTS = 5;
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const GENERIC_LOGIN_ERROR = "Usuario o clave invalidos";
 
 function buildFullName(user) {
   const parts = [user.nombre, user.apellido].filter(Boolean);
@@ -12,6 +23,9 @@ function buildFullName(user) {
 function serializeAuthUser(user) {
   return {
     id: user.id,
+    username: user.username || "",
+    role: user.role || "user",
+    mustChangePassword: user.must_change_password === true,
     nombre: user.nombre || "",
     apellido: user.apellido || "",
     fullName: buildFullName(user),
@@ -24,77 +38,60 @@ function serializeAuthUser(user) {
   };
 }
 
-router.post("/register", async (req, res) => {
-  try {
-    const { errors, data } = validateRegisterPayload(req.body);
+function getLoginAttemptKey(req, username) {
+  return `${req.ip || req.socket?.remoteAddress || "unknown"}:${String(username || "").toLowerCase()}`;
+}
 
-    if (errors.length > 0) {
-      return res.status(400).json({ error: errors[0], errors });
-    }
-
-    const existingUser = await pool.query("SELECT id FROM users WHERE email = $1", [data.email]);
-
-    if (existingUser.rowCount > 0) {
-      return res.status(409).json({ error: "Ya existe una cuenta con ese email." });
-    }
-
-    const passwordHash = await createPasswordHash(data.password);
-    const fullName = [data.nombre, data.apellido].filter(Boolean).join(" ").trim();
-    const result = await pool.query(
-      `INSERT INTO users (
-        full_name,
-        nombre,
-        apellido,
-        email,
-        telefono,
-        mileage_unit,
-        reminders_enabled,
-        password_hash,
-        is_approved
-      )
-      VALUES ($1, $2, $3, $4, $5, 'km', TRUE, $6, FALSE)
-      RETURNING
-        id,
-        full_name,
-        nombre,
-        apellido,
-        email,
-        telefono,
-        profile_photo_url,
-        mileage_unit,
-        reminders_enabled,
-        is_approved,
-        created_at`,
-      [fullName, data.nombre, data.apellido, data.email, data.telefono, passwordHash]
-    );
-
-    res.status(201).json({
-      ok: true,
-      message: "Cuenta creada. Tu usuario queda pendiente de aprobacion.",
-      user: serializeAuthUser(result.rows[0]),
-    });
-  } catch (error) {
-    if (error?.code === "23505") {
-      return res.status(409).json({ error: "Ya existe una cuenta con ese email." });
-    }
-
-    console.error(error);
-    res.status(500).json({ error: "Error al crear la cuenta" });
+function getLoginAttemptState(key) {
+  const now = Date.now();
+  const state = LOGIN_ATTEMPTS.get(key);
+  if (!state || state.resetAt <= now) {
+    return { count: 0, resetAt: now + LOGIN_WINDOW_MS };
   }
+  return state;
+}
+
+function registerFailedLogin(key) {
+  const state = getLoginAttemptState(key);
+  LOGIN_ATTEMPTS.set(key, { count: state.count + 1, resetAt: state.resetAt });
+}
+
+function isLoginBlocked(key) {
+  const state = getLoginAttemptState(key);
+  return state.count >= MAX_FAILED_LOGIN_ATTEMPTS;
+}
+
+router.post("/register", (_req, res) => {
+  res.status(403).json({
+    error: "El registro publico esta deshabilitado. Un superadmin debe crear el usuario desde Administracion.",
+  });
 });
 
 router.post("/login", async (req, res) => {
   try {
-    const email = String(req.body.email || "").trim().toLowerCase();
-    const password = String(req.body.password || "").trim();
+    const usernameValidation = validateUsername(req.body.username);
+    const passwordValidation = validateNumericPassword(req.body.password, "Clave numerica");
+    const username = usernameValidation.username;
+    const password = passwordValidation.password;
+    const attemptKey = getLoginAttemptKey(req, username);
 
-    if (!email || !password) {
-      return res.status(400).json({ error: "Email y contrasena son obligatorios" });
+    if (usernameValidation.error || passwordValidation.error) {
+      registerFailedLogin(attemptKey);
+      return res.status(401).json({ error: GENERIC_LOGIN_ERROR });
+    }
+
+    if (isLoginBlocked(attemptKey)) {
+      return res.status(429).json({ error: "Demasiados intentos. Intenta nuevamente en unos minutos." });
     }
 
     const result = await pool.query(
       `SELECT
         id,
+        username,
+        role,
+        is_active,
+        must_change_password,
+        session_version,
         full_name,
         nombre,
         apellido,
@@ -107,25 +104,33 @@ router.post("/login", async (req, res) => {
         created_at,
         password_hash
        FROM users
-       WHERE email = $1`,
-      [email]
+       WHERE LOWER(username) = LOWER($1)
+         AND deleted_at IS NULL`,
+      [username]
     );
 
     const user = result.rows[0];
 
     if (!user) {
-      return res.status(401).json({ error: "Credenciales invalidas" });
+      registerFailedLogin(attemptKey);
+      return res.status(401).json({ error: GENERIC_LOGIN_ERROR });
     }
 
     const isValidPassword = await verifyPassword(password, user.password_hash);
 
     if (!isValidPassword) {
-      return res.status(401).json({ error: "Credenciales invalidas" });
+      registerFailedLogin(attemptKey);
+      return res.status(401).json({ error: GENERIC_LOGIN_ERROR });
     }
 
-    if (user.is_approved === false) {
-      return res.status(403).json({ error: "Tu cuenta aun esta pendiente de aprobacion." });
+    if (user.is_active === false) {
+      registerFailedLogin(attemptKey);
+      return res.status(403).json({ error: "La cuenta no esta habilitada." });
     }
+
+    LOGIN_ATTEMPTS.delete(attemptKey);
+    await pool.query("UPDATE users SET last_login_at = NOW() WHERE id = $1", [user.id]);
+    issueSession(res, user);
 
     res.json({
       ok: true,
@@ -134,6 +139,82 @@ router.post("/login", async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Error al iniciar sesion" });
+  }
+});
+
+router.post("/logout", (_req, res) => {
+  clearSessionCookie(res);
+  res.json({ ok: true });
+});
+
+router.get("/me", requireAuth({ allowPasswordChangeRequired: true }), async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT
+        id,
+        username,
+        role,
+        must_change_password,
+        full_name,
+        nombre,
+        apellido,
+        email,
+        telefono,
+        profile_photo_url,
+        mileage_unit,
+        reminders_enabled,
+        created_at
+       FROM users
+       WHERE id = $1`,
+      [req.user.id]
+    );
+
+    res.json({ ok: true, user: serializeAuthUser(result.rows[0]) });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error al obtener la sesion" });
+  }
+});
+
+router.post("/change-password", requireAuth({ allowPasswordChangeRequired: true }), async (req, res) => {
+  try {
+    const currentValidation = validateNumericPassword(req.body.current_password, "Clave actual");
+    const newValidation = validateNumericPassword(req.body.new_password, "Nueva clave");
+    const confirmPassword = String(req.body.confirm_password || "").trim();
+
+    if (currentValidation.error || newValidation.error || confirmPassword !== newValidation.password) {
+      return res.status(400).json({ error: "Las claves numericas no son validas o no coinciden" });
+    }
+
+    if (currentValidation.password === newValidation.password) {
+      return res.status(400).json({ error: "La nueva clave debe ser distinta a la actual" });
+    }
+
+    const userResult = await pool.query("SELECT id, password_hash FROM users WHERE id = $1", [req.user.id]);
+    const user = userResult.rows[0];
+    const currentPasswordMatches = await verifyPassword(currentValidation.password, user?.password_hash);
+
+    if (!currentPasswordMatches) {
+      return res.status(400).json({ error: "La clave actual es incorrecta" });
+    }
+
+    const passwordHash = await createPasswordHash(newValidation.password);
+    const updateResult = await pool.query(
+      `UPDATE users
+       SET password_hash = $1,
+           must_change_password = FALSE,
+           password_changed_at = NOW(),
+           session_version = session_version + 1
+       WHERE id = $2
+       RETURNING id, username, role, must_change_password, session_version, full_name, nombre, apellido, email, telefono, profile_photo_url, mileage_unit, reminders_enabled, created_at`,
+      [passwordHash, req.user.id]
+    );
+
+    issueSession(res, updateResult.rows[0]);
+    res.json({ ok: true, user: serializeAuthUser(updateResult.rows[0]) });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error al cambiar la clave" });
   }
 });
 

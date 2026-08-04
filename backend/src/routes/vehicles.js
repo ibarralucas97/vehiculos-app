@@ -8,6 +8,7 @@ const {
 } = require("../utils/validation");
 const { logActivity } = require("../utils/activityLog");
 const { didMileageChange } = require("../utils/vehicleMileage");
+const { uploadImageToCloudinary } = require("../utils/imageUploads");
 
 const VEHICLE_RETURNING_FIELDS = `
   id,
@@ -25,7 +26,9 @@ const VEHICLE_RETURNING_FIELDS = `
   vehicle_reminders_enabled,
   notify_days_before,
   notify_km_before,
-  km_update_reminder_days
+  km_update_reminder_days,
+  photo_url,
+  photo_public_id
 `;
 
 async function recordActivity(details) {
@@ -42,11 +45,7 @@ function formatPlateLabel(value) {
 
 router.get("/", async (req, res) => {
   try {
-    const userId = Number(req.query.user_id);
-
-    if (!userId) {
-      return res.status(400).json({ error: "user_id requerido" });
-    }
+    const userId = req.user.id;
 
     const result = await pool.query(
       `SELECT
@@ -65,7 +64,9 @@ router.get("/", async (req, res) => {
         vehicle_reminders_enabled,
         notify_days_before,
         notify_km_before,
-        km_update_reminder_days
+        km_update_reminder_days,
+        photo_url,
+        photo_public_id
        FROM vehiculos
        WHERE user_id = $1
        ORDER BY id ASC`,
@@ -87,11 +88,7 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ errors });
     }
 
-    const userId = Number(req.body.user_id);
-
-    if (!userId) {
-      return res.status(400).json({ error: "user_id requerido" });
-    }
+    const userId = req.user.id;
 
     const count = await pool.query("SELECT COUNT(*) FROM vehiculos WHERE user_id = $1", [userId]);
 
@@ -151,16 +148,12 @@ router.post("/", async (req, res) => {
 
 router.put("/:id", async (req, res) => {
   try {
-    const userId = Number(req.body.user_id);
+    const userId = req.user.id;
     const id = Number(req.params.id);
     const { errors, data } = validateVehiclePayload(req.body);
 
     if (errors.length > 0) {
       return res.status(400).json({ errors });
-    }
-
-    if (!userId) {
-      return res.status(400).json({ error: "user_id requerido" });
     }
 
     const currentResult = await pool.query(
@@ -227,15 +220,58 @@ router.put("/:id", async (req, res) => {
   }
 });
 
+router.post("/:id/photo", async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const id = Number(req.params.id);
+
+    if (!id) {
+      return res.status(400).json({ error: "vehicle_id invalido" });
+    }
+
+    const vehicleResult = await pool.query(
+      "SELECT id FROM vehiculos WHERE id = $1 AND user_id = $2",
+      [id, userId]
+    );
+
+    if (vehicleResult.rowCount === 0) {
+      return res.status(404).json({ error: "Vehiculo no encontrado" });
+    }
+
+    const upload = await uploadImageToCloudinary({
+      dataUrl: req.body.image_data_url,
+      fileName: req.body.file_name,
+      folder: "rodado-control/vehicles",
+    });
+
+    const result = await pool.query(
+      `UPDATE vehiculos
+       SET photo_url = $1,
+           photo_public_id = $2
+       WHERE id = $3 AND user_id = $4
+       RETURNING ${VEHICLE_RETURNING_FIELDS}`,
+      [upload.secureUrl, upload.publicId || null, id, userId]
+    );
+
+    res.json({
+      ok: true,
+      image: {
+        secureUrl: upload.secureUrl,
+        publicId: upload.publicId,
+      },
+      vehicle: result.rows[0],
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(400).json({ error: error.message || "No se pudo subir la imagen del vehiculo" });
+  }
+});
+
 router.patch("/:id/km", async (req, res) => {
   try {
-    const userId = Number(req.body.user_id);
+    const userId = req.user.id;
     const id = Number(req.params.id);
     const kmActual = Number(req.body.km_actual);
-
-    if (!userId) {
-      return res.status(400).json({ error: "user_id requerido" });
-    }
 
     if (
       !Number.isInteger(kmActual) ||
@@ -294,16 +330,12 @@ router.patch("/:id/km", async (req, res) => {
 
 router.patch("/:id/reminders", async (req, res) => {
   try {
-    const userId = Number(req.body.user_id);
+    const userId = req.user.id;
     const id = Number(req.params.id);
     const { errors, data } = validateVehicleReminderPayload(req.body);
 
     if (errors.length > 0) {
       return res.status(400).json({ errors });
-    }
-
-    if (!userId) {
-      return res.status(400).json({ error: "user_id requerido" });
     }
 
     const notifyDaysBefore = data.notify_days_before ?? 30;
@@ -364,12 +396,8 @@ router.delete("/:id", async (req, res) => {
   const client = await pool.connect();
 
   try {
-    const userId = Number(req.query.user_id);
+    const userId = req.user.id;
     const id = Number(req.params.id);
-
-    if (!userId) {
-      return res.status(400).json({ error: "user_id requerido" });
-    }
 
     if (!id) {
       return res.status(400).json({ error: "vehicle_id invalido" });

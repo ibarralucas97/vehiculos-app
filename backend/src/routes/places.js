@@ -17,11 +17,7 @@ async function recordActivity(details) {
 // =====================
 router.get("/", async (req, res) => {
   try {
-    const userId = Number(req.query.user_id);
-
-    if (!userId) {
-      return res.status(400).json({ error: "user_id requerido" });
-    }
+    const userId = req.user.id;
 
     const result = await pool.query(
       `SELECT id, nombre, ubicacion, contacto_nombre, contacto_numero
@@ -50,11 +46,7 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ errors });
     }
 
-    const userId = Number(req.body.user_id);
-
-    if (!userId) {
-      return res.status(400).json({ error: "user_id requerido" });
-    }
+    const userId = req.user.id;
 
     const count = await pool.query(
   "SELECT COUNT(*) FROM lugares WHERE user_id = $1",
@@ -97,14 +89,10 @@ if (Number(count.rows[0].count) >= 30) {
 
 router.put("/:id", async (req, res) => {
   try {
-    const userId = Number(req.body.user_id);
+    const userId = req.user.id;
     const id = Number(req.params.id);
 
     const { nombre, ubicacion, contacto_nombre, contacto_numero } = req.body;
-
-    if (!userId) {
-      return res.status(400).json({ error: "user_id requerido" });
-    }
 
     const result = await pool.query(
       `UPDATE lugares
@@ -145,15 +133,11 @@ router.delete("/:id", async (req, res) => {
   const client = await pool.connect();
 
   try {
-    const userId = Number(req.query.user_id);
+    const userId = req.user.id;
     const id = Number(req.params.id);
 
     if (!id) {
       return res.status(400).json({ error: "place_id invalido" });
-    }
-
-    if (!userId) {
-      return res.status(400).json({ error: "user_id requerido" });
     }
 
     await client.query("BEGIN");

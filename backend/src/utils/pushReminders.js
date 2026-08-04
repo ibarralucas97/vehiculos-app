@@ -318,4 +318,5 @@ module.exports = {
   buildReminderCandidates,
   fetchUserReminderRows,
   runReminderSweep,
+  upsertNotificationEvent,
 };

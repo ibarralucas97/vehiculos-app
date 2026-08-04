@@ -49,6 +49,26 @@ function isValidPhone(value) {
   return normalized === "" || /^[0-9+\s()\-]{6,20}$/.test(normalized);
 }
 
+function normalizeOptionalHttpsUrl(value, fieldName, errors, { allowHttp = false } = {}) {
+  const normalized = normalizeText(value);
+
+  if (!normalized) {
+    return "";
+  }
+
+  try {
+    const url = new URL(normalized);
+    if (url.protocol !== "https:" && !(allowHttp && url.protocol === "http:")) {
+      errors.push(`${fieldName} debe ser una URL https`);
+      return "";
+    }
+    return url.href;
+  } catch (_error) {
+    errors.push(`${fieldName} debe ser una URL valida`);
+    return "";
+  }
+}
+
 function parseOptionalInteger(
   value,
   fieldName,
@@ -260,7 +280,6 @@ function validateUserProfilePayload(payload) {
   const apellido = normalizeText(payload.apellido);
   const email = normalizeText(payload.email).toLowerCase();
   const telefono = normalizeText(payload.telefono);
-  const profilePhotoUrl = normalizeText(payload.profile_photo_url);
   const errors = [];
 
   if (!nombre) errors.push("nombre es obligatorio");
@@ -275,7 +294,6 @@ function validateUserProfilePayload(payload) {
       apellido,
       email,
       telefono,
-      profile_photo_url: profilePhotoUrl,
     },
   };
 }
@@ -284,6 +302,7 @@ function validateRegisterPayload(payload) {
   const nombre = normalizeText(payload.nombre);
   const apellido = normalizeText(payload.apellido);
   const email = normalizeText(payload.email).toLowerCase();
+  const username = normalizeText(payload.username);
   const telefono = normalizeText(payload.telefono);
   const password = String(payload.password || "").trim();
   const confirmPassword = String(payload.confirmPassword || "").trim();
@@ -301,10 +320,13 @@ function validateRegisterPayload(payload) {
   } else if (!isValidPhone(telefono)) {
     errors.push("telefono debe tener un formato valido");
   }
+  if (!/^[A-Za-z0-9._-]{3,32}$/.test(username)) {
+    errors.push("username debe tener 3 a 32 caracteres y solo letras, numeros, punto, guion o guion bajo");
+  }
   if (!password) {
     errors.push("password es obligatoria");
-  } else if (password.length < 6) {
-    errors.push("password debe tener al menos 6 caracteres");
+  } else if (!/^\d{6,10}$/.test(password)) {
+    errors.push("password debe tener entre 6 y 10 digitos");
   }
   if (confirmPassword !== password) {
     errors.push("confirmPassword debe coincidir con password");
@@ -316,6 +338,7 @@ function validateRegisterPayload(payload) {
       nombre,
       apellido,
       email,
+      username,
       telefono,
       password,
       confirmPassword,
@@ -348,8 +371,8 @@ function validatePasswordChangePayload(payload) {
   const errors = [];
 
   if (!currentPassword) errors.push("current_password es obligatoria");
-  if (!newPassword || newPassword.length < 6) {
-    errors.push("new_password debe tener al menos 6 caracteres");
+  if (!/^\d{6,10}$/.test(newPassword)) {
+    errors.push("new_password debe tener entre 6 y 10 digitos");
   }
   if (confirmPassword !== newPassword) {
     errors.push("confirm_password debe coincidir con new_password");
@@ -368,11 +391,95 @@ function validatePasswordChangePayload(payload) {
   };
 }
 
+function validateAdminUserPayload(payload) {
+  const username = normalizeText(payload.username);
+  const password = String(payload.password || "").trim();
+  const role = normalizeText(payload.role || "user").toLowerCase();
+  const isActive = normalizeBoolean(payload.is_active, true);
+  const email = normalizeText(payload.email).toLowerCase();
+  const nombre = normalizeText(payload.nombre);
+  const apellido = normalizeText(payload.apellido);
+  const telefono = normalizeText(payload.telefono);
+  const errors = [];
+
+  if (!/^[A-Za-z0-9._-]{3,32}$/.test(username)) {
+    errors.push("username debe tener 3 a 32 caracteres y solo letras, numeros, punto, guion o guion bajo");
+  }
+  if (!/^\d{6,10}$/.test(password)) {
+    errors.push("password debe tener entre 6 y 10 digitos");
+  }
+  if (!["user", "superadmin"].includes(role)) {
+    errors.push("role no es valido");
+  }
+  if (email && !isValidEmail(email)) {
+    errors.push("email debe ser valido");
+  }
+  if (!isValidPhone(telefono)) {
+    errors.push("telefono debe tener un formato valido");
+  }
+
+  return {
+    errors,
+    data: {
+      username,
+      password,
+      role,
+      is_active: isActive,
+      email: email || null,
+      nombre,
+      apellido,
+      telefono,
+    },
+  };
+}
+
+function validateAdminUserUpdatePayload(payload) {
+  const username = normalizeText(payload.username);
+  const role = normalizeText(payload.role || "").toLowerCase();
+  const errors = [];
+  const data = {};
+
+  if (Object.prototype.hasOwnProperty.call(payload, "username")) {
+    if (!/^[A-Za-z0-9._-]{3,32}$/.test(username)) {
+      errors.push("username debe tener 3 a 32 caracteres y solo letras, numeros, punto, guion o guion bajo");
+    } else {
+      data.username = username;
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "role")) {
+    if (!["user", "superadmin"].includes(role)) {
+      errors.push("role no es valido");
+    } else {
+      data.role = role;
+    }
+  }
+
+  return { errors, data };
+}
+
+function validateAdminResetPasswordPayload(payload) {
+  const password = String(payload.password || "").trim();
+  const errors = [];
+
+  if (!/^\d{6,10}$/.test(password)) {
+    errors.push("password debe tener entre 6 y 10 digitos");
+  }
+
+  return {
+    errors,
+    data: { password },
+  };
+}
+
 module.exports = {
   MAX_NUMERIC_FIELD_VALUE,
   isValidEmail,
   isValidPhone,
   validateMaintenancePayload,
+  validateAdminResetPasswordPayload,
+  validateAdminUserPayload,
+  validateAdminUserUpdatePayload,
   validatePasswordChangePayload,
   validatePlacePayload,
   validateRegisterPayload,

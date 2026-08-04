@@ -7,6 +7,7 @@ const {
   validateUserPreferencesPayload,
   validateUserProfilePayload,
 } = require("../utils/validation");
+const { uploadImageToCloudinary } = require("../utils/imageUploads");
 
 function parseUserRow(row) {
   const nombre = row.nombre || "";
@@ -15,6 +16,9 @@ function parseUserRow(row) {
 
   return {
     id: row.id,
+    username: row.username || "",
+    role: row.role || "user",
+    mustChangePassword: row.must_change_password === true,
     nombre,
     apellido,
     fullName,
@@ -31,6 +35,9 @@ async function getUserById(userId) {
   const result = await pool.query(
     `SELECT
       id,
+      username,
+      role,
+      must_change_password,
       full_name,
       nombre,
       apellido,
@@ -42,7 +49,7 @@ async function getUserById(userId) {
       created_at,
       password_hash
      FROM users
-     WHERE id = $1`,
+     WHERE id = $1 AND deleted_at IS NULL`,
     [userId]
   );
 
@@ -51,11 +58,7 @@ async function getUserById(userId) {
 
 router.get("/profile", async (req, res) => {
   try {
-    const userId = Number(req.query.user_id);
-
-    if (!userId) {
-      return res.status(400).json({ error: "user_id requerido" });
-    }
+    const userId = req.user.id;
 
     const user = await getUserById(userId);
 
@@ -72,12 +75,8 @@ router.get("/profile", async (req, res) => {
 
 router.put("/profile", async (req, res) => {
   try {
-    const userId = Number(req.body.user_id);
+    const userId = req.user.id;
     const { errors, data } = validateUserProfilePayload(req.body);
-
-    if (!userId) {
-      return res.status(400).json({ error: "user_id requerido" });
-    }
 
     if (errors.length > 0) {
       return res.status(400).json({ errors });
@@ -90,11 +89,14 @@ router.put("/profile", async (req, res) => {
            apellido = $2,
            full_name = $3,
            email = $4,
-           telefono = $5,
-           profile_photo_url = $6
-       WHERE id = $7
+           telefono = $5
+       WHERE id = $6
+         AND deleted_at IS NULL
        RETURNING
          id,
+         username,
+         role,
+         must_change_password,
          full_name,
          nombre,
          apellido,
@@ -110,7 +112,6 @@ router.put("/profile", async (req, res) => {
         fullName,
         data.email,
         data.telefono || null,
-        data.profile_photo_url || null,
         userId,
       ]
     );
@@ -133,14 +134,61 @@ router.put("/profile", async (req, res) => {
   }
 });
 
+router.post("/profile/photo", async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const existingUser = await getUserById(userId);
+
+    if (!existingUser) {
+      return res.status(404).json({ error: "Usuario no encontrado" });
+    }
+
+    const upload = await uploadImageToCloudinary({
+      dataUrl: req.body.image_data_url,
+      fileName: req.body.file_name,
+      folder: "rodado-control/profile",
+    });
+
+    const result = await pool.query(
+      `UPDATE users
+       SET profile_photo_url = $1
+       WHERE id = $2
+       RETURNING
+         id,
+         username,
+         role,
+         must_change_password,
+         full_name,
+         nombre,
+         apellido,
+         email,
+         telefono,
+         profile_photo_url,
+         mileage_unit,
+         reminders_enabled,
+         created_at`,
+      [upload.secureUrl, userId]
+    );
+
+    res.json({
+      ok: true,
+      image: {
+        secureUrl: upload.secureUrl,
+        publicId: upload.publicId,
+      },
+      user: parseUserRow(result.rows[0]),
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(400).json({ error: error.message || "No se pudo subir la foto de perfil" });
+  }
+});
+
 router.put("/preferences", async (req, res) => {
   try {
-    const userId = Number(req.body.user_id);
+    const userId = req.user.id;
     const { errors, data } = validateUserPreferencesPayload(req.body);
-
-    if (!userId) {
-      return res.status(400).json({ error: "user_id requerido" });
-    }
 
     if (errors.length > 0) {
       return res.status(400).json({ errors });
@@ -151,8 +199,12 @@ router.put("/preferences", async (req, res) => {
        SET mileage_unit = $1,
            reminders_enabled = $2
        WHERE id = $3
+         AND deleted_at IS NULL
        RETURNING
          id,
+         username,
+         role,
+         must_change_password,
          full_name,
          nombre,
          apellido,
@@ -181,12 +233,8 @@ router.put("/preferences", async (req, res) => {
 
 router.post("/password", async (req, res) => {
   try {
-    const userId = Number(req.body.user_id);
+    const userId = req.user.id;
     const { errors, data } = validatePasswordChangePayload(req.body);
-
-    if (!userId) {
-      return res.status(400).json({ error: "user_id requerido" });
-    }
 
     if (errors.length > 0) {
       return res.status(400).json({ errors });
@@ -206,7 +254,15 @@ router.post("/password", async (req, res) => {
 
     const passwordHash = await createPasswordHash(data.new_password);
 
-    await pool.query("UPDATE users SET password_hash = $1 WHERE id = $2", [passwordHash, userId]);
+    await pool.query(
+      `UPDATE users
+       SET password_hash = $1,
+           must_change_password = FALSE,
+           password_changed_at = NOW(),
+           session_version = session_version + 1
+       WHERE id = $2`,
+      [passwordHash, userId]
+    );
 
     res.json({ ok: true });
   } catch (error) {

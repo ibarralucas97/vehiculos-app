@@ -1,4 +1,4 @@
-const CACHE_NAME = "rodado-control-v18";
+const CACHE_NAME = "rodado-control-v20";
 const APP_SHELL = [
   "/",
   "/index.html",
@@ -30,13 +30,11 @@ const APP_SHELL = [
   "/assets/icons/tabler/logout.svg",
   "/assets/icons/tabler/map-pin.svg",
   "/assets/icons/tabler/menu-2.svg",
-  "/assets/icons/tabler/moon.svg",
   "/assets/icons/tabler/motorbike.svg",
   "/assets/icons/tabler/plus.svg",
   "/assets/icons/tabler/refresh.svg",
   "/assets/icons/tabler/settings.svg",
   "/assets/icons/tabler/steering-wheel.svg",
-  "/assets/icons/tabler/sun.svg",
   "/assets/icons/tabler/tool.svg",
   "/assets/icons/tabler/trash.svg",
   "/assets/icons/tabler/truck.svg",
@@ -72,6 +70,7 @@ const API_PREFIXES = [
   "/notifications",
   "/dashboard",
   "/users",
+  "/admin",
   "/api",
 ];
 

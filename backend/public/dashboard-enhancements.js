@@ -12,7 +12,7 @@ const uiModalCancel = document.getElementById("ui-modal-cancel");
 const uiModalConfirm = document.getElementById("ui-modal-confirm");
 const uiModalClose = document.getElementById("ui-modal-close");
 
-const hasOverviewUi = Boolean(overviewStatusLabel && overviewStatusCopy && overviewMonthlyTotal && overviewTotalInvested && overviewNextService && remindersList);
+const hasOverviewUi = Boolean(overviewStatusLabel && overviewStatusCopy && overviewMonthlyTotal && overviewTotalInvested && overviewNextService);
 
 let modalResolver = null;
 
@@ -148,7 +148,6 @@ function clearOverview() {
   overviewMonthlyTotal.textContent = formatCurrency(0);
   overviewTotalInvested.textContent = formatCurrency(0);
   overviewNextService.textContent = "Sin calculo";
-  remindersList.innerHTML = '<div class="vehicle-detail-empty">Selecciona un vehiculo para cargar recordatorios.</div>';
   renderReminderCount(0);
 }
 
@@ -189,6 +188,10 @@ function renderOverview(data) {
   }
 
   const alerts = data.alerts || [];
+
+  if (!remindersList) {
+    return;
+  }
 
   if (!remindersEnabled) {
     remindersList.innerHTML = '<div class="vehicle-detail-empty">Activa los recordatorios desde Configuracion para ver alertas aqui.</div>';
@@ -251,14 +254,16 @@ async function loadDashboardOverview() {
   overviewNextService.textContent = "Calculando";
 
   try {
-    const data = await fetchJson(`/dashboard/overview?user_id=${session.id}&vehiculo_id=${selectedVehicleId}`);
+    const data = await fetchJson(`/dashboard/overview?vehiculo_id=${selectedVehicleId}`);
     renderOverview(data);
   } catch (error) {
     overviewStatusLabel.textContent = "Error";
     overviewStatusLabel.className = "vehicle-detail-status is-atrasado";
     overviewStatusCopy.textContent = error.message;
     overviewNextService.textContent = "Sin calculo";
-    remindersList.innerHTML = `<div class="vehicle-detail-empty">${error.message}</div>`;
+    if (remindersList) {
+      remindersList.innerHTML = `<div class="vehicle-detail-empty">${error.message}</div>`;
+    }
     renderReminderCount(0);
   }
 }
@@ -384,7 +389,7 @@ deletePlace = async function patchedDeletePlace(id) {
 
   try {
     showAppLoading("Eliminando lugar...");
-    await fetchJson(`/places/${id}?user_id=${session.id}`, { method: "DELETE" });
+    await fetchJson(`/places/${id}`, { method: "DELETE" });
     await refreshAllData();
   } catch (error) {
     hideAppLoading();

@@ -10,7 +10,14 @@ const {
   saveSubscription,
   sendPushToUser,
 } = require("../utils/pushNotifications");
-const { runReminderSweep } = require("../utils/pushReminders");
+const {
+  buildReminderCandidates,
+  fetchUserReminderRows,
+  runReminderSweep,
+  upsertNotificationEvent,
+} = require("../utils/pushReminders");
+const { normalizeReminder } = require("../utils/reminders");
+const { requireAuth } = require("../middleware/auth");
 
 async function getUserNotificationPreferences(userId) {
   const result = await pool.query(
@@ -56,13 +63,9 @@ function requireCronToken(req, res) {
   return true;
 }
 
-router.get("/status", async (req, res) => {
+router.get("/status", requireAuth(), async (req, res) => {
   try {
-    const userId = Number(req.query.user_id);
-
-    if (!userId) {
-      return res.status(400).json({ error: "user_id requerido" });
-    }
+    const userId = req.user.id;
 
     const user = await getUserNotificationPreferences(userId);
 
@@ -86,13 +89,189 @@ router.get("/status", async (req, res) => {
   }
 });
 
-router.post("/subscribe", async (req, res) => {
-  try {
-    const userId = Number(req.body.user_id);
+function parseNotificationRow(row) {
+  const payload = row.payload || {};
+  const data = payload.data || {};
 
-    if (!userId) {
-      return res.status(400).json({ error: "user_id requerido" });
+  return {
+    id: row.id,
+    title: payload.title || "Rodado Control",
+    body: payload.body || "Notificacion",
+    type: row.notification_type,
+    stage: row.stage || "",
+    vehicleId: row.vehicle_id || data.vehicleId || null,
+    maintenanceId: row.maintenance_id || data.maintenanceId || null,
+    url: data.url || payload.url || "/",
+    createdAt: row.last_sent_at || row.created_at || null,
+    readAt: row.read_at || null,
+    unread: !row.read_at,
+  };
+}
+
+async function ensureReminderNotificationEvents(userId) {
+  const user = await getUserNotificationPreferences(userId);
+
+  if (!user || user.reminders_enabled === false) {
+    return { candidates: 0 };
+  }
+
+  const rows = await fetchUserReminderRows(pool, userId);
+  let candidatesCount = 0;
+
+  for (const vehicle of rows) {
+    const reminder = normalizeReminder(vehicle);
+
+    for (const candidate of buildReminderCandidates(reminder)) {
+      candidatesCount += 1;
+      await upsertNotificationEvent(pool, {
+        userId,
+        vehicleId: reminder.vehicleId,
+        notificationType: candidate.type,
+        dedupeKey: candidate.dedupeKey,
+        payload: candidate.notification,
+        stage: candidate.stage,
+        dueSnapshot: candidate.dueSnapshot,
+      });
     }
+  }
+
+  return { candidates: candidatesCount };
+}
+
+function parsePagination(query) {
+  const limitValue = query.limit === undefined ? 10 : Number(query.limit);
+  const offsetValue = query.offset === undefined ? 0 : Number(query.offset);
+  const filter = String(query.filter || "all").trim().toLowerCase();
+
+  if (!Number.isInteger(limitValue) || limitValue < 1 || limitValue > 50) {
+    return { error: "limit invalido" };
+  }
+  if (!Number.isInteger(offsetValue) || offsetValue < 0) {
+    return { error: "offset invalido" };
+  }
+  if (!["all", "unread"].includes(filter)) {
+    return { error: "filter invalido" };
+  }
+
+  return { limit: limitValue, offset: offsetValue, filter };
+}
+
+router.get("/", requireAuth(), async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const pagination = parsePagination(req.query);
+
+    if (pagination.error) {
+      return res.status(400).json({ error: pagination.error });
+    }
+
+    await ensureReminderNotificationEvents(userId);
+
+    const whereParts = ["user_id = $1"];
+    const values = [userId];
+    if (pagination.filter === "unread") {
+      whereParts.push("read_at IS NULL");
+    }
+    const whereClause = whereParts.join(" AND ");
+    const totalResult = await pool.query(
+      `SELECT COUNT(*)::int AS total
+       FROM push_notification_events
+       WHERE ${whereClause}`,
+      values
+    );
+    const unreadCountResult = await pool.query(
+      `SELECT COUNT(*)::int AS unread_count
+       FROM push_notification_events
+       WHERE user_id = $1 AND read_at IS NULL`,
+      [userId]
+    );
+    values.push(pagination.limit, pagination.offset);
+    const result = await pool.query(
+      `SELECT
+        id,
+        vehicle_id,
+        maintenance_id,
+        notification_type,
+        stage,
+        payload,
+        created_at,
+        last_sent_at,
+        read_at
+       FROM push_notification_events
+       WHERE ${whereClause}
+       ORDER BY created_at DESC, id DESC
+       LIMIT $${values.length - 1} OFFSET $${values.length}`,
+      values
+    );
+    const notifications = result.rows.map(parseNotificationRow);
+    const total = Number(totalResult.rows[0]?.total || 0);
+
+    res.json({
+      ok: true,
+      notifications,
+      pagination: {
+        limit: pagination.limit,
+        offset: pagination.offset,
+        hasMore: pagination.offset + notifications.length < total,
+        total,
+      },
+      unreadCount: Number(unreadCountResult.rows[0]?.unread_count || 0),
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error al obtener notificaciones" });
+  }
+});
+
+router.patch("/read-all", requireAuth(), async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const result = await pool.query(
+      `UPDATE push_notification_events
+       SET read_at = COALESCE(read_at, NOW())
+       WHERE user_id = $1 AND read_at IS NULL`,
+      [userId]
+    );
+
+    res.json({ ok: true, updated: result.rowCount });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error al marcar notificaciones como leidas" });
+  }
+});
+
+router.patch("/:id/read", requireAuth(), async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const id = Number(req.params.id);
+
+    if (!id) {
+      return res.status(400).json({ error: "notification_id invalido" });
+    }
+
+    const result = await pool.query(
+      `UPDATE push_notification_events
+       SET read_at = COALESCE(read_at, NOW())
+       WHERE id = $1 AND user_id = $2
+       RETURNING id, read_at`,
+      [id, userId]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Notificacion no encontrada" });
+    }
+
+    res.json({ ok: true, id: result.rows[0].id, readAt: result.rows[0].read_at });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error al marcar la notificacion como leida" });
+  }
+});
+
+router.post("/subscribe", requireAuth(), async (req, res) => {
+  try {
+    const userId = req.user.id;
 
     if (!hasPushConfiguration()) {
       return res.status(503).json({ error: "Push no configurado en el servidor" });
@@ -113,13 +292,9 @@ router.post("/subscribe", async (req, res) => {
   }
 });
 
-router.delete("/subscribe", async (req, res) => {
+router.delete("/subscribe", requireAuth(), async (req, res) => {
   try {
-    const userId = Number(req.body?.user_id || req.query.user_id);
-
-    if (!userId) {
-      return res.status(400).json({ error: "user_id requerido" });
-    }
+    const userId = req.user.id;
 
     const removed = await removeSubscription(pool, {
       userId,
@@ -135,13 +310,9 @@ router.delete("/subscribe", async (req, res) => {
   }
 });
 
-router.post("/test", async (req, res) => {
+router.post("/test", requireAuth(), async (req, res) => {
   try {
-    const userId = Number(req.body.user_id);
-
-    if (!userId) {
-      return res.status(400).json({ error: "user_id requerido" });
-    }
+    const userId = req.user.id;
 
     const result = await sendPushToUser(pool, {
       userId,

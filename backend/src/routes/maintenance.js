@@ -77,13 +77,21 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ error: imagePayload.error });
     }
 
-    const userId = Number(req.body.user_id);
-
-    if (!userId) {
-      return res.status(400).json({ error: "user_id requerido" });
-    }
+    const userId = req.user.id;
 
     await client.query("BEGIN");
+
+    const ownershipResult = await client.query(
+      `SELECT
+        EXISTS(SELECT 1 FROM vehiculos WHERE id = $1 AND user_id = $3) AS vehicle_ok,
+        EXISTS(SELECT 1 FROM lugares WHERE id = $2 AND user_id = $3) AS place_ok`,
+      [data.vehiculo_id, data.lugar_id, userId]
+    );
+
+    if (!ownershipResult.rows[0].vehicle_ok || !ownershipResult.rows[0].place_ok) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Vehiculo o lugar no encontrado" });
+    }
 
     const result = await client.query(
       `INSERT INTO mantenimiento
@@ -199,11 +207,7 @@ router.get("/", async (req, res) => {
     const conditions = [];
     const values = [];
 
-    const userId = Number(req.query.user_id);
-
-    if (!userId) {
-      return res.status(400).json({ error: "user_id requerido" });
-    }
+    const userId = req.user.id;
 
     values.push(userId);
     conditions.push(`m.user_id = $${values.length}`);
@@ -286,15 +290,11 @@ router.get("/", async (req, res) => {
 router.post("/:id/images", async (req, res) => {
   try {
     const maintenanceId = Number(req.params.id);
-    const userId = Number(req.body.user_id);
+    const userId = req.user.id;
     const imagePayload = parseMaintenanceImagePayload(req.body);
 
     if (!maintenanceId) {
       return res.status(400).json({ error: "maintenance_id invalido" });
-    }
-
-    if (!userId) {
-      return res.status(400).json({ error: "user_id requerido" });
     }
 
     if (imagePayload.error || !imagePayload.data) {
@@ -339,14 +339,10 @@ router.post("/:id/images", async (req, res) => {
 router.get("/:id/images", async (req, res) => {
   try {
     const maintenanceId = Number(req.params.id);
-    const userId = Number(req.query.user_id);
+    const userId = req.user.id;
 
     if (!maintenanceId) {
       return res.status(400).json({ error: "maintenance_id invalido" });
-    }
-
-    if (!userId) {
-      return res.status(400).json({ error: "user_id requerido" });
     }
 
     const result = await pool.query(
@@ -385,20 +381,29 @@ router.put("/:id", async (req, res) => {
 
   try {
     const maintenanceId = Number(req.params.id);
-    const userId = Number(req.body.user_id);
+    const userId = req.user.id;
     const { errors, data } = validateMaintenancePayload(req.body);
 
     if (!maintenanceId) {
       return res.status(400).json({ error: "maintenance_id invalido" });
-    }
-    if (!userId) {
-      return res.status(400).json({ error: "user_id requerido" });
     }
     if (errors.length > 0) {
       return res.status(400).json({ errors });
     }
 
     await client.query("BEGIN");
+
+    const ownershipResult = await client.query(
+      `SELECT
+        EXISTS(SELECT 1 FROM vehiculos WHERE id = $1 AND user_id = $3) AS vehicle_ok,
+        EXISTS(SELECT 1 FROM lugares WHERE id = $2 AND user_id = $3) AS place_ok`,
+      [data.vehiculo_id, data.lugar_id, userId]
+    );
+
+    if (!ownershipResult.rows[0].vehicle_ok || !ownershipResult.rows[0].place_ok) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Vehiculo o lugar no encontrado" });
+    }
 
     const result = await client.query(
       `UPDATE mantenimiento
@@ -463,14 +468,10 @@ router.put("/:id", async (req, res) => {
 router.delete("/:id", async (req, res) => {
   try {
     const maintenanceId = Number(req.params.id);
-    const userId = Number(req.query.user_id || req.body?.user_id);
+    const userId = req.user.id;
 
     if (!maintenanceId) {
       return res.status(400).json({ error: "maintenance_id invalido" });
-    }
-
-    if (!userId) {
-      return res.status(400).json({ error: "user_id requerido" });
     }
 
     const result = await pool.query(

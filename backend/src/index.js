@@ -12,9 +12,15 @@ const vehicleRoutes = require("./routes/vehicles");
 const placeRoutes = require("./routes/places");
 const notificationRoutes = require("./routes/notifications");
 const activityRoutes = require("./routes/activity");
+const adminRoutes = require("./routes/admin");
+const { requireAuth, requireSuperadmin } = require("./middleware/auth");
 
 const app = express();
 const JSON_PAYLOAD_LIMIT = "10mb";
+
+if (process.env.RENDER || process.env.TRUST_PROXY === "1") {
+  app.set("trust proxy", 1);
+}
 
 app.use(express.json({ limit: JSON_PAYLOAD_LIMIT }));
 app.use(express.urlencoded({ extended: true, limit: JSON_PAYLOAD_LIMIT }));
@@ -35,13 +41,14 @@ app.get("/", (_req, res) => {
 });
 
 app.use("/auth", authRoutes);
-app.use("/dashboard", dashboardRoutes);
-app.use("/maintenance", maintenanceRoutes);
-app.use("/users", userRoutes);
-app.use("/vehicles", vehicleRoutes);
-app.use("/places", placeRoutes);
+app.use("/dashboard", requireAuth(), dashboardRoutes);
+app.use("/maintenance", requireAuth(), maintenanceRoutes);
+app.use("/users", requireAuth(), userRoutes);
+app.use("/vehicles", requireAuth(), vehicleRoutes);
+app.use("/places", requireAuth(), placeRoutes);
 app.use("/notifications", notificationRoutes);
-app.use("/activity", activityRoutes);
+app.use("/activity", requireAuth(), activityRoutes);
+app.use("/admin", requireAuth(), requireSuperadmin, adminRoutes);
 
 app.use((error, _req, res, next) => {
   if (error?.type === "entity.too.large") {

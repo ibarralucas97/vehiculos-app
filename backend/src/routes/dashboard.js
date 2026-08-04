@@ -5,12 +5,8 @@ const { normalizeReminder } = require("../utils/reminders");
 
 router.get("/overview", async (req, res) => {
   try {
-    const userId = Number(req.query.user_id);
+    const userId = req.user.id;
     const vehicleId = Number(req.query.vehiculo_id || 0) || null;
-
-    if (!userId) {
-      return res.status(400).json({ error: "user_id requerido" });
-    }
 
     const userResult = await pool.query(
       "SELECT reminders_enabled FROM users WHERE id = $1",

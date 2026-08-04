@@ -4,12 +4,8 @@ const pool = require("../db/connection");
 
 router.get("/", async (req, res) => {
   try {
-    const userId = Number(req.query.user_id);
+    const userId = req.user.id;
     const limit = Math.min(Math.max(Number(req.query.limit || 30), 1), 100);
-
-    if (!userId) {
-      return res.status(400).json({ error: "user_id requerido" });
-    }
 
     const result = await pool.query(
       `SELECT

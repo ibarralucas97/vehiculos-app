@@ -18,6 +18,8 @@ const DEFAULT_NOTIFY_DAYS_BEFORE = 30;
 const DEFAULT_NOTIFY_KM_BEFORE = 1000;
 const DEFAULT_KM_UPDATE_REMINDER_DAYS = 7;
 const ALLOWED_MAINTENANCE_IMAGE_TYPES = new Set(["image/png", "image/jpeg"]);
+const ALLOWED_UPLOAD_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
+const ALLOWED_UPLOAD_IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "webp"]);
 const MAX_MAINTENANCE_IMAGE_FILE_BYTES = 5 * 1024 * 1024;
 const MAX_MAINTENANCE_IMAGE_DATA_URL_LENGTH = 7_000_000;
 const MAINTENANCE_IMAGE_MAX_DIMENSION = 1600;
@@ -185,6 +187,7 @@ const menuCurrentActivityButton = document.getElementById("menu-current-activity
 const menuCurrentEditButton = document.getElementById("menu-current-edit");
 const menuCurrentDeleteButton = document.getElementById("menu-current-delete");
 const menuCurrentSettingsButton = document.getElementById("menu-current-settings");
+const menuAdminButton = document.getElementById("menu-admin");
 const currentVehicleName = document.getElementById("current-vehicle-name");
 const currentVehicleKm = document.getElementById("current-vehicle-km");
 const vehicleKmOdometer = document.getElementById("vehicle-km-odometer");
@@ -212,7 +215,16 @@ const topbar = document.getElementById("app-topbar");
 const topbarTitleAction = document.getElementById("topbar-title-action");
 const topbarUserName = document.getElementById("topbar-user-name");
 const topbarNotificationsButton = document.getElementById("topbar-notifications-button");
+const topbarRemindersCount = document.getElementById("topbar-reminders-count");
 const notificationsInboxClose = document.getElementById("notifications-inbox-close");
+const notificationsInboxEmpty = document.getElementById("notifications-inbox-empty");
+const notificationsInboxList = document.getElementById("notifications-inbox-list");
+const notificationsMarkAllReadButton = document.getElementById("notifications-mark-all-read");
+const notificationsFilterAll = document.getElementById("notifications-filter-all");
+const notificationsFilterUnread = document.getElementById("notifications-filter-unread");
+const notificationsViewAllButton = document.getElementById("notifications-view-all");
+const notificationsLoadMoreButton = document.getElementById("notifications-load-more");
+const notificationsBackLatestButton = document.getElementById("notifications-back-latest");
 const heroMaintenanceButton = document.getElementById("hero-maintenance-button");
 const heroHistoryButton = document.getElementById("hero-history-button");
 const currentVehicleMeta = document.getElementById("current-vehicle-meta");
@@ -226,6 +238,8 @@ const profileAvatarPreview = document.getElementById("profile-avatar-preview");
 const profileAvatarImage = document.getElementById("profile-avatar-image");
 const profileAvatarFallback = document.getElementById("profile-avatar-fallback");
 const profileCreatedAt = document.getElementById("profile-created-at");
+const profilePhotoInput = document.getElementById("profile-photo-input");
+const profilePhotoMessage = document.getElementById("profile-photo-message");
 const preferencesForm = document.getElementById("preferences-form");
 const preferencesMessage = document.getElementById("preferences-message");
 const preferencesSaveButton = document.getElementById("preferences-save-button");
@@ -244,13 +258,9 @@ const refreshFeedback = document.getElementById("refresh-feedback");
 const refreshFeedbackText = document.getElementById("refresh-feedback-text");
 const toastStack = document.getElementById("toast-stack");
 
-const THEME_PREFERENCE_KEY = "mygarage_theme";
-const LIGHT_THEME_COLOR = "#2D6FEA";
 const DARK_THEME_COLOR = "#020B24";
 const PWA_INSTALL_DISMISS_KEY = "mygarage_pwa_install_dismissed";
-const LOGIN_LOGO_LIGHT_SRC = "/login-logo.png";
 const LOGIN_LOGO_DARK_SRC = "/splash-logo-transparent.png";
-const themeMenuButton = document.getElementById("menu-theme-toggle");
 const loginBrandLogo = document.getElementById("login-brand-logo");
 const footerYear = document.getElementById("footer-year");
 const maintenanceDetailModal = document.getElementById("maintenance-detail-modal");
@@ -261,6 +271,14 @@ const maintenanceImageLightbox = document.getElementById("maintenance-image-ligh
 const maintenanceImageLightboxImg = document.getElementById("maintenance-image-lightbox-img");
 const maintenanceImageLightboxClose = document.getElementById("maintenance-image-lightbox-close");
 const activityList = document.getElementById("activity-list");
+const adminUsersModal = document.getElementById("admin-users-modal");
+const adminUsersClose = document.getElementById("admin-users-close");
+const adminUsersList = document.getElementById("admin-users-list");
+const adminUsersSearch = document.getElementById("admin-users-search");
+const adminUsersRefresh = document.getElementById("admin-users-refresh");
+const adminUserCreateForm = document.getElementById("admin-user-create-form");
+const adminUserCreateButton = document.getElementById("admin-user-create-button");
+const adminUsersMessage = document.getElementById("admin-users-message");
 const settingsPushState = document.getElementById("settings-push-state");
 const settingsPushCopy = document.getElementById("settings-push-copy");
 const settingsPermissionState = document.getElementById("settings-permission-state");
@@ -279,6 +297,10 @@ const vehicleRemindersMessage = document.getElementById("vehicle-reminders-messa
 const vehicleRemindersSummaryDate = document.getElementById("vehicle-reminders-summary-date");
 const vehicleRemindersSummaryKm = document.getElementById("vehicle-reminders-summary-km");
 const vehicleRemindersSummaryNote = document.getElementById("vehicle-reminders-summary-note");
+const vehiclePhotoInput = document.getElementById("vehicle-photo-input");
+const vehiclePhotoPreviewImg = document.getElementById("vehicle-photo-preview-img");
+const vehiclePhotoPreviewFallback = document.getElementById("vehicle-photo-preview-fallback");
+const vehiclePhotoMessage = document.getElementById("vehicle-photo-message");
 const themeColorMeta = document.querySelector('meta[name="theme-color"]');
 
 let maintenanceImageRefs = getMaintenanceImageRefs();
@@ -286,6 +308,20 @@ let currentMaintenanceRecords = new Map();
 let notificationsServerStatus = null;
 let notificationStateLoading = false;
 let notificationsLastSyncAt = null;
+let currentNotifications = [];
+let notificationsState = {
+  filter: "all",
+  expanded: false,
+  limit: 10,
+  offset: 0,
+  hasMore: false,
+  loading: false,
+  unreadCount: 0,
+};
+let selectedProfilePhotoFile = null;
+let selectedProfilePhotoDataUrl = "";
+let selectedVehiclePhotoFile = null;
+let selectedVehiclePhotoDataUrl = "";
 let toastId = 0;
 let authMode = "login";
 let placesViewMode = "list";
@@ -379,6 +415,9 @@ function normalizeSessionUser(user = {}) {
     nombre: user.nombre || "",
     apellido: user.apellido || "",
     telefono: user.telefono || "",
+    username: user.username || "",
+    role: user.role || "user",
+    mustChangePassword: user.mustChangePassword === true || user.must_change_password === true,
     profilePhotoUrl: user.profilePhotoUrl || user.profile_photo_url || "",
     mileageUnit: user.mileageUnit || user.mileage_unit || "km",
     remindersEnabled:
@@ -410,6 +449,8 @@ function saveSession(user) {
 
 function clearSession() {
   localStorage.removeItem(SESSION_KEY);
+  currentNotifications = [];
+  setTopbarUnreadBadge(0);
 }
 
 function getMaintenanceImageRefs() {
@@ -424,21 +465,8 @@ function saveMaintenanceImageRefs() {
   localStorage.setItem(MAINTENANCE_IMAGES_KEY, JSON.stringify(maintenanceImageRefs));
 }
 
-function getSavedTheme() {
-  try {
-    return localStorage.getItem(THEME_PREFERENCE_KEY);
-  } catch (_error) {
-    return null;
-  }
-}
-
 function getPreferredTheme() {
-  const savedTheme = getSavedTheme();
-  if (savedTheme === "dark" || savedTheme === "light") {
-    return savedTheme;
-  }
-
-  return window.matchMedia?.("(prefers-color-scheme: dark)")?.matches ? "dark" : "light";
+  return "dark";
 }
 
 function buildIconMarkup(name) {
@@ -480,7 +508,17 @@ function normalizeVehicleRecord(vehicle = {}) {
     vehicle_type: normalizeVehicleType(vehicle.vehicle_type),
     vehicle_color: colorState.normalized,
     vehicle_color_hex: colorState.hex,
+    photo_url: vehicle.photo_url || vehicle.photoUrl || "",
+    photo_public_id: vehicle.photo_public_id || vehicle.photoPublicId || "",
   };
+}
+
+function handleVehicleThumbError(image) {
+  const wrapper = image?.closest(".vehicle-card-media");
+  if (!wrapper) return;
+  image.removeAttribute("src");
+  image.classList.add("hidden");
+  wrapper.classList.add("is-fallback");
 }
 
 function getVehicleTypeConfig(value) {
@@ -727,6 +765,319 @@ function formatDateTimeLabel(value) {
   });
 }
 
+function getUploadImageSizeMessage() {
+  return "La imagen es demasiado grande. Proba con una imagen menor a 5 MB.";
+}
+
+function validateUploadImageFile(file) {
+  if (!file) {
+    return { ok: true, message: "" };
+  }
+
+  const mimeType = String(file.type || "").toLowerCase();
+  const extension = String(file.name || "").trim().toLowerCase().split(".").pop();
+
+  if (!ALLOWED_UPLOAD_IMAGE_TYPES.has(mimeType) || !ALLOWED_UPLOAD_IMAGE_EXTENSIONS.has(extension || "")) {
+    return { ok: false, message: "Solo se permiten imagenes PNG, JPG, JPEG o WEBP." };
+  }
+
+  if (file.size > MAX_MAINTENANCE_IMAGE_FILE_BYTES) {
+    return { ok: false, message: getUploadImageSizeMessage() };
+  }
+
+  return { ok: true, message: "" };
+}
+
+async function prepareUploadImageData(file) {
+  const validation = validateUploadImageFile(file);
+
+  if (!validation.ok) {
+    throw new Error(validation.message);
+  }
+
+  return prepareMaintenanceImageData(file);
+}
+
+async function uploadImageData({ endpoint, file, dataUrl, userId }) {
+  const response = await fetchJson(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({      file_name: file?.name || "",
+      image_data_url: dataUrl,
+    }),
+  });
+
+  return response;
+}
+
+function setTopbarUnreadBadge(unreadCount = 0) {
+  if (!topbarRemindersCount) return;
+
+  const count = Math.max(Number(unreadCount) || 0, 0);
+
+  if (count === 0) {
+    topbarRemindersCount.textContent = "";
+    topbarRemindersCount.classList.add("hidden");
+    topbarRemindersCount.removeAttribute("title");
+    return;
+  }
+
+  topbarRemindersCount.textContent = count > 9 ? "+9" : String(count);
+  topbarRemindersCount.classList.remove("hidden");
+  topbarRemindersCount.setAttribute("aria-label", `${count} notificaciones no leidas`);
+  topbarRemindersCount.setAttribute("title", `${count} notificaciones no leidas`);
+}
+
+function formatNotificationTime(value) {
+  if (!value) return "Sin fecha";
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Sin fecha";
+  }
+
+  return date.toLocaleString("es-AR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function renderNotificationsInbox() {
+  if (!notificationsInboxList || !notificationsInboxEmpty) return;
+
+  notificationsInboxEmpty.textContent = notificationsState.filter === "unread"
+    ? "No tenés notificaciones sin leer"
+    : "No hay notificaciones.";
+  notificationsInboxEmpty.classList.toggle("hidden", currentNotifications.length > 0);
+  notificationsInboxList.innerHTML = currentNotifications.map((notification) => `
+    <button
+      class="notification-item${notification.unread ? " is-unread" : " is-read"}"
+      type="button"
+      data-notification-id="${Number(notification.id)}"
+    >
+      <span class="notification-state-dot" aria-hidden="true"></span>
+      <span class="notification-copy">
+        <strong>
+          ${escapeHtml(notification.title || "Rodado Control")}
+          ${notification.unread ? '<span class="notification-new-label">Nueva</span>' : ""}
+        </strong>
+        <span>${escapeHtml(notification.body || "Notificacion")}</span>
+        <time datetime="${escapeHtml(notification.createdAt || "")}">${escapeHtml(formatNotificationTime(notification.createdAt))}</time>
+      </span>
+    </button>
+  `).join("");
+
+  notificationsMarkAllReadButton?.toggleAttribute(
+    "disabled",
+    notificationsState.unreadCount === 0
+  );
+  notificationsFilterAll?.classList.toggle("is-active", notificationsState.filter === "all");
+  notificationsFilterUnread?.classList.toggle("is-active", notificationsState.filter === "unread");
+  notificationsFilterAll?.setAttribute("aria-pressed", String(notificationsState.filter === "all"));
+  notificationsFilterUnread?.setAttribute("aria-pressed", String(notificationsState.filter === "unread"));
+  notificationsViewAllButton?.classList.toggle("hidden", notificationsState.expanded || !notificationsState.hasMore);
+  notificationsLoadMoreButton?.classList.toggle("hidden", !notificationsState.expanded || !notificationsState.hasMore);
+  notificationsBackLatestButton?.classList.toggle("hidden", !notificationsState.expanded);
+}
+
+async function loadNotificationsInbox({ append = false, expanded = notificationsState.expanded } = {}) {
+  const session = getSession();
+
+  if (!session?.id || notificationsState.loading) {
+    currentNotifications = [];
+    setTopbarUnreadBadge(0);
+    renderNotificationsInbox();
+    return;
+  }
+
+  notificationsState.loading = true;
+  notificationsState.expanded = Boolean(expanded);
+  notificationsState.limit = notificationsState.expanded ? 25 : 10;
+  const offset = append ? currentNotifications.length : 0;
+
+  try {
+    const params = new URLSearchParams({
+      limit: String(notificationsState.limit),
+      offset: String(offset),
+      filter: notificationsState.filter,
+    });
+    const response = await fetchJson(`/notifications?${params.toString()}`);
+    const incoming = Array.isArray(response.notifications) ? response.notifications : [];
+    currentNotifications = append ? [...currentNotifications, ...incoming] : incoming;
+    notificationsState.hasMore = Boolean(response.pagination?.hasMore);
+    notificationsState.unreadCount = Number(response.unreadCount || 0);
+    setTopbarUnreadBadge(notificationsState.unreadCount);
+  } finally {
+    notificationsState.loading = false;
+    renderNotificationsInbox();
+  }
+}
+
+async function markNotificationRead(id) {
+  const session = getSession();
+
+  if (!session?.id || !id) return;
+
+  await fetchJson(`/notifications/${id}/read`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+  currentNotifications = currentNotifications
+    .map((notification) =>
+      Number(notification.id) === Number(id)
+        ? { ...notification, unread: false, readAt: notification.readAt || new Date().toISOString() }
+        : notification
+    )
+    .filter((notification) => notificationsState.filter !== "unread" || notification.unread);
+  notificationsState.unreadCount = Math.max(notificationsState.unreadCount - 1, 0);
+  setTopbarUnreadBadge(notificationsState.unreadCount);
+  renderNotificationsInbox();
+  await loadNotificationsInbox();
+}
+
+async function markAllNotificationsRead() {
+  const session = getSession();
+
+  if (!session?.id) return;
+
+  await fetchJson("/notifications/read-all", {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+  currentNotifications = notificationsState.filter === "unread"
+    ? []
+    : currentNotifications.map((notification) => ({
+        ...notification,
+        unread: false,
+        readAt: notification.readAt || new Date().toISOString(),
+      }));
+  notificationsState.unreadCount = 0;
+  setTopbarUnreadBadge(0);
+  renderNotificationsInbox();
+  await loadNotificationsInbox();
+}
+
+function renderAdminUsers(users = []) {
+  if (!adminUsersList) return;
+
+  if (!users.length) {
+    adminUsersList.innerHTML = '<div class="empty">No hay usuarios para mostrar.</div>';
+    return;
+  }
+
+  adminUsersList.innerHTML = users.map((user) => `
+    <article class="admin-user-item" data-admin-user-id="${Number(user.id)}">
+      <div class="admin-user-main">
+        <strong>${escapeHtml(user.username || "usuario")}</strong>
+        <span>${escapeHtml(user.fullName || user.email || "Sin datos de contacto")}</span>
+        <small>${escapeHtml(user.email || "")}</small>
+      </div>
+      <div class="admin-user-badges">
+        <span class="status-badge">${escapeHtml(user.role || "user")}</span>
+        <span class="status-badge ${user.isActive ? "is-normal" : "is-atrasado"}">${user.isActive ? "Activo" : "Desactivado"}</span>
+        ${user.mustChangePassword ? '<span class="status-badge is-proximo">Cambio pendiente</span>' : ""}
+      </div>
+      <div class="admin-user-actions">
+        <button class="ghost" type="button" data-admin-action="${user.isActive ? "deactivate" : "activate"}">${user.isActive ? "Desactivar" : "Activar"}</button>
+        <button class="ghost" type="button" data-admin-action="reset-password">Blanquear clave</button>
+        <button class="ghost" type="button" data-admin-action="edit-username">Editar usuario</button>
+        <button class="ghost" type="button" data-admin-action="delete">Eliminar</button>
+      </div>
+    </article>
+  `).join("");
+}
+
+async function loadAdminUsers() {
+  if (!adminUsersList) return;
+  adminUsersList.innerHTML = '<div class="empty">Cargando usuarios...</div>';
+  const params = new URLSearchParams({ limit: "25", offset: "0" });
+  const search = String(adminUsersSearch?.value || "").trim();
+  if (search) params.set("search", search);
+
+  try {
+    const response = await fetchJson(`/admin/users?${params.toString()}`);
+    renderAdminUsers(Array.isArray(response.users) ? response.users : []);
+    if (adminUsersMessage) adminUsersMessage.textContent = "";
+  } catch (error) {
+    adminUsersList.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+function openAdminUsersModal() {
+  closeMenu();
+  openModal("admin-users-modal");
+  loadAdminUsers();
+}
+
+async function handleAdminUserAction(userId, action) {
+  const item = adminUsersList?.querySelector(`[data-admin-user-id="${userId}"]`);
+  const username = item?.querySelector(".admin-user-main strong")?.textContent || "este usuario";
+  const confirmLabels = {
+    activate: ["Activar usuario", `Vas a activar <strong>${escapeHtml(username)}</strong>.`, "Activar"],
+    deactivate: ["Desactivar usuario", `Vas a desactivar <strong>${escapeHtml(username)}</strong> y sus sesiones dejaran de servir.`, "Desactivar"],
+    delete: ["Eliminar usuario", `Solo se eliminara si no tiene datos asociados. Confirmas eliminar <strong>${escapeHtml(username)}</strong>?`, "Eliminar"],
+  };
+
+  if (action === "reset-password") {
+    const temporaryPassword = window.prompt("Nueva clave numerica temporal (6 a 10 digitos)");
+    if (!temporaryPassword) return;
+    await fetchJson(`/admin/users/${userId}/reset-password`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: temporaryPassword }),
+    });
+    showToast("Clave blanqueada", { tone: "success" });
+    await loadAdminUsers();
+    return;
+  }
+
+  if (action === "edit-username") {
+    const nextUsername = window.prompt("Nuevo nombre de usuario", username);
+    if (!nextUsername) return;
+    await fetchJson(`/admin/users/${userId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: nextUsername.trim() }),
+    });
+    showToast("Usuario actualizado", { tone: "success" });
+    await loadAdminUsers();
+    return;
+  }
+
+  const [title, bodyHtml, confirmLabel] = confirmLabels[action] || [];
+  if (!title) return;
+  const confirmed = await openUiModal({
+    title,
+    bodyHtml: `<p>${bodyHtml}</p>`,
+    confirmLabel,
+    cancelLabel: "Cancelar",
+    showCancel: true,
+    destructive: action !== "activate",
+  });
+  if (!confirmed) return;
+
+  if (action === "delete") {
+    await fetchJson(`/admin/users/${userId}`, { method: "DELETE" });
+  } else {
+    await fetchJson(`/admin/users/${userId}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ is_active: action === "activate" }),
+    });
+  }
+  showToast("Accion administrativa aplicada", { tone: "success" });
+  await loadAdminUsers();
+}
+
 function dismissToast(id) {
   const toast = document.querySelector(`[data-toast-id="${id}"]`);
   if (!toast) return;
@@ -872,7 +1223,7 @@ async function loadActivityHistory() {
     body: "Estamos consultando las acciones recientes de tu cuenta.",
   });
 
-  const items = await fetchJson(`/activity?user_id=${session.id}&limit=40`);
+  const items = await fetchJson(`/activity?limit=40`);
 
   if (!Array.isArray(items) || items.length === 0) {
     activityList.innerHTML = buildEmptyStateMarkup({
@@ -976,54 +1327,28 @@ async function refreshCurrentContext({ silent = false } = {}) {
   }
 }
 
-function updateThemeMenuButton(theme = document.body.dataset.theme) {
-  if (!themeMenuButton) return;
-
-  const isDark = theme === "dark";
-  const nextLabel = isDark ? "Modo claro" : "Modo oscuro";
-  const nextIcon = isDark ? "themeLight" : "themeDark";
-
-  themeMenuButton.setAttribute("aria-pressed", String(isDark));
-  themeMenuButton.setAttribute("aria-label", `Cambiar a ${nextLabel.toLowerCase()}`);
-  themeMenuButton.innerHTML = `
-    <span class="menu-button-icon" aria-hidden="true">${buildIconMarkup(nextIcon)}</span>
-    <span class="menu-button-label">${nextLabel}</span>
-  `;
-}
-
 function syncLoginBrandLogo(theme = document.body.dataset.theme) {
   if (!loginBrandLogo) return;
 
-  const nextSrc = theme === "dark" ? LOGIN_LOGO_DARK_SRC : LOGIN_LOGO_LIGHT_SRC;
+  const nextSrc = LOGIN_LOGO_DARK_SRC;
   if (!loginBrandLogo.getAttribute("src") || loginBrandLogo.getAttribute("src") !== nextSrc) {
     loginBrandLogo.setAttribute("src", nextSrc);
   }
 }
 
-function applyTheme(theme) {
-  const resolvedTheme = theme === "dark" ? "dark" : "light";
-  document.body.dataset.theme = resolvedTheme;
-  updateThemeMenuButton(resolvedTheme);
-  syncLoginBrandLogo(resolvedTheme);
+function applyTheme() {
+  document.body.dataset.theme = "dark";
+  syncLoginBrandLogo("dark");
 
   if (themeColorMeta) {
-    themeColorMeta.setAttribute("content", resolvedTheme === "dark" ? DARK_THEME_COLOR : LIGHT_THEME_COLOR);
+    themeColorMeta.setAttribute("content", DARK_THEME_COLOR);
   }
-}
 
-function persistTheme(theme) {
   try {
-    localStorage.setItem(THEME_PREFERENCE_KEY, theme);
+    localStorage.removeItem("mygarage_theme");
   } catch (_error) {
     // Ignore storage issues on private sessions.
   }
-}
-
-function toggleTheme() {
-  const nextTheme = document.body.dataset.theme === "dark" ? "light" : "dark";
-  persistTheme(nextTheme);
-  applyTheme(nextTheme);
-  closeMenu();
 }
 
 function syncFooterYear() {
@@ -1107,7 +1432,7 @@ async function fetchNotificationServerStatus() {
     return null;
   }
 
-  const status = await fetchJson(`/notifications/status?user_id=${session.id}`);
+  const status = await fetchJson(`/notifications/status`);
   notificationsServerStatus = status;
   notificationsLastSyncAt = new Date().toISOString();
   return status;
@@ -1219,9 +1544,7 @@ async function enablePushNotifications() {
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      user_id: session.id,
-      subscription: subscription.toJSON(),
+    body: JSON.stringify({      subscription: subscription.toJSON(),
       device_info: buildDeviceInfo(),
     }),
   });
@@ -1243,9 +1566,7 @@ async function disablePushNotifications() {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        user_id: session.id,
-        endpoint: subscription.endpoint,
+      body: JSON.stringify({        endpoint: subscription.endpoint,
       }),
     });
 
@@ -1288,9 +1609,7 @@ async function sendPushTestNotification() {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        user_id: session.id,
-      }),
+      body: JSON.stringify({      }),
     });
 
     setNotificationStatus("Notificacion de prueba enviada.", "success");
@@ -1359,6 +1678,12 @@ function resetVehicleFormState() {
   if (vehicleColorInput) {
     vehicleColorInput.value = DEFAULT_VEHICLE_COLOR;
   }
+  selectedVehiclePhotoFile = null;
+  selectedVehiclePhotoDataUrl = "";
+  if (vehiclePhotoInput) vehiclePhotoInput.value = "";
+  if (vehicleForm?.elements.photo_url) vehicleForm.elements.photo_url.value = "";
+  if (vehicleForm?.elements.photo_public_id) vehicleForm.elements.photo_public_id.value = "";
+  renderVehiclePhotoPreview(null);
   syncVehicleVisualSelectors();
   if (vehicleSaveButton) {
     vehicleSaveButton.textContent = "Crear vehiculo";
@@ -1411,7 +1736,33 @@ function populateVehicleForm(vehicle) {
   document.querySelector("#vehicle-form [name=intervalo_km]").value = vehicle.intervalo_km ?? "";
   document.querySelector("#vehicle-form [name=fecha_ultimo_service]").value = vehicle.fecha_ultimo_service ? String(vehicle.fecha_ultimo_service).slice(0, 10) : "";
   document.querySelector("#vehicle-form [name=intervalo_tiempo]").value = vehicle.intervalo_tiempo ?? "";
+  document.querySelector("#vehicle-form [name=photo_url]").value = vehicle.photo_url || "";
+  document.querySelector("#vehicle-form [name=photo_public_id]").value = vehicle.photo_public_id || "";
+  renderVehiclePhotoPreview(vehicle.photo_url || "");
   syncVehicleVisualSelectors();
+}
+
+function renderVehiclePhotoPreview(photoUrl) {
+  const hasPhoto = Boolean(photoUrl);
+
+  if (vehiclePhotoPreviewImg) {
+    if (hasPhoto) {
+      vehiclePhotoPreviewImg.src = photoUrl;
+      vehiclePhotoPreviewImg.classList.remove("hidden");
+    } else {
+      vehiclePhotoPreviewImg.removeAttribute("src");
+      vehiclePhotoPreviewImg.classList.add("hidden");
+    }
+  }
+
+  if (vehiclePhotoPreviewFallback) {
+    vehiclePhotoPreviewFallback.innerHTML = buildIconMarkup("vehicle");
+    vehiclePhotoPreviewFallback.classList.toggle("hidden", hasPhoto);
+  }
+
+  if (vehiclePhotoMessage) {
+    vehiclePhotoMessage.textContent = hasPhoto ? "Foto actual del vehiculo." : "Opcional. PNG, JPG o WEBP hasta 5 MB.";
+  }
 }
 
 function openVehicleCreateModal() {
@@ -1605,14 +1956,14 @@ function openCurrentVehicleSettings() {
   openVehicleEditModal(selectedVehicle.id);
 }
 
-function updateAuthModeUI(isLoggedIn = Boolean(normalizeSessionUser(getSession() || {}).email)) {
-  const isRegisterView = !isLoggedIn && authMode === "register";
+function updateAuthModeUI(isLoggedIn = Boolean(normalizeSessionUser(getSession() || {}).username || normalizeSessionUser(getSession() || {}).email)) {
+  const isRegisterView = false;
 
   loginForm?.classList.toggle("hidden", isLoggedIn || isRegisterView);
   registerForm?.classList.toggle("hidden", isLoggedIn || !isRegisterView);
   loginMessage?.classList.toggle("hidden", isLoggedIn || isRegisterView);
   registerMessage?.classList.toggle("hidden", isLoggedIn || !isRegisterView);
-  showRegisterButton?.classList.toggle("hidden", isLoggedIn || isRegisterView);
+  showRegisterButton?.classList.add("hidden");
   showLoginButton?.classList.toggle("hidden", isLoggedIn || !isRegisterView);
 
   if (authKicker) {
@@ -1624,14 +1975,12 @@ function updateAuthModeUI(isLoggedIn = Boolean(normalizeSessionUser(getSession()
   }
 
   if (!isLoggedIn && sessionCopy) {
-    sessionCopy.textContent = isRegisterView
-      ? "Completa tus datos para solicitar acceso. Te avisaremos cuando la cuenta quede aprobada."
-      : "Ingresa para seguir con tus vehiculos.";
+    sessionCopy.textContent = "Ingresa para seguir con tus vehiculos.";
   }
 }
 
 function setAuthMode(mode, { preserveMessages = false } = {}) {
-  authMode = mode === "register" ? "register" : "login";
+  authMode = "login";
 
   if (!preserveMessages) {
     if (loginMessage) loginMessage.textContent = "";
@@ -1644,32 +1993,33 @@ function setAuthMode(mode, { preserveMessages = false } = {}) {
 function validateRegisterForm(payload) {
   if (!payload.nombre) return "Completa tu nombre.";
   if (!payload.apellido) return "Completa tu apellido.";
+  if (!/^[A-Za-z0-9._-]{3,32}$/.test(payload.username || "")) return "Ingresa un usuario valido de 3 a 32 caracteres.";
   if (!payload.email) return "Completa tu email.";
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email)) return "Ingresa un email valido.";
   if (!payload.telefono) return "Completa tu telefono.";
-  if (!payload.password) return "Completa tu contrasena.";
-  if (payload.password.length < 6) return "La contrasena debe tener al menos 6 caracteres.";
-  if (payload.password !== payload.confirmPassword) return "Las contrasenas no coinciden.";
+  if (!/^\d{6,10}$/.test(payload.password || "")) return "La clave debe tener entre 6 y 10 digitos.";
+  if (payload.password !== payload.confirmPassword) return "Las claves no coinciden.";
   return "";
 }
 
 function updateSessionUI() {
   const session = normalizeSessionUser(getSession() || {});
-  const isLoggedIn = Boolean(session?.email);
+  const isLoggedIn = Boolean(session?.username || session?.email);
   const currentView = getCurrentView();
   const hasCurrentVehicle = Boolean(selectedVehicleId) && (currentVehicles.length === 0 || Boolean(getSelectedVehicle()));
 
   topbar?.classList.toggle("hidden", !isLoggedIn);
+  menuAdminButton?.classList.toggle("hidden", session.role !== "superadmin");
   sessionBox.classList.toggle("hidden", !isLoggedIn);
   logoutButton.classList.add("hidden");
   updateAuthModeUI(isLoggedIn);
 
   if (isLoggedIn) {
     const fullName = buildFullName(session);
-    sessionEmail.textContent = fullName ? `${fullName} - ${session.email}` : session.email;
+    sessionEmail.textContent = fullName ? `${fullName} - ${session.username || session.email}` : (session.username || session.email);
     if (topbarUserName) {
       topbarUserName.textContent = getUserDisplayName(session);
-      topbarUserName.title = fullName || session.email || "";
+      topbarUserName.title = fullName || session.username || session.email || "";
     }
 
     sessionCopy.textContent = "";
@@ -1951,7 +2301,7 @@ async function fetchCurrentProfile() {
     throw new Error("No hay una sesion activa.");
   }
 
-  const profile = await fetchJson(`/users/profile?user_id=${session.id}`);
+  const profile = await fetchJson(`/users/profile`);
   syncSession(profile);
   return normalizeSessionUser(profile);
 }
@@ -1991,6 +2341,17 @@ async function openSettingsModal() {
 function openGlobalNotificationsModal() {
   closeMenu();
   openModal("notifications-inbox-modal");
+  notificationsState.expanded = false;
+  if (notificationsInboxEmpty) {
+    notificationsInboxEmpty.textContent = "Cargando notificaciones...";
+    notificationsInboxEmpty.classList.remove("hidden");
+  }
+  loadNotificationsInbox().catch((error) => {
+    if (notificationsInboxEmpty) {
+      notificationsInboxEmpty.textContent = error.message || "No se pudieron cargar las notificaciones.";
+      notificationsInboxEmpty.classList.remove("hidden");
+    }
+  });
 }
 
 function showNotAvailable() {
@@ -2044,6 +2405,7 @@ async function fetchJson(url, options = {}) {
   const method = String(options?.method || "GET").toUpperCase();
   const requestOptions = {
     ...options,
+    credentials: "same-origin",
     headers: {
       Accept: "application/json",
       ...(options.headers || {}),
@@ -2072,6 +2434,10 @@ async function fetchJson(url, options = {}) {
 
   if (!response.ok) {
     console.error("[API ERROR]", method, requestUrl, response.status, data);
+    if (response.status === 401 && !String(requestUrl).startsWith("/auth/login")) {
+      clearSession();
+      updateSessionUI();
+    }
     const message = Array.isArray(data?.errors)
       ? data.errors.join(", ")
       : data?.message || data?.error || (response.status === 413 ? getMaintenanceImageSizeMessage() : `Error ${response.status}`) || "Ocurrio un error";
@@ -2193,6 +2559,10 @@ function fillProfileForm(user) {
   profileForm.elements.email.value = user.email || "";
   profileForm.elements.telefono.value = user.telefono || "";
   profileForm.elements.profile_photo_url.value = user.profilePhotoUrl || "";
+  if (profilePhotoInput) profilePhotoInput.value = "";
+  selectedProfilePhotoFile = null;
+  selectedProfilePhotoDataUrl = "";
+  if (profilePhotoMessage) profilePhotoMessage.textContent = "Selecciona una foto PNG, JPG o WEBP de hasta 5 MB.";
   if (profileCreatedAt) {
     profileCreatedAt.textContent = formatRegisteredDate(user.createdAt);
   }
@@ -2305,7 +2675,7 @@ async function loadVehicleReminderSummary(vehicleId) {
     return null;
   }
 
-  const data = await fetchJson(`/dashboard/overview?user_id=${session.id}&vehiculo_id=${vehicleId}`);
+  const data = await fetchJson(`/dashboard/overview?vehiculo_id=${vehicleId}`);
   return data.selectedReminder || null;
 }
 
@@ -2419,9 +2789,7 @@ async function saveKmUpdateFromModal(vehicle) {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        user_id: session.id,
-        km_actual: nextKm,
+      body: JSON.stringify({        km_actual: nextKm,
       }),
     });
 
@@ -2797,8 +3165,8 @@ async function loadSelects() {
  const session = getSession();
 
 const [vehicles, places] = await Promise.all([
-  fetchJson(`/vehicles?user_id=${session.id}`),
-  fetchJson(`/places?user_id=${session.id}`),
+  fetchJson(`/vehicles`),
+  fetchJson(`/places`),
 ]);
 
   if (vehicleSelect) {
@@ -2826,7 +3194,7 @@ function sortMaintenanceByMostRecent(items) {
 async function loadPlacesList() {
   const session = getSession();
 
-  const places = await fetchJson(`/places?user_id=${session.id}`);
+  const places = await fetchJson(`/places`);
 
   currentPlaces = places;
 
@@ -2867,7 +3235,7 @@ async function loadPlacesList() {
 async function loadVehiclesScreen() {
   const session = getSession();
 
-  const vehicles = (await fetchJson(`/vehicles?user_id=${session.id}`)).map(normalizeVehicleRecord);
+  const vehicles = (await fetchJson(`/vehicles`)).map(normalizeVehicleRecord);
   currentVehicles = vehicles;
 
   const container = document.getElementById("vehicles-grid");
@@ -2897,11 +3265,16 @@ buildVehicleIdentityMarkup = function patchedBuildVehicleIdentityMarkup(vehicle 
   const colorConfig = getVehicleColorConfig(vehicle.vehicle_color);
   const modelLabel = vehicle.modelo ? escapeHtml(vehicle.modelo) : "";
   const plateLabel = vehicle.patente ? escapeHtml(vehicle.patente) : "Sin patente";
+  const photoUrl = String(vehicle.photo_url || "").trim();
+  const alt = photoUrl ? `Foto de ${escapeHtml(vehicle.nombre || "vehiculo")}` : "";
 
   return `
     <div class="vehicle-card-shell" style="--vehicle-color:${colorConfig.hex}">
       <div class="vehicle-card-head">
-        <div class="vehicle-card-icon" aria-hidden="true">${buildIconMarkup(typeConfig.icon)}</div>
+        <div class="vehicle-card-media${photoUrl ? "" : " is-fallback"}">
+          ${photoUrl ? `<img class="vehicle-card-thumb" src="${escapeHtml(photoUrl)}" alt="${alt}" loading="lazy" onerror="handleVehicleThumbError(this)" />` : ""}
+          <div class="vehicle-card-icon" aria-hidden="true">${buildIconMarkup(typeConfig.icon)}</div>
+        </div>
         <div class="vehicle-card-copy">
           <strong>${escapeHtml(vehicle.nombre || "Vehiculo")}</strong>
           ${modelLabel ? `<span class="vehicle-card-model">${modelLabel}</span>` : ""}
@@ -2917,7 +3290,7 @@ buildVehicleIdentityMarkup = function patchedBuildVehicleIdentityMarkup(vehicle 
 loadVehiclesScreen = async function patchedLoadVehiclesScreen() {
   const session = getSession();
 
-  const vehicles = (await fetchJson(`/vehicles?user_id=${session.id}`)).map(normalizeVehicleRecord);
+  const vehicles = (await fetchJson(`/vehicles`)).map(normalizeVehicleRecord);
   currentVehicles = vehicles;
 
   const container = document.getElementById("vehicles-grid");
@@ -3000,7 +3373,7 @@ async function loadVehiclesList() {
   const session = getSession();
   if (!vehiclesListModal) return;
 
-  const vehicles = (await fetchJson(`/vehicles?user_id=${session.id}`)).map(normalizeVehicleRecord);
+  const vehicles = (await fetchJson(`/vehicles`)).map(normalizeVehicleRecord);
 
   currentVehicles = vehicles;
 
@@ -3107,8 +3480,7 @@ async function loadMaintenance() {
 
   setHistoryState("loading");
   const session = getSession();
-  params.set("user_id", session.id);
-  if (selectedVehicleId) {
+    if (selectedVehicleId) {
     params.set("vehiculo_id", String(selectedVehicleId));
   }
 
@@ -3305,12 +3677,12 @@ loginForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
 
   const formData = new FormData(loginForm);
-  const email = String(formData.get("email") || "").trim().toLowerCase();
+  const username = String(formData.get("username") || "").trim();
   const password = String(formData.get("password") || "").trim();
 
-  if (!email || !password) {
-    loginMessage.textContent = "Completa email y contrasena para ingresar.";
-    showToast("Completa email y contrasena para ingresar.", { tone: "warning" });
+  if (!/^[A-Za-z0-9._-]{3,32}$/.test(username) || !/^\d{6,10}$/.test(password)) {
+    loginMessage.textContent = "Completa usuario y clave numerica valida para ingresar.";
+    showToast("Completa usuario y clave numerica valida para ingresar.", { tone: "warning" });
     return;
   }
 
@@ -3323,16 +3695,22 @@ loginForm?.addEventListener("submit", async (event) => {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ username, password }),
     });
 
     syncSession(response.user);
     loginMessage.textContent = "";
 
-    await loadVehiclesList();
-    await loadVehiclesScreen();
-
-    setView("vehicles", "loginSuccess");
+    if (normalizeSessionUser(response.user).mustChangePassword) {
+      setView("vehicles", "loginPasswordChangeRequired");
+      await openSettingsModal();
+      showToast("Debes cambiar tu clave numerica para continuar.", { tone: "warning", duration: 4200 });
+    } else {
+      await loadVehiclesList();
+      await loadVehiclesScreen();
+      await loadNotificationsInbox().catch(() => {});
+      setView("vehicles", "loginSuccess");
+    }
     showToast("Sesion iniciada correctamente.", { tone: "success" });
   } catch (error) {
     clearSession();
@@ -3347,50 +3725,12 @@ loginForm?.addEventListener("submit", async (event) => {
 
 registerForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
-
-  const formData = new FormData(registerForm);
-  const payload = {
-    nombre: String(formData.get("nombre") || "").trim(),
-    apellido: String(formData.get("apellido") || "").trim(),
-    email: String(formData.get("email") || "").trim().toLowerCase(),
-    telefono: String(formData.get("telefono") || "").trim(),
-    password: String(formData.get("password") || "").trim(),
-    confirmPassword: String(formData.get("confirmPassword") || "").trim(),
-  };
-  const validationMessage = validateRegisterForm(payload);
-
-  if (validationMessage) {
-    registerMessage.textContent = validationMessage;
-    showToast(validationMessage, { tone: "warning" });
-    return;
-  }
-
-  setButtonLoading(registerSubmitButton, true, "Creando cuenta...");
-  registerMessage.textContent = "Creando cuenta...";
-
-  try {
-    const response = await fetchJson("/auth/register", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-
-    registerForm.reset();
-    setAuthMode("login", { preserveMessages: true });
-    loginMessage.textContent = response.message || "Cuenta creada. Tu usuario queda pendiente de aprobacion.";
-    registerMessage.textContent = "";
-    showToast(loginMessage.textContent, { tone: "success", duration: 4200 });
-  } catch (error) {
-    registerMessage.textContent = error.message;
-    showToast(error.message, { tone: "error", duration: 3800 });
-  } finally {
-    setButtonLoading(registerSubmitButton, false, "Creando cuenta...");
-  }
+  registerMessage.textContent = "El registro publico esta deshabilitado. Un superadmin debe crear el usuario desde Administracion.";
+  showToast(registerMessage.textContent, { tone: "warning", duration: 4200 });
 });
 
 function logout() {
+  fetchJson("/auth/logout", { method: "POST" }).catch(() => {});
   clearSession();
   selectedVehicleId = null;
   clearViewState();
@@ -3467,6 +3807,32 @@ vehicleColorOptions?.addEventListener("click", (event) => {
   syncVehicleVisualSelectors();
 });
 
+vehiclePhotoInput?.addEventListener("change", async () => {
+  const file = vehiclePhotoInput.files?.[0] || null;
+  selectedVehiclePhotoFile = null;
+  selectedVehiclePhotoDataUrl = "";
+
+  if (!file) {
+    renderVehiclePhotoPreview(vehicleForm?.elements.photo_url?.value || "");
+    return;
+  }
+
+  try {
+    if (vehiclePhotoMessage) vehiclePhotoMessage.textContent = "Preparando vista previa...";
+    const prepared = await prepareUploadImageData(file);
+    selectedVehiclePhotoFile = file;
+    selectedVehiclePhotoDataUrl = prepared.dataUrl;
+    renderVehiclePhotoPreview(prepared.dataUrl);
+    if (vehiclePhotoMessage) vehiclePhotoMessage.textContent = "Foto lista para subir al guardar.";
+  } catch (error) {
+    vehiclePhotoInput.value = "";
+    selectedVehiclePhotoFile = null;
+    selectedVehiclePhotoDataUrl = "";
+    renderVehiclePhotoPreview(vehicleForm?.elements.photo_url?.value || "");
+    if (vehiclePhotoMessage) vehiclePhotoMessage.textContent = error.message;
+  }
+});
+
 vehicleWizardBackButton?.addEventListener("click", () => {
   goToVehicleWizardStep(currentVehicleWizardStep - 1);
 });
@@ -3487,6 +3853,7 @@ vehicleForm?.addEventListener("submit", async (e) => {
   }
 
   try {
+    delete data.vehicle_photo_file;
     data.vehicle_type = normalizeVehicleType(data.vehicle_type);
     data.vehicle_color = normalizeVehicleColor(data.vehicle_color);
     data.km_actual = normalizeNumericPayloadValue(data.km_actual, NUMERIC_FIELD_CONFIG.km_actual);
@@ -3496,23 +3863,44 @@ vehicleForm?.addEventListener("submit", async (e) => {
     setButtonLoading(vehicleSaveButton, true, isEditing ? "Guardando..." : "Creando...");
 
     if (isEditing) {
+      if (selectedVehiclePhotoFile && selectedVehiclePhotoDataUrl) {
+        vehicleFormMessage.textContent = "Subiendo imagen del vehiculo...";
+        const upload = await uploadImageData({
+          endpoint: `/vehicles/${editingVehicleId}/photo`,
+          file: selectedVehiclePhotoFile,
+          dataUrl: selectedVehiclePhotoDataUrl,
+          userId: session.id,
+        });
+        if (upload.vehicle) {
+          currentVehicles = currentVehicles.map((vehicle) =>
+            Number(vehicle.id) === Number(editingVehicleId) ? normalizeVehicleRecord(upload.vehicle) : vehicle
+          );
+        }
+      }
+
       await fetchJson(`/vehicles/${editingVehicleId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...data,
-          user_id: session.id,
-        }),
+          ...data,        }),
       });
     } else {
-      await fetchJson(`/vehicles`, {
+      const createdVehicle = await fetchJson(`/vehicles`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...data,
-          user_id: session.id,
-        }),
+          ...data,        }),
       });
+
+      if (selectedVehiclePhotoFile && selectedVehiclePhotoDataUrl && createdVehicle?.id) {
+        vehicleFormMessage.textContent = "Subiendo imagen del vehiculo...";
+        await uploadImageData({
+          endpoint: `/vehicles/${createdVehicle.id}/photo`,
+          file: selectedVehiclePhotoFile,
+          dataUrl: selectedVehiclePhotoDataUrl,
+          userId: session.id,
+        });
+      }
     }
 
     await refreshAllData();
@@ -3553,18 +3941,14 @@ placeForm?.addEventListener("submit", async (e) => {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...data,
-          user_id: session.id,
-        }),
+          ...data,        }),
       });
     } else {
       await fetchJson(`/places`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...data,
-          user_id: session.id,
-        }),
+          ...data,        }),
       });
     }
 
@@ -3618,9 +4002,7 @@ maintenanceForm?.addEventListener("submit", async (event) => {
     const session = getSession();
 
     const requestBody = JSON.stringify({
-      ...payload,
-      user_id: session.id,
-      image_base64: imageRef || "",
+      ...payload,      image_base64: imageRef || "",
       image_mime_type: preparedImage.mimeType,
     });
 
@@ -3702,7 +4084,7 @@ async function deleteMaintenance(id) {
   try {
     showAppLoading("Eliminando mantenimiento...");
 
-    await fetchJson(`/maintenance/${id}?user_id=${session.id}`, {
+    await fetchJson(`/maintenance/${id}`, {
       method: "DELETE",
     });
 
@@ -3763,7 +4145,7 @@ async function exportMaintenanceToCsv({ vehicleId = selectedVehicleId } = {}) {
     return false;
   }
 
-  const items = await fetchJson(`/maintenance?user_id=${session.id}&vehiculo_id=${effectiveVehicleId}`);
+  const items = await fetchJson(`/maintenance?vehiculo_id=${effectiveVehicleId}`);
   const sortedItems = [...items].sort((a, b) => {
     const dateDiff = new Date(a.fecha).getTime() - new Date(b.fecha).getTime();
     if (dateDiff !== 0) return dateDiff;
@@ -3838,7 +4220,7 @@ async function deleteVehicle(id) {
 
   showAppLoading("Eliminando vehiculo...");
 
-  await fetchJson(`/vehicles/${id}?user_id=${session.id}`, {
+  await fetchJson(`/vehicles/${id}`, {
     method: "DELETE",
   });
 
@@ -3951,7 +4333,6 @@ function closeModal(id) {
 
 maintenanceDetailClose?.addEventListener("click", closeMaintenanceDetail);
 maintenanceImageLightboxClose?.addEventListener("click", closeMaintenanceImageLightbox);
-themeMenuButton?.addEventListener("click", toggleTheme);
 notificationsToggleButton?.addEventListener("click", () => {
   handleNotificationToggle().then(() => {
     showToast("Estado de notificaciones actualizado", { tone: "info" });
@@ -3970,6 +4351,83 @@ notificationsTestButton?.addEventListener("click", () => {
 });
 
 notificationsInboxClose?.addEventListener("click", () => closeModal("notifications-inbox-modal"));
+notificationsMarkAllReadButton?.addEventListener("click", () => {
+  markAllNotificationsRead().catch((error) => {
+    showToast(error.message || "No se pudieron marcar las notificaciones.", { tone: "error" });
+  });
+});
+notificationsInboxList?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-notification-id]");
+  if (!button) return;
+  const id = Number(button.getAttribute("data-notification-id"));
+  markNotificationRead(id).catch((error) => {
+    showToast(error.message || "No se pudo marcar la notificacion.", { tone: "error" });
+  });
+});
+notificationsFilterAll?.addEventListener("click", () => {
+  notificationsState.filter = "all";
+  notificationsState.expanded = false;
+  loadNotificationsInbox().catch((error) => showToast(error.message, { tone: "error" }));
+});
+notificationsFilterUnread?.addEventListener("click", () => {
+  notificationsState.filter = "unread";
+  notificationsState.expanded = false;
+  loadNotificationsInbox().catch((error) => showToast(error.message, { tone: "error" }));
+});
+notificationsViewAllButton?.addEventListener("click", () => {
+  loadNotificationsInbox({ expanded: true }).catch((error) => showToast(error.message, { tone: "error" }));
+});
+notificationsLoadMoreButton?.addEventListener("click", () => {
+  loadNotificationsInbox({ append: true, expanded: true }).catch((error) => showToast(error.message, { tone: "error" }));
+});
+notificationsBackLatestButton?.addEventListener("click", () => {
+  loadNotificationsInbox({ expanded: false }).catch((error) => showToast(error.message, { tone: "error" }));
+});
+menuAdminButton?.addEventListener("click", openAdminUsersModal);
+adminUsersClose?.addEventListener("click", () => closeModal("admin-users-modal"));
+adminUsersRefresh?.addEventListener("click", loadAdminUsers);
+adminUsersSearch?.addEventListener("input", () => {
+  window.clearTimeout(adminUsersSearch._loadTimer);
+  adminUsersSearch._loadTimer = window.setTimeout(loadAdminUsers, 250);
+});
+adminUserCreateForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const formData = new FormData(adminUserCreateForm);
+  const role = String(formData.get("role") || "user");
+  const payload = {
+    username: String(formData.get("username") || "").trim(),
+    password: String(formData.get("password") || "").trim(),
+    role,
+    is_active: formData.get("is_active") === "on",
+    confirm_superadmin: role === "superadmin"
+      ? window.confirm("Confirmas crear otro superadmin?")
+      : false,
+  };
+
+  setButtonLoading(adminUserCreateButton, true, "Creando...");
+  if (adminUsersMessage) adminUsersMessage.textContent = "Creando usuario...";
+  try {
+    await fetchJson("/admin/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    adminUserCreateForm.reset();
+    if (adminUsersMessage) adminUsersMessage.textContent = "Usuario creado.";
+    await loadAdminUsers();
+  } catch (error) {
+    if (adminUsersMessage) adminUsersMessage.textContent = error.message;
+  } finally {
+    setButtonLoading(adminUserCreateButton, false, "Crear usuario");
+  }
+});
+adminUsersList?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-admin-action]");
+  const item = event.target.closest("[data-admin-user-id]");
+  if (!button || !item) return;
+  handleAdminUserAction(Number(item.dataset.adminUserId), button.dataset.adminAction)
+    .catch((error) => showToast(error.message, { tone: "error", duration: 3600 }));
+});
 pwaInstallDismiss?.addEventListener("click", dismissPwaInstallBanner);
 
 function viewPlace(id) {
@@ -4035,7 +4493,7 @@ async function deletePlace(id) {
   try {
     showAppLoading("Eliminando lugar...");
 
-    await fetchJson(`/places/${id}?user_id=${session.id}`, {
+    await fetchJson(`/places/${id}`, {
       method: "DELETE",
     });
 
@@ -4276,15 +4734,27 @@ profileForm?.addEventListener("submit", async (event) => {
   setButtonLoading(profileSaveButton, true, "Guardando...");
 
   try {
+    if (selectedProfilePhotoFile && selectedProfilePhotoDataUrl) {
+      profileMessage.textContent = "Subiendo foto...";
+      const upload = await uploadImageData({
+        endpoint: "/users/profile/photo",
+        file: selectedProfilePhotoFile,
+        dataUrl: selectedProfilePhotoDataUrl,
+        userId: session.id,
+      });
+      if (upload.user) {
+        syncSession(upload.user);
+      }
+    }
+    delete payload.profile_photo_url;
+
     const response = await fetchJson("/users/profile", {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        ...payload,
-        user_id: session.id,
-      }),
+        ...payload,      }),
     });
 
     const nextSession = syncSession(response.user);
@@ -4298,10 +4768,33 @@ profileForm?.addEventListener("submit", async (event) => {
   }
 });
 
-profileForm?.elements.profile_photo_url?.addEventListener("input", (event) => {
-  const session = getSession() || {};
-  const nextName = `${profileForm.elements.nombre.value || session.nombre || ""} ${profileForm.elements.apellido.value || session.apellido || ""}`.trim();
-  setProfileAvatar(String(event.target.value || "").trim(), nextName);
+profilePhotoInput?.addEventListener("change", async () => {
+  const file = profilePhotoInput.files?.[0] || null;
+  selectedProfilePhotoFile = null;
+  selectedProfilePhotoDataUrl = "";
+
+  if (!file) {
+    if (profilePhotoMessage) profilePhotoMessage.textContent = "Selecciona una foto PNG, JPG o WEBP de hasta 5 MB.";
+    return;
+  }
+
+  try {
+    if (profilePhotoMessage) profilePhotoMessage.textContent = "Preparando vista previa...";
+    const prepared = await prepareUploadImageData(file);
+    selectedProfilePhotoFile = file;
+    selectedProfilePhotoDataUrl = prepared.dataUrl;
+    profileForm.elements.profile_photo_url.value = prepared.dataUrl;
+    const nextName = `${profileForm.elements.nombre.value || ""} ${profileForm.elements.apellido.value || ""}`.trim();
+    setProfileAvatar(prepared.dataUrl, nextName);
+    if (profilePhotoMessage) profilePhotoMessage.textContent = "Foto lista para subir al guardar.";
+  } catch (error) {
+    profilePhotoInput.value = "";
+    profileForm.elements.profile_photo_url.value = getSession()?.profilePhotoUrl || "";
+    selectedProfilePhotoFile = null;
+    selectedProfilePhotoDataUrl = "";
+    setProfileAvatar(profileForm.elements.profile_photo_url.value, buildFullName(getSession() || {}));
+    if (profilePhotoMessage) profilePhotoMessage.textContent = error.message;
+  }
 });
 
 profileForm?.elements.nombre?.addEventListener("input", () => {
@@ -4332,9 +4825,7 @@ preferencesForm?.addEventListener("submit", async (event) => {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        user_id: session.id,
-        mileage_unit: preferencesForm.elements.mileage_unit.value,
+      body: JSON.stringify({        mileage_unit: preferencesForm.elements.mileage_unit.value,
         reminders_enabled: preferencesForm.elements.reminders_enabled.checked,
       }),
     });
@@ -4371,9 +4862,7 @@ vehicleRemindersForm?.addEventListener("submit", async (event) => {
   setButtonLoading(vehicleRemindersSaveButton, true, "Guardando...");
 
   try {
-    const payload = {
-      user_id: session.id,
-      vehicle_reminders_enabled: vehicleRemindersForm.elements.vehicle_reminders_enabled.checked,
+    const payload = {      vehicle_reminders_enabled: vehicleRemindersForm.elements.vehicle_reminders_enabled.checked,
       intervalo_tiempo: normalizeOptionalPositiveInteger(
         vehicleRemindersForm.elements.intervalo_tiempo.value,
         "Cada cuantos meses quieres hacer mantenimiento",
@@ -4444,30 +4933,35 @@ passwordForm?.addEventListener("submit", async (event) => {
 
   const payload = Object.fromEntries(new FormData(passwordForm).entries());
 
-  if (String(payload.new_password || "").trim() !== String(payload.confirm_password || "").trim()) {
-    passwordMessage.textContent = "La confirmacion no coincide con la nueva contrasena.";
+  if (!/^\d{6,10}$/.test(String(payload.new_password || "").trim())) {
+    passwordMessage.textContent = "La nueva clave debe tener entre 6 y 10 digitos.";
     return;
   }
 
-  passwordMessage.textContent = "Actualizando contrasena...";
+  if (String(payload.new_password || "").trim() !== String(payload.confirm_password || "").trim()) {
+    passwordMessage.textContent = "La confirmacion no coincide con la nueva clave.";
+    return;
+  }
+
+  passwordMessage.textContent = "Actualizando clave...";
   setButtonLoading(passwordSaveButton, true, "Guardando...");
 
   try {
-    await fetchJson("/users/password", {
+    const response = await fetchJson("/auth/change-password", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        ...payload,
-        user_id: session.id,
-      }),
+      body: JSON.stringify(payload),
     });
 
+    if (response.user) {
+      syncSession(response.user);
+    }
     passwordForm.reset();
-    passwordMessage.textContent = "Contrasena actualizada correctamente.";
-    setStatus("Contrasena actualizada");
-    showToast("Contrasena actualizada", { tone: "success" });
+    passwordMessage.textContent = "Clave actualizada correctamente.";
+    setStatus("Clave actualizada");
+    showToast("Clave actualizada", { tone: "success" });
   } catch (error) {
     passwordMessage.textContent = error.message;
   } finally {
@@ -4510,7 +5004,7 @@ async function exportMaintenanceToPdf({
   setButtonLoading(triggerButton, true, "Exportando...");
 
   try {
-    const items = await fetchJson(`/maintenance?user_id=${session.id}&vehiculo_id=${effectiveVehicleId}`);
+    const items = await fetchJson(`/maintenance?vehiculo_id=${effectiveVehicleId}`);
     const sortedItems = [...items].sort((a, b) => {
       const dateDiff = new Date(a.fecha).getTime() - new Date(b.fecha).getTime();
       if (dateDiff !== 0) return dateDiff;
@@ -4635,7 +5129,7 @@ function registerServiceWorker() {
   updatePwaInstallBanner();
   window.addEventListener("resize", () => {
     updatePwaInstallBanner();
-    if (getSession()?.email) {
+    if (getSession()?.username || getSession()?.email) {
       updateSessionUI();
     }
   });
@@ -4656,6 +5150,7 @@ function registerServiceWorker() {
   try {
     await loadVehiclesList();
     await loadVehiclesScreen();
+    await loadNotificationsInbox().catch(() => {});
     restoreStoredDashboardView();
   } catch (error) {
     console.error(error);
