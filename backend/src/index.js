@@ -7,13 +7,14 @@ const config = require("./config");
 const authRoutes = require("./routes/auth");
 const dashboardRoutes = require("./routes/dashboard");
 const maintenanceRoutes = require("./routes/maintenance");
+const maintenancePlanRoutes = require("./routes/maintenancePlans");
 const userRoutes = require("./routes/users");
 const vehicleRoutes = require("./routes/vehicles");
 const placeRoutes = require("./routes/places");
 const notificationRoutes = require("./routes/notifications");
 const activityRoutes = require("./routes/activity");
 const adminRoutes = require("./routes/admin");
-const { requireAuth, requireSuperadmin } = require("./middleware/auth");
+const { requireAuth, requireSuperadmin, requireRegularUser } = require("./middleware/auth");
 
 const app = express();
 const JSON_PAYLOAD_LIMIT = "10mb";
@@ -41,13 +42,14 @@ app.get("/", (_req, res) => {
 });
 
 app.use("/auth", authRoutes);
-app.use("/dashboard", requireAuth(), dashboardRoutes);
-app.use("/maintenance", requireAuth(), maintenanceRoutes);
+app.use("/dashboard", requireAuth(), requireRegularUser, dashboardRoutes);
+app.use("/maintenance", requireAuth(), requireRegularUser, maintenanceRoutes);
+app.use("/maintenance-plans", requireAuth(), requireRegularUser, maintenancePlanRoutes);
 app.use("/users", requireAuth(), userRoutes);
-app.use("/vehicles", requireAuth(), vehicleRoutes);
-app.use("/places", requireAuth(), placeRoutes);
+app.use("/vehicles", requireAuth(), requireRegularUser, vehicleRoutes);
+app.use("/places", requireAuth(), requireRegularUser, placeRoutes);
 app.use("/notifications", notificationRoutes);
-app.use("/activity", requireAuth(), activityRoutes);
+app.use("/activity", requireAuth(), requireRegularUser, activityRoutes);
 app.use("/admin", requireAuth(), requireSuperadmin, adminRoutes);
 
 app.use((error, _req, res, next) => {

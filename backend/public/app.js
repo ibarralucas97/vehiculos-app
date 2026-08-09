@@ -279,6 +279,26 @@ const adminUsersRefresh = document.getElementById("admin-users-refresh");
 const adminUserCreateForm = document.getElementById("admin-user-create-form");
 const adminUserCreateButton = document.getElementById("admin-user-create-button");
 const adminUsersMessage = document.getElementById("admin-users-message");
+const adminScreen=document.getElementById("admin-screen");
+const adminMetrics=document.getElementById("admin-metrics");
+const adminAuditList=document.getElementById("admin-audit-list");
+const adminResources=document.getElementById("admin-resources");
+const adminUsersStatus=document.getElementById("admin-users-status");
+const adminUsersPrev=document.getElementById("admin-users-prev");
+const adminUsersNext=document.getElementById("admin-users-next");
+const adminUsersPage=document.getElementById("admin-users-page");
+const menuAdminGroup=document.getElementById("menu-admin-group");
+const adminNavDashboard=document.getElementById("admin-nav-dashboard");
+const adminNavUsers=document.getElementById("admin-nav-users");
+const adminNavAudit=document.getElementById("admin-nav-audit");
+const adminNavAccount=document.getElementById("admin-nav-account");
+const ADMIN_EXTERNAL_RESOURCES=Object.freeze([
+  {name:"Render",icon:"R",description:"Servicio backend y despliegues",url:"https://dashboard.render.com/web/srv-d7j6pc9kh4rs73bem1ug"},
+  {name:"Neon",icon:"N",description:"Base de datos PostgreSQL",url:"https://console.neon.tech/app/projects/ancient-shape-72653891"},
+  {name:"GitHub",icon:"GH",description:"Repositorio del proyecto",url:"https://github.com/ibarralucas97/vehiculos-app"},
+  {name:"Documentación",icon:"D",description:"Documentación técnica y operativa",url:"https://docs.google.com/document/d/1Im9-aHiUqPLgkFWXr6zyS7N0k7XmA5b-zVYhJSYp8AU/edit?tab=t.pt4lzyfhbz32"},
+  {name:"Cloudinary",icon:"C",description:"Biblioteca de imágenes de vehículos",url:"https://console.cloudinary.com/app/c-cc992860adebe1f924e3ee81ed14f1/assets/media_library/folders/cfe4ce1eb68906e68f79ff2ad36b232e5d?view_mode=mosaic"}
+]);
 const settingsPushState = document.getElementById("settings-push-state");
 const settingsPushCopy = document.getElementById("settings-push-copy");
 const settingsPermissionState = document.getElementById("settings-permission-state");
@@ -335,6 +355,7 @@ let backButtonTouchState = {
   lastTouchEndAt: 0,
 };
 let activeView = "unknown";
+let adminUsersOffset=0;let adminUsersHasMore=false;
 let currentVehicleWizardStep = 1;
 let touchGestureState = {
   active: false,
@@ -980,6 +1001,7 @@ function renderAdminUsers(users = []) {
         <strong>${escapeHtml(user.username || "usuario")}</strong>
         <span>${escapeHtml(user.fullName || user.email || "Sin datos de contacto")}</span>
         <small>${escapeHtml(user.email || "")}</small>
+        <small>Último ingreso: ${user.lastLoginAt?new Date(user.lastLoginAt).toLocaleString("es-AR"):"Nunca"}</small>
       </div>
       <div class="admin-user-badges">
         <span class="status-badge">${escapeHtml(user.role || "user")}</span>
@@ -999,20 +1021,27 @@ function renderAdminUsers(users = []) {
 async function loadAdminUsers() {
   if (!adminUsersList) return;
   adminUsersList.innerHTML = '<div class="empty">Cargando usuarios...</div>';
-  const params = new URLSearchParams({ limit: "25", offset: "0" });
+  const params = new URLSearchParams({ limit: "25", offset: String(adminUsersOffset),status:adminUsersStatus?.value||"all" });
   const search = String(adminUsersSearch?.value || "").trim();
   if (search) params.set("search", search);
 
   try {
     const response = await fetchJson(`/admin/users?${params.toString()}`);
     renderAdminUsers(Array.isArray(response.users) ? response.users : []);
+    adminUsersHasMore=Boolean(response.pagination?.hasMore);if(adminUsersPrev)adminUsersPrev.disabled=adminUsersOffset===0;if(adminUsersNext)adminUsersNext.disabled=!adminUsersHasMore;if(adminUsersPage)adminUsersPage.textContent=`Página ${Math.floor(adminUsersOffset/25)+1}`;
     if (adminUsersMessage) adminUsersMessage.textContent = "";
   } catch (error) {
     adminUsersList.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
   }
 }
 
+function renderAdminResources(){if(!adminResources)return;adminResources.innerHTML=ADMIN_EXTERNAL_RESOURCES.map(item=>`<a class="admin-resource-card" href="${item.url}" target="_blank" rel="noopener noreferrer"><span class="admin-resource-icon" aria-hidden="true">${item.icon}</span><span><strong>${item.name}</strong><small>${item.description}</small></span><span class="admin-external" aria-hidden="true">↗</span></a>`).join("");}
+async function loadAdminAudit(){if(!adminAuditList)return;adminAuditList.innerHTML='<div class="admin-loading">Cargando actividad...</div>';try{const response=await fetchJson('/admin/audit-logs?limit=10&offset=0');adminAuditList.innerHTML=response.logs.length?response.logs.map(log=>`<article class="admin-audit-item"><strong>${escapeHtml(log.action)}</strong><span>${escapeHtml(log.actor?.username||"Sistema")} → ${escapeHtml(log.target?.username||"Sin usuario afectado")}</span><time>${new Date(log.createdAt).toLocaleString("es-AR")}</time></article>`).join(""):'<div class="empty">Todavía no hay acciones administrativas.</div>';}catch(error){adminAuditList.innerHTML=`<div class="empty">${escapeHtml(error.message)}</div>`;}}
+async function loadAdminDashboard(){if(getSession()?.role!=="superadmin")return;if(adminMetrics)adminMetrics.innerHTML='<div class="admin-loading">Cargando métricas...</div>';renderAdminResources();try{const response=await fetchJson('/admin/dashboard');const labels=[['total','Usuarios'],['active','Activos'],['inactive','Desactivados'],['password_pending','Cambio pendiente'],['never_logged_in','Nunca ingresaron'],['recent','Altas últimos 30 días']];adminMetrics.innerHTML=labels.map(([key,label])=>`<article class="admin-metric-card"><span>${label}</span><strong>${Number(response.metrics[key]||0).toLocaleString("es-AR")}</strong></article>`).join('');await loadAdminAudit();}catch(error){if(adminMetrics)adminMetrics.innerHTML=`<div class="empty">${escapeHtml(error.message)}</div>`;}}
+function openAdminDashboard(){closeMenu();if(getSession()?.role!=="superadmin"){showToast("Acceso denegado",{tone:"error"});return;}setView('admin','openAdminDashboard');loadAdminDashboard();}
+
 function openAdminUsersModal() {
+  if(getSession()?.role!=="superadmin"){showToast("Acceso denegado",{tone:"error"});return;}
   closeMenu();
   openModal("admin-users-modal");
   loadAdminUsers();
@@ -1028,8 +1057,8 @@ async function handleAdminUserAction(userId, action) {
   };
 
   if (action === "reset-password") {
-    const temporaryPassword = window.prompt("Nueva clave numerica temporal (6 a 10 digitos)");
-    if (!temporaryPassword) return;
+    const confirmed=await openUiModal({title:"Restablecer contraseña",bodyHtml:'<label>Nueva clave numérica temporal<input id="admin-temporary-password" type="password" inputmode="numeric" pattern="[0-9]{6,10}" autocomplete="new-password"></label><p class="inline-help">La persona deberá cambiarla al iniciar sesión.</p>',confirmLabel:"Restablecer",cancelLabel:"Cancelar",showCancel:true,destructive:true});
+    const temporaryPassword=document.getElementById("admin-temporary-password")?.value;if(!confirmed||!/^[0-9]{6,10}$/.test(temporaryPassword||"")){if(confirmed)showToast("La clave debe tener entre 6 y 10 dígitos",{tone:"error"});return;}
     await fetchJson(`/admin/users/${userId}/reset-password`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -1041,8 +1070,8 @@ async function handleAdminUserAction(userId, action) {
   }
 
   if (action === "edit-username") {
-    const nextUsername = window.prompt("Nuevo nombre de usuario", username);
-    if (!nextUsername) return;
+    const confirmed=await openUiModal({title:"Editar usuario",bodyHtml:`<label>Nombre de usuario<input id="admin-next-username" type="text" value="${escapeHtml(username)}" autocomplete="off"></label>`,confirmLabel:"Guardar",cancelLabel:"Cancelar",showCancel:true});
+    const nextUsername=document.getElementById("admin-next-username")?.value;if(!confirmed||!nextUsername)return;
     await fetchJson(`/admin/users/${userId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -1272,6 +1301,7 @@ async function refreshCurrentContext({ silent = false } = {}) {
   }
 
   try {
+    if(getCurrentView()==="admin"){await loadAdminDashboard();}
     if (getCurrentView() === "vehicles") {
       await loadVehiclesScreen();
       if (isModalOpen("vehicles-modal")) {
@@ -1863,7 +1893,8 @@ function updateMenuContext() {
   const selectedVehicle = getSelectedVehicle();
   const hasCurrentVehicle = Boolean(selectedVehicle);
 
-  menuCurrentVehicleGroup?.classList.toggle("hidden", !hasCurrentVehicle);
+  const isAdmin=getSession()?.role==="superadmin";
+  menuCurrentVehicleGroup?.classList.toggle("hidden", isAdmin||!hasCurrentVehicle);
 
   if (menuCurrentVehicleName) {
     menuCurrentVehicleName.textContent = hasCurrentVehicle
@@ -2002,14 +2033,21 @@ function validateRegisterForm(payload) {
   return "";
 }
 
+function getInitialViewForSession(user){const session=normalizeSessionUser(user||{});if(session.mustChangePassword)return "password-change";return session.role==="superadmin"?"admin":"vehicles";}
+
 function updateSessionUI() {
   const session = normalizeSessionUser(getSession() || {});
   const isLoggedIn = Boolean(session?.username || session?.email);
   const currentView = getCurrentView();
   const hasCurrentVehicle = Boolean(selectedVehicleId) && (currentVehicles.length === 0 || Boolean(getSelectedVehicle()));
+  const isAdmin=session.role==="superadmin";
 
   topbar?.classList.toggle("hidden", !isLoggedIn);
-  menuAdminButton?.classList.toggle("hidden", session.role !== "superadmin");
+  menuAdminButton?.classList.add("hidden");
+  menuAdminGroup?.classList.toggle("hidden",!isAdmin);
+  [menuHomeButton,menuProfileButton,menuSettingsButton,menuActivityButton].forEach(element=>element?.classList.toggle("hidden",isAdmin));
+  menuCurrentVehicleGroup?.classList.toggle("hidden",isAdmin||!selectedVehicleId);
+  topbarNotificationsButton?.closest(".vehicle-detail-notification-wrap")?.classList.toggle("hidden",isAdmin);
   sessionBox.classList.toggle("hidden", !isLoggedIn);
   logoutButton.classList.add("hidden");
   updateAuthModeUI(isLoggedIn);
@@ -2028,7 +2066,12 @@ function updateSessionUI() {
       registerMessage.textContent = "";
     }
 
-    if (currentView === "dashboard") {
+    const initialView=getInitialViewForSession(session);
+    if(initialView==="password-change"){
+      setView(isAdmin?"admin":"vehicles","passwordChangeRequired");
+    } else if(initialView==="admin"){
+      if(currentView!=="admin")setView("admin","roleInitialView");
+    } else if (currentView === "dashboard") {
       if (!hasCurrentVehicle) {
         setView("vehicles", "updateSessionUI", null, { reason: "noCurrentVehicle" });
       }
@@ -2060,6 +2103,7 @@ function isCollapsibleSectionOpen(section) {
 
 function deriveCurrentViewFromDom() {
   const vehiclesScreen = document.getElementById("vehicles-screen");
+  if(adminScreen&&!adminScreen.classList.contains("hidden"))return "admin";
 
   if (dashboard && !dashboard.classList.contains("hidden") && selectedVehicleId) {
     return "dashboard";
@@ -2158,14 +2202,19 @@ function setView(nextView, source, event = null, extra = {}) {
     welcomeScreen?.classList.add("hidden");
     vehiclesScreen?.classList.add("hidden");
     dashboard?.classList.remove("hidden");
+    adminScreen?.classList.add("hidden");
   } else if (nextView === "vehicles") {
     welcomeScreen?.classList.add("hidden");
     dashboard?.classList.add("hidden");
     vehiclesScreen?.classList.remove("hidden");
+    adminScreen?.classList.add("hidden");
+  } else if(nextView==="admin"){
+    welcomeScreen?.classList.add("hidden");dashboard?.classList.add("hidden");vehiclesScreen?.classList.add("hidden");adminScreen?.classList.remove("hidden");
   } else if (nextView === "login") {
     dashboard?.classList.add("hidden");
     vehiclesScreen?.classList.add("hidden");
     welcomeScreen?.classList.remove("hidden");
+    adminScreen?.classList.add("hidden");
   }
 
   activeView = nextView;
@@ -2323,15 +2372,14 @@ async function openProfileModal() {
 async function openSettingsModal() {
   closeMenu();
   openModal("settings-modal");
+  const isAdmin=getSession()?.role==="superadmin";document.getElementById("settings-user-preferences")?.classList.toggle("hidden",isAdmin);
   if (preferencesMessage) preferencesMessage.textContent = "Cargando preferencias...";
   if (passwordMessage) passwordMessage.textContent = "";
   passwordForm?.reset();
 
   try {
     const profile = await fetchCurrentProfile();
-    fillPreferencesForm(profile);
-    await refreshNotificationControls();
-    renderReminderSettingsSummary(profile, notificationsServerStatus);
+    if(!isAdmin){fillPreferencesForm(profile);await refreshNotificationControls();renderReminderSettingsSummary(profile, notificationsServerStatus);}
     if (preferencesMessage) preferencesMessage.textContent = "";
   } catch (error) {
     if (preferencesMessage) preferencesMessage.textContent = error.message;
@@ -2701,6 +2749,7 @@ async function openVehicleRemindersModal(id = selectedVehicleId) {
   if (vehicleRemindersMessage) vehicleRemindersMessage.textContent = "";
   renderVehicleRemindersSummary(null, vehicle);
   openModal("vehicle-reminders-modal");
+  if (typeof loadMaintenancePlans === "function") await loadMaintenancePlans().catch(() => {});
 
   try {
     const reminder = await loadVehicleReminderSummary(vehicle.id);
@@ -3089,6 +3138,7 @@ function editMaintenance(id) {
   maintenanceForm.elements.accion.value = item.accion || "";
   maintenanceForm.elements.km.value = item.km ?? "";
   maintenanceForm.elements.cost.value = item.cost ?? "";
+  if (maintenanceForm.elements.maintenance_plan_id) maintenanceForm.elements.maintenance_plan_id.value = item.maintenance_plan_id ?? "";
   clearMaintenanceImagePreview();
   closeMaintenanceDetail();
   if (maintenanceSubmitButton) {
@@ -3701,15 +3751,14 @@ loginForm?.addEventListener("submit", async (event) => {
     syncSession(response.user);
     loginMessage.textContent = "";
 
-    if (normalizeSessionUser(response.user).mustChangePassword) {
-      setView("vehicles", "loginPasswordChangeRequired");
+    const initialView=getInitialViewForSession(response.user);
+    if (initialView==="password-change") {
+      setView(normalizeSessionUser(response.user).role==="superadmin"?"admin":"vehicles", "loginPasswordChangeRequired");
       await openSettingsModal();
       showToast("Debes cambiar tu clave numerica para continuar.", { tone: "warning", duration: 4200 });
     } else {
-      await loadVehiclesList();
-      await loadVehiclesScreen();
-      await loadNotificationsInbox().catch(() => {});
-      setView("vehicles", "loginSuccess");
+      if(initialView==="admin"){setView("admin","loginSuccessAdmin");await loadAdminDashboard();}
+      else{await loadVehiclesList();await loadVehiclesScreen();await loadNotificationsInbox().catch(() => {});setView("vehicles", "loginSuccess");}
     }
     showToast("Sesion iniciada correctamente.", { tone: "success" });
   } catch (error) {
@@ -4386,7 +4435,19 @@ notificationsBackLatestButton?.addEventListener("click", () => {
 menuAdminButton?.addEventListener("click", openAdminUsersModal);
 adminUsersClose?.addEventListener("click", () => closeModal("admin-users-modal"));
 adminUsersRefresh?.addEventListener("click", loadAdminUsers);
+adminUsersStatus?.addEventListener("change",()=>{adminUsersOffset=0;loadAdminUsers();});
+adminUsersPrev?.addEventListener("click",()=>{adminUsersOffset=Math.max(0,adminUsersOffset-25);loadAdminUsers();});
+adminUsersNext?.addEventListener("click",()=>{if(adminUsersHasMore){adminUsersOffset+=25;loadAdminUsers();}});
+adminNavDashboard?.addEventListener("click",openAdminDashboard);
+adminNavUsers?.addEventListener("click",openAdminUsersModal);
+adminNavAudit?.addEventListener("click",()=>{closeMenu();document.querySelector("#admin-audit-list")?.scrollIntoView({behavior:"smooth"});loadAdminAudit();});
+adminNavAccount?.addEventListener("click",openSettingsModal);
+document.getElementById("admin-create-user-shortcut")?.addEventListener("click",openAdminUsersModal);
+document.getElementById("admin-audit-shortcut")?.addEventListener("click",()=>document.getElementById("admin-audit-list")?.scrollIntoView({behavior:"smooth"}));
+document.getElementById("admin-audit-refresh")?.addEventListener("click",loadAdminAudit);
+document.querySelectorAll("[data-admin-filter]").forEach(button=>button.addEventListener("click",()=>{if(adminUsersStatus)adminUsersStatus.value=button.dataset.adminFilter;adminUsersOffset=0;openAdminUsersModal();}));
 adminUsersSearch?.addEventListener("input", () => {
+  adminUsersOffset=0;
   window.clearTimeout(adminUsersSearch._loadTimer);
   adminUsersSearch._loadTimer = window.setTimeout(loadAdminUsers, 250);
 });
@@ -4394,14 +4455,15 @@ adminUserCreateForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
   const formData = new FormData(adminUserCreateForm);
   const role = String(formData.get("role") || "user");
+  let confirmSuperadmin=false;
+  if(role==="superadmin")confirmSuperadmin=await openUiModal({title:"Crear otro superadmin",bodyHtml:"<p>Esta cuenta tendrá acceso administrativo global. Confirmá únicamente si es necesario.</p>",confirmLabel:"Confirmar creación",cancelLabel:"Cancelar",showCancel:true,destructive:true});
+  if(role==="superadmin"&&!confirmSuperadmin)return;
   const payload = {
     username: String(formData.get("username") || "").trim(),
     password: String(formData.get("password") || "").trim(),
     role,
     is_active: formData.get("is_active") === "on",
-    confirm_superadmin: role === "superadmin"
-      ? window.confirm("Confirmas crear otro superadmin?")
-      : false,
+    confirm_superadmin: confirmSuperadmin,
   };
 
   setButtonLoading(adminUserCreateButton, true, "Creando...");
@@ -5144,6 +5206,11 @@ function registerServiceWorker() {
     maintenanceList.innerHTML = '<div class="empty">Accede para continuar.</div>';
     return;
   }
+
+  const initialSession=normalizeSessionUser(getSession()||{});
+  const initialView=getInitialViewForSession(initialSession);
+  if(initialView==="password-change"){await openSettingsModal();showToast("Debes cambiar tu clave numérica para continuar.",{tone:"warning"});return;}
+  if(initialView==="admin"){setView("admin","initAdmin");await loadAdminDashboard();return;}
 
   
 

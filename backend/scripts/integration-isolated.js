@@ -31,6 +31,7 @@ async function resetDatabase(pool) {
     DROP TABLE IF EXISTS activity_logs CASCADE;
     DROP TABLE IF EXISTS push_notification_events CASCADE;
     DROP TABLE IF EXISTS push_subscriptions CASCADE;
+    DROP TABLE IF EXISTS maintenance_plans CASCADE;
     DROP TABLE IF EXISTS maintenance_images CASCADE;
     DROP TABLE IF EXISTS mantenimiento CASCADE;
     DROP TABLE IF EXISTS lugares CASCADE;
@@ -180,10 +181,13 @@ async function seedLegacyUsers(pool) {
 async function applyMigrations(pool) {
   const migration11 = fs.readFileSync(path.join(__dirname, "../src/db/migrations/011_internal_notifications_and_vehicle_images.sql"), "utf8");
   const migration12 = fs.readFileSync(path.join(__dirname, "../src/db/migrations/012_username_auth_superadmin.sql"), "utf8");
+  const migration13 = fs.readFileSync(path.join(__dirname, "../src/db/migrations/013_maintenance_plans.sql"), "utf8");
   await execSql(pool, migration11);
   await execSql(pool, migration12);
+  await execSql(pool, migration13);
   await execSql(pool, migration11);
   await execSql(pool, migration12);
+  await execSql(pool, migration13);
 }
 
 function runScript(scriptName, extraEnv) {
@@ -244,6 +248,7 @@ function startBackend(port) {
     });
     child.stderr.on("data", (chunk) => {
       output += chunk.toString();
+      process.stderr.write(chunk);
     });
     child.on("error", reject);
     child.on("exit", (code) => {
@@ -397,6 +402,24 @@ async function main() {
     });
     const cookieB = changeB.cookie.split(";")[0];
 
+    await request(baseUrl,"/admin/dashboard",{cookie:cookieA,expectedStatus:403});
+    await request(baseUrl,"/admin/audit-logs",{cookie:cookieA,expectedStatus:403});
+    const adminDashboard=await request(baseUrl,"/admin/dashboard",{cookie:adminCookie,expectedStatus:200});
+    assert(Number(adminDashboard.data.metrics.total)>=3,"metricas administrativas incompletas");
+    assert(adminDashboard.data.metrics.password_hash===undefined,"dashboard expuso hash");
+    await pool.query("UPDATE users SET deleted_at=NOW() WHERE id=$1",[userB.data.user.id]);
+    const metricsWithoutDeleted=await request(baseUrl,"/admin/dashboard",{cookie:adminCookie,expectedStatus:200});
+    assert(Number(metricsWithoutDeleted.data.metrics.total)===Number(adminDashboard.data.metrics.total)-1,"usuario eliminado logicamente fue contado");
+    await pool.query("UPDATE users SET deleted_at=NULL WHERE id=$1",[userB.data.user.id]);
+    const auditResponse=await request(baseUrl,"/admin/audit-logs?limit=10&offset=0",{cookie:adminCookie,expectedStatus:200});
+    assert(Array.isArray(auditResponse.data.logs),"auditoria no devolvio lista");
+    assert(auditResponse.data.logs.some(log=>log.action==="admin.user.create"),"creacion administrativa no genero auditoria");
+    assert(!JSON.stringify(auditResponse.data).match(/password_hash|SESSION_SECRET|DATABASE_URL/),"auditoria expuso secretos");
+    await request(baseUrl,"/vehicles",{cookie:adminCookie,expectedStatus:403});
+    await request(baseUrl,"/maintenance",{cookie:adminCookie,expectedStatus:403});
+    await request(baseUrl,`/admin/users/${changedRoot.data.user.id}/status`,{method:"PATCH",cookie:adminCookie,expectedStatus:400,body:{is_active:false}});
+    await request(baseUrl,`/admin/users/${userA.data.user.id}/status`,{method:"PATCH",cookie:cookieA,expectedStatus:403,body:{is_active:false}});
+
     await request(baseUrl, "/admin/users", { cookie: cookieA, expectedStatus: 403 });
     const vehicleA = await request(baseUrl, "/vehicles?user_id=999999", {
       method: "POST",
@@ -430,6 +453,22 @@ async function main() {
       expectedStatus: 201,
       body: { nombre: "Auto B", modelo: "B", patente: "TSTB01", km_actual: "200" },
     });
+    const placeB = await request(baseUrl,"/places",{method:"POST",cookie:cookieB,expectedStatus:201,body:{nombre:"Taller B"}});
+    const oilPlan = await request(baseUrl,"/maintenance-plans",{method:"POST",cookie:cookieA,expectedStatus:201,body:{vehicle_id:vehicleA.data.id,name:"Cambio de aceite",interval_km:5000,notify_km_before:500,initial_service_km:10000}});
+    const brakesPlan = await request(baseUrl,"/maintenance-plans",{method:"POST",cookie:cookieA,expectedStatus:201,body:{vehicle_id:vehicleA.data.id,name:"Frenos",interval_months:6,notify_days_before:15,initial_service_date:"2026-01-01"}});
+    const foreignPlan = await request(baseUrl,"/maintenance-plans",{method:"POST",cookie:cookieB,expectedStatus:201,body:{vehicle_id:vehicleB.data.id,name:"Ajeno",interval_km:1000,notify_km_before:100,initial_service_km:200}});
+    await request(baseUrl,"/maintenance",{method:"POST",cookie:cookieA,expectedStatus:404,body:{fecha:"2026-08-04",vehiculo_id:vehicleA.data.id,lugar_id:placeA.data.id,accion:"Ataque",km:15005,cost:0,maintenance_plan_id:foreignPlan.data.id}});
+    const oilService=await request(baseUrl,"/maintenance",{method:"POST",cookie:cookieA,expectedStatus:201,body:{fecha:"2026-08-04",vehiculo_id:vehicleA.data.id,lugar_id:placeA.data.id,accion:"Cambio de aceite",km:15005,cost:100,maintenance_plan_id:oilPlan.data.id}});
+    let plansA=await request(baseUrl,`/maintenance-plans?vehicle_id=${vehicleA.data.id}`,{cookie:cookieA,expectedStatus:200});
+    assert(plansA.data.find(p=>p.id===oilPlan.data.id).next_service_km===20005,"plan de aceite no avanzo a 20005");
+    assert(String(plansA.data.find(p=>p.id===brakesPlan.data.id).next_service_date).slice(0,10)==="2026-07-01","completar aceite modifico frenos");
+    await request(baseUrl,"/maintenance",{method:"POST",cookie:cookieA,expectedStatus:201,body:{fecha:"2026-08-05",vehiculo_id:vehicleA.data.id,lugar_id:placeA.data.id,accion:"Cambio de luz",km:15006,cost:20}});
+    plansA=await request(baseUrl,`/maintenance-plans?vehicle_id=${vehicleA.data.id}`,{cookie:cookieA,expectedStatus:200});
+    assert(plansA.data.find(p=>p.id===oilPlan.data.id).next_service_km===20005,"eventual modifico aceite");
+    await request(baseUrl,`/maintenance/${oilService.data.id}`,{method:"PUT",cookie:cookieA,expectedStatus:200,body:{fecha:"2026-08-04",vehiculo_id:vehicleA.data.id,lugar_id:placeA.data.id,accion:"Cambio de aceite",km:15100,cost:100,maintenance_plan_id:oilPlan.data.id}});
+    plansA=await request(baseUrl,`/maintenance-plans?vehicle_id=${vehicleA.data.id}`,{cookie:cookieA,expectedStatus:200});assert(plansA.data.find(p=>p.id===oilPlan.data.id).next_service_km===20100,"edicion no recalculo plan");
+    await request(baseUrl,`/maintenance/${oilService.data.id}`,{method:"DELETE",cookie:cookieA,expectedStatus:200});
+    plansA=await request(baseUrl,`/maintenance-plans?vehicle_id=${vehicleA.data.id}`,{cookie:cookieA,expectedStatus:200});assert(plansA.data.find(p=>p.id===oilPlan.data.id).next_service_km===15000,"eliminacion no restauro base inicial");
     const vehiclesAsA = await request(baseUrl, `/vehicles?user_id=${userB.data.user.id}`, {
       cookie: cookieA,
       expectedStatus: 200,
@@ -448,6 +487,8 @@ async function main() {
       body: { image_data_url: "data:image/png;base64,AAAA", file_name: "x.png" },
     });
 
+    await pool.query("UPDATE maintenance_plans SET is_active=FALSE WHERE user_id=$1",[userA.data.user.id]);
+    await pool.query("UPDATE push_notification_events SET read_at=NOW() WHERE user_id=$1",[userA.data.user.id]);
     await pool.query(
       `INSERT INTO push_notification_events (user_id, vehicle_id, maintenance_id, notification_type, dedupe_key, payload, created_at)
        VALUES

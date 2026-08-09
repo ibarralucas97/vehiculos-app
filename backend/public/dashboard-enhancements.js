@@ -15,6 +15,49 @@ const uiModalClose = document.getElementById("ui-modal-close");
 const hasOverviewUi = Boolean(overviewStatusLabel && overviewStatusCopy && overviewMonthlyTotal && overviewTotalInvested && overviewNextService);
 
 let modalResolver = null;
+let currentMaintenancePlans = [];
+
+function planDetailText(plan) {
+  const parts=[];
+  if(plan.km_remaining!==null){
+    parts.push(plan.km_remaining<0?`Atrasado por ${Math.abs(plan.km_remaining).toLocaleString("es-AR")} km`:plan.km_remaining===0?"Vence ahora":`Faltan ${plan.km_remaining.toLocaleString("es-AR")} km`);
+  }
+  if(plan.days_remaining!==null){
+    const n=Math.abs(plan.days_remaining); const unit=n===1?"día":"días";
+    parts.push(plan.days_remaining<0?`Atrasado por ${n} ${unit}`:plan.days_remaining===0?"Vence hoy":`Faltan ${n} ${unit}`);
+  }
+  return parts.join(" · ");
+}
+
+function planUrgencyRank(plan){return plan.status==="overdue"?0:plan.status==="upcoming"?1:2;}
+function sortPlans(plans){return [...plans].sort((a,b)=>planUrgencyRank(a)-planUrgencyRank(b)||(a.km_remaining??Infinity)-(b.km_remaining??Infinity)||(a.days_remaining??Infinity)-(b.days_remaining??Infinity)||a.id-b.id);}
+
+function renderPlanTimeline(plans=currentMaintenancePlans){
+  if(!plans.length)return `<div class="maintenance-plans-empty"><strong>Sin planes configurados</strong><span>Creá el primero indicando su base real.</span></div>`;
+  return `<div class="maintenance-plans-timeline">${sortPlans(plans).map(plan=>`<article class="maintenance-plan-item is-${plan.status}${plan.is_active?"":" is-inactive"}"><span class="maintenance-plan-node"></span><div><strong>${escapeHtml(plan.name)}</strong><p>${plan.next_service_km==null?"":`Próximo: ${Number(plan.next_service_km).toLocaleString("es-AR")} km`}${plan.next_service_date?` · ${formatDateLabel(String(plan.next_service_date).slice(0,10))}`:""}</p><span>${plan.is_active?planDetailText(plan):"Plan inactivo"}</span><div class="maintenance-plan-actions"><button type="button" onclick="toggleMaintenancePlan(${plan.id})">${plan.is_active?"Pausar":"Activar"}</button><button type="button" class="danger" onclick="deleteMaintenancePlan(${plan.id})">Eliminar</button></div></div><em>${plan.is_active?plan.status_label:"Inactivo"}</em></article>`).join("")}</div>`;
+}
+
+async function loadMaintenancePlans(){
+  if(!selectedVehicleId){currentMaintenancePlans=[];return [];}
+  currentMaintenancePlans=await fetchJson(`/maintenance-plans?vehicle_id=${selectedVehicleId}`);
+  const select=document.getElementById("maintenance-plan-select");
+  if(select){const selected=select.value;select.innerHTML='<option value="">Eventual · no reinicia ningún plan</option>'+currentMaintenancePlans.filter(p=>p.is_active).map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join("");select.value=selected;}
+  const list=document.getElementById("maintenance-plans-list");if(list)list.innerHTML=renderPlanTimeline(currentMaintenancePlans);
+  return currentMaintenancePlans;
+}
+
+async function createMaintenancePlan(){
+  const form=document.getElementById("vehicle-reminders-form"); if(!form||!selectedVehicleId)return;
+  const value=(name)=>form.elements[name]?.value||null;
+  const payload={vehicle_id:selectedVehicleId,name:value("plan_name"),interval_km:value("plan_interval_km"),notify_km_before:value("plan_notify_km"),initial_service_km:value("plan_initial_km"),interval_months:value("plan_interval_months"),notify_days_before:value("plan_notify_days"),initial_service_date:value("plan_initial_date")};
+  try{await fetchJson("/maintenance-plans",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});["plan_name","plan_interval_km","plan_initial_km","plan_interval_months","plan_initial_date"].forEach(n=>{if(form.elements[n])form.elements[n].value="";});await loadMaintenancePlans();await loadDashboardOverview();showToast("Plan creado",{tone:"success"});}catch(error){const message=document.getElementById("vehicle-reminders-message");if(message)message.textContent=error.message;}
+}
+
+async function toggleMaintenancePlan(id){const plan=currentMaintenancePlans.find(p=>Number(p.id)===Number(id));if(!plan)return;await fetchJson(`/maintenance-plans/${id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({vehicle_id:plan.vehicle_id,name:plan.name,is_active:!plan.is_active,interval_km:plan.interval_km,notify_km_before:plan.notify_km_before,initial_service_km:plan.initial_service_km,interval_months:plan.interval_months,notify_days_before:plan.notify_days_before,initial_service_date:plan.initial_service_date})});await loadMaintenancePlans();await loadDashboardOverview();}
+async function deleteMaintenancePlan(id){const confirmed=await openUiModal({title:"Eliminar plan",bodyHtml:"<p>El historial se conserva como eventual, pero este plan y sus avisos se eliminarán.</p>",showCancel:true,confirmLabel:"Eliminar",destructive:true});if(!confirmed)return;await fetchJson(`/maintenance-plans/${id}`,{method:"DELETE"});await loadMaintenancePlans();await loadDashboardOverview();}
+
+document.getElementById("maintenance-plan-create")?.addEventListener("click",createMaintenancePlan);
+document.getElementById("maintenance-plans-view-more")?.addEventListener("click",async()=>{await loadMaintenancePlans();openUiModal({title:"Mantenimientos programados",showConfirm:false,bodyHtml:renderPlanTimeline()});});
 
 function formatCurrency(value) {
   return Number(value || 0).toLocaleString("es-AR", {
@@ -254,8 +297,11 @@ async function loadDashboardOverview() {
   overviewNextService.textContent = "Calculando";
 
   try {
-    const data = await fetchJson(`/dashboard/overview?vehiculo_id=${selectedVehicleId}`);
+    const [data,plans] = await Promise.all([fetchJson(`/dashboard/overview?vehiculo_id=${selectedVehicleId}`),loadMaintenancePlans()]);
     renderOverview(data);
+    const urgent=sortPlans(plans.filter(p=>p.is_active))[0];
+    if(urgent){overviewStatusLabel.textContent=urgent.status_label;overviewStatusLabel.className=`vehicle-detail-status is-${urgent.status}`;overviewNextService.textContent=urgent.name;overviewStatusCopy.textContent=planDetailText(urgent);}
+    else{overviewStatusLabel.textContent="Sin planes";overviewStatusLabel.className="vehicle-detail-status";overviewNextService.textContent="Configurá el primero";overviewStatusCopy.textContent="Los recordatorios generales existentes se conservan como legacy.";}
   } catch (error) {
     overviewStatusLabel.textContent = "Error";
     overviewStatusLabel.className = "vehicle-detail-status is-atrasado";

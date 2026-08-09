@@ -80,6 +80,13 @@
               <button id="menu-settings" type="button">Ajustes de la app</button>
               <button id="menu-activity" type="button">Actividad</button>
             </div>
+            <div id="menu-admin-group" class="menu-section hidden">
+              <p class="menu-section-label">Administración</p>
+              <button id="admin-nav-dashboard" type="button">Dashboard</button>
+              <button id="admin-nav-users" type="button">Usuarios</button>
+              <button id="admin-nav-audit" type="button">Auditoría</button>
+              <button id="admin-nav-account" type="button">Mi cuenta y seguridad</button>
+            </div>
             <div id="menu-current-vehicle-group" class="menu-section hidden">
               <p class="menu-section-label">Vehiculo actual</p>
               <p id="menu-current-vehicle-name" class="menu-current-vehicle-name">Sin vehiculo abierto</p>
@@ -197,6 +204,14 @@
         </aside>
       </section>
 
+      <section id="admin-screen" class="admin-screen hidden" aria-labelledby="admin-screen-title">
+        <header class="admin-hero"><div><p>Administración de plataforma</p><h1 id="admin-screen-title">Dashboard administrativo</h1><span>Usuarios, seguridad y operación global de Rodado Control.</span></div><button id="admin-create-user-shortcut" type="button">Crear usuario</button></header>
+        <div id="admin-metrics" class="admin-metrics" aria-live="polite"><div class="admin-loading">Cargando métricas...</div></div>
+        <section class="admin-panel"><div class="section-head"><div><h2>Accesos rápidos</h2><p class="section-copy">Tareas frecuentes de administración.</p></div></div><div class="admin-quick-actions"><button data-admin-filter="all" type="button">Administrar usuarios</button><button data-admin-filter="inactive" type="button">Cuentas desactivadas</button><button data-admin-filter="password_pending" type="button">Cambio de contraseña pendiente</button><button id="admin-audit-shortcut" type="button">Consultar auditoría</button></div></section>
+        <section class="admin-panel"><div class="section-head"><div><h2>Actividad administrativa reciente</h2><p class="section-copy">Acciones seguras registradas por la plataforma.</p></div><button id="admin-audit-refresh" class="ghost" type="button">Actualizar</button></div><div id="admin-audit-list" class="admin-audit-list"><div class="admin-loading">Cargando actividad...</div></div></section>
+        <section class="admin-panel"><div class="section-head"><div><h2>Infraestructura y recursos</h2><p class="section-copy">Accesos externos oficiales. Cada servicio aplica su propia autenticación.</p></div></div><div id="admin-resources" class="admin-resources"></div></section>
+      </section>
+
       <section id="vehicles-screen" class="panel hidden">
         <div class="section-head">
           <h2>Mis vehiculos</h2>
@@ -235,6 +250,7 @@
               <p>Próximo service</p>
               <strong id="overview-next-service">Sin calculo</strong>
               <span id="overview-status-copy">Selecciona un vehiculo para ver el proximo mantenimiento.</span>
+              <button id="maintenance-plans-view-more" class="maintenance-plans-more" type="button">Ver más</button>
             </div>
             <span id="overview-status-label" class="vehicle-detail-status">Sin datos</span>
           </article>
@@ -277,6 +293,13 @@
                 <label>
                   Accion
                   <input type="text" name="accion" required />
+                </label>
+                <label>
+                  Plan programado (opcional)
+                  <select name="maintenance_plan_id" id="maintenance-plan-select">
+                    <option value="">Eventual · no reinicia ningún plan</option>
+                  </select>
+                  <span class="inline-help">Solo una asociación explícita completa el ciclo del plan elegido.</span>
                 </label>
                 <div class="split-fields">
                   <label>
@@ -565,7 +588,7 @@
 </svg></button>
         <h2>Configuracion</h2>
         <div class="settings-grid">
-          <section class="settings-card">
+          <section id="settings-user-preferences" class="settings-card">
             <div class="section-head section-head-stack">
               <div>
                 <h3>Preferencias</h3>
@@ -688,6 +711,22 @@
         </div>
 
         <form id="vehicle-reminders-form" class="vehicle-reminders-layout">
+          <section class="vehicle-reminders-card maintenance-plans-manager">
+            <div class="section-head section-head-stack"><div><h3>Planes por tipo</h3><p class="section-copy">Cada tipo conserva su propio ciclo. La base inicial nunca se completa en silencio.</p></div></div>
+            <div id="maintenance-plans-list" class="maintenance-plans-timeline"></div>
+            <fieldset class="maintenance-plan-form-grid">
+              <legend>Crear plan</legend>
+              <label>Tipo de mantenimiento<input name="plan_name" type="text" placeholder="Ej. Cambio de aceite" /></label>
+              <label>Intervalo km<input name="plan_interval_km" type="number" min="1" /></label>
+              <label>Avisar km antes<input name="plan_notify_km" type="number" min="0" value="500" /></label>
+              <label>Último service (km)<input name="plan_initial_km" type="number" min="0" /></label>
+              <label>Intervalo meses<input name="plan_interval_months" type="number" min="1" /></label>
+              <label>Avisar días antes<input name="plan_notify_days" type="number" min="0" value="15" /></label>
+              <label>Último service (fecha)<input name="plan_initial_date" type="date" /></label>
+              <button id="maintenance-plan-create" type="button">Agregar plan</button>
+            </fieldset>
+            <p class="inline-help">Completá km, tiempo o ambos. Los campos de base son obligatorios solo para el criterio habilitado.</p>
+          </section>
           <section class="vehicle-reminders-card">
             <div class="section-head section-head-stack">
               <div>
@@ -851,9 +890,11 @@
         </form>
         <div class="admin-users-toolbar">
           <input id="admin-users-search" type="search" placeholder="Buscar usuario" autocomplete="off" />
+          <select id="admin-users-status" aria-label="Filtrar por estado"><option value="all">Todos</option><option value="active">Activos</option><option value="inactive">Desactivados</option><option value="password_pending">Cambio pendiente</option><option value="never_logged_in">Nunca ingresaron</option></select>
           <button id="admin-users-refresh" class="ghost" type="button">Actualizar</button>
         </div>
         <div id="admin-users-list" class="admin-users-list"></div>
+        <div class="admin-pagination"><button id="admin-users-prev" class="ghost" type="button">Anterior</button><span id="admin-users-page">Página 1</span><button id="admin-users-next" class="ghost" type="button">Siguiente</button></div>
       </div>
     </div>
 

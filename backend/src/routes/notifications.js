@@ -12,12 +12,14 @@ const {
 } = require("../utils/pushNotifications");
 const {
   buildReminderCandidates,
+  buildPlanReminderCandidates,
   fetchUserReminderRows,
+  fetchUserPlanRows,
   runReminderSweep,
   upsertNotificationEvent,
 } = require("../utils/pushReminders");
 const { normalizeReminder } = require("../utils/reminders");
-const { requireAuth } = require("../middleware/auth");
+const { requireAuth, requireRegularUser } = require("../middleware/auth");
 
 async function getUserNotificationPreferences(userId) {
   const result = await pool.query(
@@ -63,7 +65,7 @@ function requireCronToken(req, res) {
   return true;
 }
 
-router.get("/status", requireAuth(), async (req, res) => {
+router.get("/status", requireAuth(), requireRegularUser, async (req, res) => {
   try {
     const userId = req.user.id;
 
@@ -101,6 +103,7 @@ function parseNotificationRow(row) {
     stage: row.stage || "",
     vehicleId: row.vehicle_id || data.vehicleId || null,
     maintenanceId: row.maintenance_id || data.maintenanceId || null,
+    maintenancePlanId: row.maintenance_plan_id || data.planId || null,
     url: data.url || payload.url || "/",
     createdAt: row.last_sent_at || row.created_at || null,
     readAt: row.read_at || null,
@@ -116,6 +119,7 @@ async function ensureReminderNotificationEvents(userId) {
   }
 
   const rows = await fetchUserReminderRows(pool, userId);
+  const plans = await fetchUserPlanRows(pool,userId);
   let candidatesCount = 0;
 
   for (const vehicle of rows) {
@@ -132,6 +136,12 @@ async function ensureReminderNotificationEvents(userId) {
         stage: candidate.stage,
         dueSnapshot: candidate.dueSnapshot,
       });
+    }
+  }
+  for(const plan of plans){
+    for(const candidate of buildPlanReminderCandidates(plan)){
+      candidatesCount+=1;
+      await upsertNotificationEvent(pool,{userId,vehicleId:plan.vehicle_id,planId:plan.id,notificationType:candidate.type,dedupeKey:candidate.dedupeKey,payload:candidate.notification,stage:candidate.stage,dueSnapshot:candidate.dueSnapshot});
     }
   }
 
@@ -156,7 +166,7 @@ function parsePagination(query) {
   return { limit: limitValue, offset: offsetValue, filter };
 }
 
-router.get("/", requireAuth(), async (req, res) => {
+router.get("/", requireAuth(), requireRegularUser, async (req, res) => {
   try {
     const userId = req.user.id;
     const pagination = parsePagination(req.query);
@@ -191,6 +201,7 @@ router.get("/", requireAuth(), async (req, res) => {
         id,
         vehicle_id,
         maintenance_id,
+        maintenance_plan_id,
         notification_type,
         stage,
         payload,
@@ -223,7 +234,7 @@ router.get("/", requireAuth(), async (req, res) => {
   }
 });
 
-router.patch("/read-all", requireAuth(), async (req, res) => {
+router.patch("/read-all", requireAuth(), requireRegularUser, async (req, res) => {
   try {
     const userId = req.user.id;
 
@@ -241,7 +252,7 @@ router.patch("/read-all", requireAuth(), async (req, res) => {
   }
 });
 
-router.patch("/:id/read", requireAuth(), async (req, res) => {
+router.patch("/:id/read", requireAuth(), requireRegularUser, async (req, res) => {
   try {
     const userId = req.user.id;
     const id = Number(req.params.id);
@@ -269,7 +280,7 @@ router.patch("/:id/read", requireAuth(), async (req, res) => {
   }
 });
 
-router.post("/subscribe", requireAuth(), async (req, res) => {
+router.post("/subscribe", requireAuth(), requireRegularUser, async (req, res) => {
   try {
     const userId = req.user.id;
 
@@ -292,7 +303,7 @@ router.post("/subscribe", requireAuth(), async (req, res) => {
   }
 });
 
-router.delete("/subscribe", requireAuth(), async (req, res) => {
+router.delete("/subscribe", requireAuth(), requireRegularUser, async (req, res) => {
   try {
     const userId = req.user.id;
 
@@ -310,7 +321,7 @@ router.delete("/subscribe", requireAuth(), async (req, res) => {
   }
 });
 
-router.post("/test", requireAuth(), async (req, res) => {
+router.post("/test", requireAuth(), requireRegularUser, async (req, res) => {
   try {
     const userId = req.user.id;
 

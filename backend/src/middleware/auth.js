@@ -62,7 +62,13 @@ function requireSuperadmin(req, res, next) {
   return next();
 }
 
+function requireRegularUser(req,res,next){
+  if(req.user?.role === "superadmin") return res.status(403).json({error:"Esta funcion pertenece a la aplicacion de usuarios",code:"ADMIN_ONLY_EXPERIENCE"});
+  return next();
+}
+
 module.exports = {
   requireAuth,
   requireSuperadmin,
+  requireRegularUser,
 };

@@ -48,6 +48,7 @@ async function countActiveSuperadmins(client) {
 router.get("/users", async (req, res) => {
   try {
     const search = String(req.query.search || "").trim();
+    const status = String(req.query.status || "all").trim();
     const rawLimit = Number(req.query.limit || 25);
     const rawOffset = Number(req.query.offset || 0);
     const limit = Number.isInteger(rawLimit) ? Math.min(Math.max(rawLimit, 1), 50) : 25;
@@ -60,8 +61,13 @@ router.get("/users", async (req, res) => {
       return res.status(400).json({ error: "offset invalido" });
     }
 
+    if(!["all","active","inactive","password_pending","never_logged_in"].includes(status)) return res.status(400).json({error:"status invalido"});
     const values = [];
     let where = "deleted_at IS NULL";
+    if(status==="active")where+=" AND is_active=TRUE";
+    if(status==="inactive")where+=" AND is_active=FALSE";
+    if(status==="password_pending")where+=" AND must_change_password=TRUE";
+    if(status==="never_logged_in")where+=" AND last_login_at IS NULL";
     if (search) {
       values.push(`%${search}%`);
       where += ` AND username ILIKE $${values.length}`;
@@ -93,6 +99,31 @@ router.get("/users", async (req, res) => {
     console.error(error);
     res.status(500).json({ error: "Error al listar usuarios" });
   }
+});
+
+router.get("/dashboard",async(_req,res)=>{
+  try{
+    const result=await pool.query(`SELECT COUNT(*)::int AS total,
+      COUNT(*) FILTER(WHERE is_active=TRUE)::int AS active,
+      COUNT(*) FILTER(WHERE is_active=FALSE)::int AS inactive,
+      COUNT(*) FILTER(WHERE must_change_password=TRUE)::int AS password_pending,
+      COUNT(*) FILTER(WHERE last_login_at IS NULL)::int AS never_logged_in,
+      COUNT(*) FILTER(WHERE created_at>=NOW()-INTERVAL '30 days')::int AS recent
+      FROM users WHERE deleted_at IS NULL`);
+    res.json({ok:true,metrics:result.rows[0]});
+  }catch(error){console.error(error);res.status(500).json({error:"Error al cargar el dashboard administrativo"});}
+});
+
+router.get("/audit-logs",async(req,res)=>{
+  try{
+    const rawLimit=Number(req.query.limit||20),rawOffset=Number(req.query.offset||0);
+    if(!Number.isInteger(rawLimit)||rawLimit<1||rawLimit>50||!Number.isInteger(rawOffset)||rawOffset<0)return res.status(400).json({error:"Paginacion invalida"});
+    const total=await pool.query("SELECT COUNT(*)::int AS total FROM admin_audit_logs");
+    const result=await pool.query(`SELECT a.id,a.action,a.created_at,actor.id AS actor_id,actor.username AS actor_username,target.id AS target_id,target.username AS target_username
+      FROM admin_audit_logs a LEFT JOIN users actor ON actor.id=a.actor_user_id LEFT JOIN users target ON target.id=a.target_user_id
+      ORDER BY a.created_at DESC,a.id DESC LIMIT $1 OFFSET $2`,[rawLimit,rawOffset]);
+    res.json({ok:true,logs:result.rows.map(row=>({id:row.id,action:row.action,createdAt:row.created_at,actor:{id:row.actor_id,username:row.actor_username||"Usuario eliminado"},target:row.target_id?{id:row.target_id,username:row.target_username||"Usuario eliminado"}:null})),pagination:{limit:rawLimit,offset:rawOffset,total:Number(total.rows[0].total),hasMore:rawOffset+result.rowCount<Number(total.rows[0].total)}});
+  }catch(error){console.error(error);res.status(500).json({error:"Error al consultar auditoria"});}
 });
 
 router.post("/users", async (req, res) => {

@@ -3,6 +3,28 @@ const {
   normalizeReminder,
 } = require("./reminders");
 const { buildNotificationPayload, sendPushToUser } = require("./pushNotifications");
+const { calculatePlan } = require("./maintenancePlans");
+
+async function fetchUserPlanRows(pool, userId) {
+  const result=await pool.query(`SELECT p.*,v.nombre AS vehicle_name,v.km_actual FROM maintenance_plans p JOIN vehiculos v ON v.id=p.vehicle_id AND v.user_id=p.user_id WHERE p.user_id=$1 AND p.is_active=TRUE ORDER BY p.id`,[userId]);
+  return result.rows.map((row)=>calculatePlan(row,{currentKm:row.km_actual}));
+}
+
+function buildPlanReminderCandidates(plan) {
+  const candidates=[]; const url=buildNotificationIntentUrl({vehicleId:plan.vehicle_id});
+  const common={planId:plan.id,vehicleId:plan.vehicle_id};
+  if(plan.status==="upcoming"){
+    const detail=plan.km_remaining!==null && plan.km_remaining<=Number(plan.notify_km_before||0)
+      ? `Faltan ${Math.max(plan.km_remaining,0).toLocaleString("es-AR")} km.`
+      : `Vence el ${String(plan.next_service_date).split("-").reverse().join("/")}.`;
+    candidates.push({type:"maintenance_plan_upcoming",stage:"upcoming",dueSnapshot:`${plan.next_service_km||"-"}:${plan.next_service_date||"-"}`,dedupeKey:`maintenance_plan_upcoming:${plan.id}:${plan.next_service_km||"-"}:${plan.next_service_date||"-"}`,cooldownDays:DEFAULT_REPEAT_DAYS,notification:buildNotificationPayload({title:`${plan.name} próximo`,body:detail,type:"maintenance_plan_upcoming",tag:`maintenance-plan-upcoming-${plan.id}`,url,data:common})});
+  }
+  if(plan.status==="overdue"){
+    const parts=[]; if(plan.km_remaining!==null&&plan.km_remaining<=0)parts.push(`atrasado por ${Math.abs(plan.km_remaining)} km`); if(plan.days_remaining!==null&&plan.days_remaining<0)parts.push(`atrasado por ${Math.abs(plan.days_remaining)} ${Math.abs(plan.days_remaining)===1?"día":"días"}`);
+    candidates.push({type:"maintenance_plan_overdue",stage:"overdue",dueSnapshot:`${plan.next_service_km||"-"}:${plan.next_service_date||"-"}`,dedupeKey:`maintenance_plan_overdue:${plan.id}:${plan.next_service_km||"-"}:${plan.next_service_date||"-"}`,cooldownDays:DEFAULT_REPEAT_DAYS,notification:buildNotificationPayload({title:`${plan.name} atrasado`,body:parts.join(" · "),type:"maintenance_plan_overdue",tag:`maintenance-plan-overdue-${plan.id}`,url,data:common})});
+  }
+  return candidates;
+}
 
 function buildNotificationIntentUrl({ vehicleId = null, maintenanceId = null, view = "dashboard" } = {}) {
   const params = new URLSearchParams();
@@ -160,20 +182,22 @@ function buildReminderCandidates(reminder) {
   return candidates;
 }
 
-async function upsertNotificationEvent(pool, { userId, vehicleId, notificationType, dedupeKey, payload, stage, dueSnapshot }) {
+async function upsertNotificationEvent(pool, { userId, vehicleId, planId, notificationType, dedupeKey, payload, stage, dueSnapshot }) {
   const result = await pool.query(
     `INSERT INTO push_notification_events (
       user_id,
       vehicle_id,
+      maintenance_plan_id,
       notification_type,
       dedupe_key,
       stage,
       due_snapshot,
       payload
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
     ON CONFLICT (dedupe_key)
     DO UPDATE SET
+      maintenance_plan_id = EXCLUDED.maintenance_plan_id,
       notification_type = EXCLUDED.notification_type,
       stage = EXCLUDED.stage,
       due_snapshot = EXCLUDED.due_snapshot,
@@ -182,6 +206,7 @@ async function upsertNotificationEvent(pool, { userId, vehicleId, notificationTy
     [
       userId,
       vehicleId || null,
+      planId || null,
       notificationType,
       dedupeKey,
       stage || null,
@@ -255,6 +280,7 @@ async function runReminderSweep(pool) {
   for (const row of usersResult.rows) {
     const reminderRows = await fetchUserReminderRows(pool, row.id);
     const reminders = reminderRows.map((vehicle) => normalizeReminder(vehicle));
+    const plans = await fetchUserPlanRows(pool,row.id);
 
     for (const reminder of reminders) {
       const candidates = buildReminderCandidates(reminder);
@@ -308,6 +334,17 @@ async function runReminderSweep(pool) {
         });
       }
     }
+    for(const plan of plans){
+      for(const candidate of buildPlanReminderCandidates(plan)){
+        summary.candidates+=1;
+        const eventRow=await upsertNotificationEvent(pool,{userId:row.id,vehicleId:plan.vehicle_id,planId:plan.id,notificationType:candidate.type,dedupeKey:candidate.dedupeKey,payload:candidate.notification,stage:candidate.stage,dueSnapshot:candidate.dueSnapshot});
+        if(!eventRow||isEventInCooldown(eventRow)){summary.cooldownSkipped+=1;continue;}
+        const result=await sendPushToUser(pool,{userId:row.id,notification:candidate.notification});
+        summary.sent+=result.sent;summary.failed+=result.failed;summary.pruned+=result.pruned;
+        if(result.sent>0||result.pruned>0)await markNotificationEventSent(pool,{eventId:eventRow.id,payload:candidate.notification,cooldownDays:candidate.cooldownDays,result:result.sent>0?"sent":"pruned"});
+        else await markNotificationEventFailure(pool,{eventId:eventRow.id,payload:candidate.notification,result:result.error||"failed"});
+      }
+    }
   }
 
   return summary;
@@ -316,7 +353,9 @@ async function runReminderSweep(pool) {
 module.exports = {
   buildNotificationIntentUrl,
   buildReminderCandidates,
+  buildPlanReminderCandidates,
   fetchUserReminderRows,
+  fetchUserPlanRows,
   runReminderSweep,
   upsertNotificationEvent,
 };

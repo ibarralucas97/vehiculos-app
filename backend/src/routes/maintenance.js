@@ -5,8 +5,10 @@ const { validateMaintenancePayload } = require("../utils/validation");
 const { buildNotificationPayload, sendPushToUser } = require("../utils/pushNotifications");
 const { buildNotificationIntentUrl } = require("../utils/pushReminders");
 const { logActivity } = require("../utils/activityLog");
+const { recalculatePlan } = require("../utils/maintenancePlans");
 const MAX_IMAGE_BASE64_LENGTH = 7_000_000;
 const ALLOWED_IMAGE_MIME_TYPES = new Set(["image/png", "image/jpeg"]);
+function parseMaintenancePlanId(value){if(value===null||value===undefined||value==="")return null;const id=Number(value);return Number.isInteger(id)&&id>0?id:NaN;}
 
 function parseMaintenanceImagePayload(payload = {}) {
   const imageUrl = String(payload.image_url || "").trim();
@@ -78,25 +80,28 @@ router.post("/", async (req, res) => {
     }
 
     const userId = req.user.id;
+    const maintenancePlanId = parseMaintenancePlanId(req.body.maintenance_plan_id);
+    if(Number.isNaN(maintenancePlanId)) return res.status(400).json({error:"maintenance_plan_id invalido"});
 
     await client.query("BEGIN");
 
     const ownershipResult = await client.query(
       `SELECT
         EXISTS(SELECT 1 FROM vehiculos WHERE id = $1 AND user_id = $3) AS vehicle_ok,
-        EXISTS(SELECT 1 FROM lugares WHERE id = $2 AND user_id = $3) AS place_ok`,
-      [data.vehiculo_id, data.lugar_id, userId]
+        EXISTS(SELECT 1 FROM lugares WHERE id = $2 AND user_id = $3) AS place_ok,
+        ($4::int IS NULL OR EXISTS(SELECT 1 FROM maintenance_plans WHERE id=$4 AND vehicle_id=$1 AND user_id=$3)) AS plan_ok`,
+      [data.vehiculo_id, data.lugar_id, userId, maintenancePlanId]
     );
 
-    if (!ownershipResult.rows[0].vehicle_ok || !ownershipResult.rows[0].place_ok) {
+    if (!ownershipResult.rows[0].vehicle_ok || !ownershipResult.rows[0].place_ok || !ownershipResult.rows[0].plan_ok) {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Vehiculo o lugar no encontrado" });
     }
 
     const result = await client.query(
       `INSERT INTO mantenimiento
-      (fecha, vehiculo_id, lugar_id, accion, km, cost, user_id)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      (fecha, vehiculo_id, lugar_id, accion, km, cost, user_id, maintenance_plan_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       RETURNING *`,
       [
         data.fecha,
@@ -105,11 +110,12 @@ router.post("/", async (req, res) => {
         data.accion,
         data.km,
         data.cost,
-        userId,
+        userId, maintenancePlanId,
       ]
     );
 
     const createdMaintenance = result.rows[0];
+    if (maintenancePlanId) await recalculatePlan(client, maintenancePlanId, userId);
     let createdImage = null;
 
     if (imagePayload.data) {
@@ -261,6 +267,8 @@ router.get("/", async (req, res) => {
         m.accion,
         m.km,
         m.cost,
+        m.maintenance_plan_id,
+        mp.name AS maintenance_plan_name,
         mi.image_url,
         mi.image_base64,
         COALESCE(mi.image_url, mi.image_base64) AS image_source
@@ -274,6 +282,7 @@ router.get("/", async (req, res) => {
         ORDER BY created_at DESC, id DESC
         LIMIT 1
       ) mi ON TRUE
+      LEFT JOIN maintenance_plans mp ON mp.id=m.maintenance_plan_id AND mp.user_id=m.user_id
       ${whereClause}
       ORDER BY m.fecha DESC, m.id DESC
       ${limitClause}`,
@@ -382,6 +391,8 @@ router.put("/:id", async (req, res) => {
   try {
     const maintenanceId = Number(req.params.id);
     const userId = req.user.id;
+    const maintenancePlanId = parseMaintenancePlanId(req.body.maintenance_plan_id);
+    if(Number.isNaN(maintenancePlanId)) return res.status(400).json({error:"maintenance_plan_id invalido"});
     const { errors, data } = validateMaintenancePayload(req.body);
 
     if (!maintenanceId) {
@@ -393,14 +404,19 @@ router.put("/:id", async (req, res) => {
 
     await client.query("BEGIN");
 
+    const previousResult = await client.query("SELECT maintenance_plan_id FROM mantenimiento WHERE id=$1 AND user_id=$2 FOR UPDATE", [maintenanceId,userId]);
+    if (!previousResult.rowCount) { await client.query("ROLLBACK"); return res.status(404).json({error:"Mantenimiento no encontrado"}); }
+    const previousPlanId = previousResult.rows[0].maintenance_plan_id;
+
     const ownershipResult = await client.query(
       `SELECT
         EXISTS(SELECT 1 FROM vehiculos WHERE id = $1 AND user_id = $3) AS vehicle_ok,
-        EXISTS(SELECT 1 FROM lugares WHERE id = $2 AND user_id = $3) AS place_ok`,
-      [data.vehiculo_id, data.lugar_id, userId]
+        EXISTS(SELECT 1 FROM lugares WHERE id = $2 AND user_id = $3) AS place_ok,
+        ($4::int IS NULL OR EXISTS(SELECT 1 FROM maintenance_plans WHERE id=$4 AND vehicle_id=$1 AND user_id=$3)) AS plan_ok`,
+      [data.vehiculo_id, data.lugar_id, userId, maintenancePlanId]
     );
 
-    if (!ownershipResult.rows[0].vehicle_ok || !ownershipResult.rows[0].place_ok) {
+    if (!ownershipResult.rows[0].vehicle_ok || !ownershipResult.rows[0].place_ok || !ownershipResult.rows[0].plan_ok) {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Vehiculo o lugar no encontrado" });
     }
@@ -412,16 +428,19 @@ router.put("/:id", async (req, res) => {
            lugar_id = $3,
            accion = $4,
            km = $5,
-           cost = $6
+           cost = $6,
+           maintenance_plan_id = $9
        WHERE id = $7 AND user_id = $8
        RETURNING *`,
-      [data.fecha, data.vehiculo_id, data.lugar_id, data.accion, data.km, data.cost, maintenanceId, userId]
+      [data.fecha, data.vehiculo_id, data.lugar_id, data.accion, data.km, data.cost, maintenanceId, userId, maintenancePlanId]
     );
 
     if (result.rowCount === 0) {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Mantenimiento no encontrado" });
     }
+    if (previousPlanId) await recalculatePlan(client, previousPlanId, userId);
+    if (maintenancePlanId && Number(maintenancePlanId) !== Number(previousPlanId)) await recalculatePlan(client, maintenancePlanId, userId);
 
     await client.query(
       `UPDATE vehiculos
@@ -466,6 +485,7 @@ router.put("/:id", async (req, res) => {
 
 
 router.delete("/:id", async (req, res) => {
+  const client = await pool.connect();
   try {
     const maintenanceId = Number(req.params.id);
     const userId = req.user.id;
@@ -474,17 +494,21 @@ router.delete("/:id", async (req, res) => {
       return res.status(400).json({ error: "maintenance_id invalido" });
     }
 
-    const result = await pool.query(
+    await client.query("BEGIN");
+    const result = await client.query(
       `DELETE FROM mantenimiento
        WHERE id = $1
          AND user_id = $2
-       RETURNING id, accion, vehiculo_id, lugar_id`,
+       RETURNING id, accion, vehiculo_id, lugar_id, maintenance_plan_id`,
       [maintenanceId, userId]
     );
 
     if (result.rowCount === 0) {
+      await client.query("ROLLBACK");
       return res.status(404).json({ error: "Mantenimiento no encontrado" });
     }
+    if(result.rows[0].maintenance_plan_id) await recalculatePlan(client,result.rows[0].maintenance_plan_id,userId);
+    await client.query("COMMIT");
 
     await logActivity(pool, {
       userId,
@@ -500,9 +524,10 @@ router.delete("/:id", async (req, res) => {
 
     res.json({ ok: true, id: result.rows[0].id });
   } catch (error) {
+    await client.query("ROLLBACK").catch(()=>{});
     console.error(error);
     res.status(500).json({ error: "Error al eliminar el mantenimiento" });
-  }
+  } finally { client.release(); }
 });
 
 module.exports = router;
