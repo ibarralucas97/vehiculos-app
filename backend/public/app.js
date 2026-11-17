@@ -323,7 +323,8 @@ const vehiclePhotoPreviewFallback = document.getElementById("vehicle-photo-previ
 const vehiclePhotoMessage = document.getElementById("vehicle-photo-message");
 const themeColorMeta = document.querySelector('meta[name="theme-color"]');
 
-let maintenanceImageRefs = getMaintenanceImageRefs();
+let sessionGeneration = 0;
+removeLegacyMaintenanceImages();
 let currentMaintenanceRecords = new Map();
 let notificationsServerStatus = null;
 let notificationStateLoading = false;
@@ -458,6 +459,9 @@ function getSession() {
 }
 
 function saveSession(user) {
+  if (String(getSession()?.id || "") !== String(user.id || "")) {
+    clearPrivateMaintenanceState();
+  }
   const normalizedUser = normalizeSessionUser(user);
   localStorage.setItem(
     SESSION_KEY,
@@ -469,21 +473,71 @@ function saveSession(user) {
 }
 
 function clearSession() {
+  clearPrivateMaintenanceState();
   localStorage.removeItem(SESSION_KEY);
-  currentNotifications = [];
-  setTopbarUnreadBadge(0);
 }
 
-function getMaintenanceImageRefs() {
+function removeLegacyMaintenanceImages() {
   try {
-    return JSON.parse(localStorage.getItem(MAINTENANCE_IMAGES_KEY) || "{}");
+    localStorage.removeItem(MAINTENANCE_IMAGES_KEY);
   } catch (_error) {
-    return {};
+    // Storage may be unavailable; never read or reuse the legacy value.
   }
 }
 
-function saveMaintenanceImageRefs() {
-  localStorage.setItem(MAINTENANCE_IMAGES_KEY, JSON.stringify(maintenanceImageRefs));
+function clearPrivateMaintenanceState() {
+  sessionGeneration += 1;
+  removeLegacyMaintenanceImages();
+  currentMaintenanceRecords.clear();
+  clearPrivatePhotoState();
+  currentNotifications = [];
+  notificationsState = {
+    filter: "all", expanded: false, limit: 10, offset: 0,
+    hasMore: false, loading: false, unreadCount: 0,
+  };
+  notificationsServerStatus = null;
+  notificationsLastSyncAt = null;
+  notificationStateLoading = false;
+  setTopbarUnreadBadge(0);
+  renderNotificationsInbox();
+  if (typeof clearPrivateDashboardState === "function") clearPrivateDashboardState();
+  document.getElementById("vehicle-reminders-form")?.reset();
+  closeModal("vehicle-reminders-modal");
+  editingVehicleReminderId = null;
+  for (const id of ["vehicle-reminders-title", "vehicle-reminders-subtitle", "vehicle-reminders-message",
+    "vehicle-reminders-summary-date", "vehicle-reminders-summary-km", "vehicle-reminders-summary-note",
+    "notifications-status", "settings-push-state", "settings-push-copy", "settings-sync-state",
+    "settings-sync-copy", "settings-reminder-km"]) {
+    document.getElementById(id)?.replaceChildren();
+  }
+  currentPlaces = [];
+  currentVehicles = [];
+  selectedVehicleId = null;
+  resetMaintenanceFormState();
+  closeMaintenanceImageLightbox();
+  reopenHistoryAfterMaintenanceDetail = false;
+  closeMaintenanceDetail();
+  if (maintenanceDetailTitle) maintenanceDetailTitle.textContent = "";
+  for (const id of ["maintenance-list", "places-list", "vehiculo_id", "lugar_id", "ui-modal-body"]) {
+    document.getElementById(id)?.replaceChildren();
+  }
+}
+
+function clearPrivatePhotoState() {
+  selectedVehiclePhotoFile = null;
+  selectedVehiclePhotoDataUrl = "";
+  selectedProfilePhotoFile = null;
+  selectedProfilePhotoDataUrl = "";
+  vehicleForm?.reset();
+  profileForm?.reset();
+  if (vehiclePhotoInput) vehiclePhotoInput.value = "";
+  if (profilePhotoInput) profilePhotoInput.value = "";
+  if (vehicleForm?.elements.photo_url) vehicleForm.elements.photo_url.value = "";
+  if (vehicleForm?.elements.photo_public_id) vehicleForm.elements.photo_public_id.value = "";
+  if (profileForm?.elements.profile_photo_url) profileForm.elements.profile_photo_url.value = "";
+  renderVehiclePhotoPreview("");
+  setProfileAvatar("");
+  if (profilePhotoMessage) profilePhotoMessage.textContent = "Selecciona una foto PNG, JPG o WEBP de hasta 5 MB.";
 }
 
 function getPreferredTheme() {
@@ -907,6 +961,7 @@ function renderNotificationsInbox() {
 }
 
 async function loadNotificationsInbox({ append = false, expanded = notificationsState.expanded } = {}) {
+  const generation = sessionGeneration;
   const session = getSession();
 
   if (!session?.id || notificationsState.loading) {
@@ -928,14 +983,17 @@ async function loadNotificationsInbox({ append = false, expanded = notifications
       filter: notificationsState.filter,
     });
     const response = await fetchJson(`/notifications?${params.toString()}`);
+    if (generation !== sessionGeneration) return;
     const incoming = Array.isArray(response.notifications) ? response.notifications : [];
     currentNotifications = append ? [...currentNotifications, ...incoming] : incoming;
     notificationsState.hasMore = Boolean(response.pagination?.hasMore);
     notificationsState.unreadCount = Number(response.unreadCount || 0);
     setTopbarUnreadBadge(notificationsState.unreadCount);
   } finally {
-    notificationsState.loading = false;
-    renderNotificationsInbox();
+    if (generation === sessionGeneration) {
+      notificationsState.loading = false;
+      renderNotificationsInbox();
+    }
   }
 }
 
@@ -1474,6 +1532,7 @@ async function getCurrentPushSubscription() {
 }
 
 async function refreshNotificationControls() {
+  const generation = sessionGeneration;
   if (!notificationsStatus || !notificationsToggleButton || !notificationsTestButton) {
     return;
   }
@@ -1501,6 +1560,7 @@ async function refreshNotificationControls() {
 
     const status = await fetchNotificationServerStatus();
     const subscription = await getCurrentPushSubscription();
+    if (generation !== sessionGeneration) return;
     const hasSubscription = Boolean(subscription) && Number(status?.subscriptionCount || 0) > 0;
     const permission = Notification.permission;
     const remindersPaused = session.remindersEnabled === false;
@@ -1534,9 +1594,9 @@ async function refreshNotificationControls() {
     notificationsTestButton.disabled = !hasSubscription;
     renderReminderSettingsSummary(session, status);
   } catch (error) {
-    setNotificationStatus(error.message, "error");
+    if (generation === sessionGeneration) setNotificationStatus(error.message, "error");
   } finally {
-    notificationStateLoading = false;
+    if (generation === sessionGeneration) notificationStateLoading = false;
   }
 }
 
@@ -2450,6 +2510,7 @@ function toggleMenu() {
 
 
 async function fetchJson(url, options = {}) {
+  const generation = sessionGeneration;
   const method = String(options?.method || "GET").toUpperCase();
   const requestOptions = {
     ...options,
@@ -2470,6 +2531,9 @@ async function fetchJson(url, options = {}) {
 
   const response = await fetch(requestUrl, requestOptions);
   const rawBody = await response.text();
+  if (generation !== sessionGeneration) {
+    throw new Error("La sesion cambio durante la solicitud. Volve a intentarlo.");
+  }
   let data = {};
 
   if (rawBody) {
@@ -2916,9 +2980,14 @@ function setHistoryState(state, detail = "") {
   maintenanceList.innerHTML = config.body;
 }
 
+function safeRecordId(value) {
+  const id = Number(value);
+  return Number.isSafeInteger(id) && id > 0 ? id : 0;
+}
+
 function optionMarkup(items, labelKey) {
   return items
-    .map((item) => `<option value="${item.id}">${item[labelKey]}</option>`)
+    .map((item) => `<option value="${safeRecordId(item.id)}">${escapeHtml(item[labelKey])}</option>`)
     .join("");
 }
 
@@ -2937,21 +3006,6 @@ function buildItemActionButton({ action, icon, label, variant = "default" }) {
   `;
 }
 
-function persistMaintenanceImages(items) {
-  let hasChanges = false;
-
-  items.forEach((item) => {
-    if (item?.id && item.image_source && maintenanceImageRefs[item.id] !== item.image_source) {
-      maintenanceImageRefs[item.id] = item.image_source;
-      hasChanges = true;
-    }
-  });
-
-  if (hasChanges) {
-    saveMaintenanceImageRefs();
-  }
-}
-
 function cacheMaintenanceItems(items = []) {
   items.forEach((item) => {
     if (!item?.id) return;
@@ -2965,12 +3019,16 @@ function cacheMaintenanceItems(items = []) {
 
 function removeCachedMaintenance(id) {
   currentMaintenanceRecords.delete(Number(id));
-  delete maintenanceImageRefs[id];
-  saveMaintenanceImageRefs();
 }
 
 function getMaintenanceImageSource(item) {
-  return item?.image_source || maintenanceImageRefs[item?.id] || "";
+  const source = String(item?.image_source || "").trim();
+  if (/^data:image\/(?:png|jpeg|webp);base64,[a-z0-9+/=\s]+$/i.test(source)) return source;
+  try {
+    const url = new URL(source, window.location.origin);
+    if (source && ["http:", "https:"].includes(url.protocol) && !url.username && !url.password) return url.href;
+  } catch (_error) {}
+  return "";
 }
 
 function getMaintenanceRecord(id) {
@@ -3022,23 +3080,23 @@ function buildMaintenanceDetailMarkup(item) {
 
   return `
     <div class="maintenance-detail-grid">
-      <div class="maintenance-detail-item"><strong>Tipo</strong><span>${item.accion || "Sin dato"}</span></div>
+      <div class="maintenance-detail-item"><strong>Tipo</strong><span>${escapeHtml(item.accion || "Sin dato")}</span></div>
       <div class="maintenance-detail-item"><strong>Fecha</strong><span>${formatMaintenanceDate(item.fecha)}</span></div>
-      <div class="maintenance-detail-item"><strong>Kilometraje</strong><span>${formatDistance(item.km)}</span></div>
-      <div class="maintenance-detail-item"><strong>Costo</strong><span>${formatCurrency(item.cost)}</span></div>
-      <div class="maintenance-detail-item"><strong>Vehiculo</strong><span>${item.vehiculo || "Sin dato"}${item.modelo ? ` - ${item.modelo}` : ""}</span></div>
-      <div class="maintenance-detail-item"><strong>Patente</strong><span>${item.patente || "Sin dato"}</span></div>
-      <div class="maintenance-detail-item"><strong>Taller / lugar</strong><span>${item.lugar || "Sin dato"}</span></div>
-      <div class="maintenance-detail-item"><strong>Usuario</strong><span>${userLabel}</span></div>
-      <div class="maintenance-detail-item"><strong>Descripcion</strong><span>${item.accion || "Sin dato"}</span></div>
-      <div class="maintenance-detail-item"><strong>Observaciones</strong><span>${observations}</span></div>
+      <div class="maintenance-detail-item"><strong>Kilometraje</strong><span>${escapeHtml(formatDistance(item.km))}</span></div>
+      <div class="maintenance-detail-item"><strong>Costo</strong><span>${escapeHtml(formatCurrency(item.cost))}</span></div>
+      <div class="maintenance-detail-item"><strong>Vehiculo</strong><span>${escapeHtml(item.vehiculo || "Sin dato")}${item.modelo ? ` - ${escapeHtml(item.modelo)}` : ""}</span></div>
+      <div class="maintenance-detail-item"><strong>Patente</strong><span>${escapeHtml(item.patente || "Sin dato")}</span></div>
+      <div class="maintenance-detail-item"><strong>Taller / lugar</strong><span>${escapeHtml(item.lugar || "Sin dato")}</span></div>
+      <div class="maintenance-detail-item"><strong>Usuario</strong><span>${escapeHtml(userLabel)}</span></div>
+      <div class="maintenance-detail-item"><strong>Descripcion</strong><span>${escapeHtml(item.accion || "Sin dato")}</span></div>
+      <div class="maintenance-detail-item"><strong>Observaciones</strong><span>${escapeHtml(observations)}</span></div>
     </div>
     <div class="maintenance-detail-media">
       ${
         imageSource
           ? `
-            <button type="button" class="maintenance-image-button" onclick="openMaintenanceImageLightboxById(${Number(item.id)})">
-              <img src="${imageSource}" alt="Imagen del mantenimiento ${item.accion || ""}" />
+            <button type="button" class="maintenance-image-button" onclick="openMaintenanceImageLightboxById(${safeRecordId(item.id)})">
+              <img src="${escapeHtml(imageSource)}" alt="Imagen del mantenimiento ${escapeHtml(item.accion || "")}" />
             </button>
             <p class="maintenance-image-caption">Toca la imagen para ampliarla.</p>
           `
@@ -3046,8 +3104,8 @@ function buildMaintenanceDetailMarkup(item) {
       }
     </div>
     <div class="maintenance-detail-actions-footer">
-      <button class="ghost maintenance-card-button" type="button" onclick="editMaintenance(${Number(item.id)})">Editar</button>
-      <button class="ghost maintenance-card-button danger" type="button" onclick="deleteMaintenance(${Number(item.id)})">Eliminar</button>
+      <button class="ghost maintenance-card-button" type="button" onclick="editMaintenance(${safeRecordId(item.id)})">Editar</button>
+      <button class="ghost maintenance-card-button danger" type="button" onclick="deleteMaintenance(${safeRecordId(item.id)})">Eliminar</button>
     </div>
   `;
 }
@@ -3177,13 +3235,13 @@ function renderMaintenanceCards(items, container) {
   container.innerHTML = items
     .map(
       (item) => {
-        const placeMarkup = item.lugar ? `<span>Taller: ${item.lugar}</span>` : "";
+        const placeMarkup = item.lugar ? `<span>Taller: ${escapeHtml(item.lugar)}</span>` : "";
 
         return `
         <article class="card">
           <div class="card-top">
             <div>
-              <h3>${item.accion}</h3>
+              <h3>${escapeHtml(item.accion)}</h3>
             </div>
             <strong>${formatCurrency(item.cost)}</strong>
           </div>
@@ -3193,7 +3251,7 @@ function renderMaintenanceCards(items, container) {
             ${placeMarkup}
           </div>
           <div class="maintenance-card-actions">
-            <button class="ghost maintenance-card-button" type="button" onclick="openMaintenanceDetail(${Number(item.id)})">Ver detalle</button>
+            <button class="ghost maintenance-card-button" type="button" onclick="openMaintenanceDetail(${safeRecordId(item.id)})">Ver detalle</button>
           </div>
         </article>
       `;
@@ -3265,14 +3323,14 @@ async function loadPlacesList() {
     <div class="item-row">
       
       <div class="item-info">
-        <strong>${p.nombre}</strong>
-        <span>${p.ubicacion || ""}</span>
+        <strong>${escapeHtml(p.nombre)}</strong>
+        <span>${escapeHtml(p.ubicacion || "")}</span>
       </div>
 
       <div class="item-actions">
-        ${buildItemActionButton({ action: `viewPlace(${p.id})`, icon: "view", label: "Ver lugar" })}
-        ${buildItemActionButton({ action: `editPlace(${p.id})`, icon: "edit", label: "Editar lugar" })}
-        ${buildItemActionButton({ action: `deletePlace(${p.id})`, icon: "delete", label: "Eliminar lugar", variant: "danger" })}
+        ${buildItemActionButton({ action: `viewPlace(${safeRecordId(p.id)})`, icon: "view", label: "Ver lugar" })}
+        ${buildItemActionButton({ action: `editPlace(${safeRecordId(p.id)})`, icon: "edit", label: "Editar lugar" })}
+        ${buildItemActionButton({ action: `deletePlace(${safeRecordId(p.id)})`, icon: "delete", label: "Eliminar lugar", variant: "danger" })}
       </div>
 
     </div>
@@ -3545,7 +3603,6 @@ async function loadMaintenance() {
   const query = params.toString();
   const url = query ? `/maintenance?${query}` : "/maintenance";
   const items = await fetchJson(url);
-  persistMaintenanceImages(items);
 
   if (items.length === 0) {
     setHistoryState("empty");
@@ -3813,6 +3870,13 @@ function logout() {
 
 showRegisterButton?.addEventListener("click", () => setAuthMode("register"));
 showLoginButton?.addEventListener("click", () => setAuthMode("login"));
+window.addEventListener("storage", (event) => {
+  if (event.key === SESSION_KEY || event.key === null) {
+    clearPrivateMaintenanceState();
+    updateSessionUI();
+  }
+});
+
 logoutButton?.addEventListener("click", logout);
 menuHomeButton?.addEventListener("click", () => goBackToVehicles("menuHome"));
 menuLogoutButton?.addEventListener("click", logout);
@@ -3857,6 +3921,7 @@ vehicleColorOptions?.addEventListener("click", (event) => {
 });
 
 vehiclePhotoInput?.addEventListener("change", async () => {
+  const generation = sessionGeneration;
   const file = vehiclePhotoInput.files?.[0] || null;
   selectedVehiclePhotoFile = null;
   selectedVehiclePhotoDataUrl = "";
@@ -3869,11 +3934,13 @@ vehiclePhotoInput?.addEventListener("change", async () => {
   try {
     if (vehiclePhotoMessage) vehiclePhotoMessage.textContent = "Preparando vista previa...";
     const prepared = await prepareUploadImageData(file);
+    if (generation !== sessionGeneration) return;
     selectedVehiclePhotoFile = file;
     selectedVehiclePhotoDataUrl = prepared.dataUrl;
     renderVehiclePhotoPreview(prepared.dataUrl);
     if (vehiclePhotoMessage) vehiclePhotoMessage.textContent = "Foto lista para subir al guardar.";
   } catch (error) {
+    if (generation !== sessionGeneration) return;
     vehiclePhotoInput.value = "";
     selectedVehiclePhotoFile = null;
     selectedVehiclePhotoDataUrl = "";
@@ -4019,6 +4086,7 @@ placeForm?.addEventListener("submit", async (e) => {
 
 maintenanceForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
+  const generation = sessionGeneration;
 
   if (!selectedVehicleId) {
     formMessage.textContent = "Primero selecciona un vehiculo.";
@@ -4047,6 +4115,7 @@ maintenanceForm?.addEventListener("submit", async (event) => {
     payload.km = normalizeNumericPayloadValue(payload.km, NUMERIC_FIELD_CONFIG.km);
     payload.cost = normalizeNumericPayloadValue(payload.cost, NUMERIC_FIELD_CONFIG.cost);
     const preparedImage = await prepareMaintenanceImageData(selectedImage);
+    if (generation !== sessionGeneration) return;
     const imageRef = preparedImage.dataUrl;
     const session = getSession();
 
@@ -4055,18 +4124,13 @@ maintenanceForm?.addEventListener("submit", async (event) => {
       image_mime_type: preparedImage.mimeType,
     });
 
-    const savedMaintenance = await fetchJson(isEditingMaintenance ? `/maintenance/${editingMaintenanceId}` : `/maintenance`, {
+    await fetchJson(isEditingMaintenance ? `/maintenance/${editingMaintenanceId}` : `/maintenance`, {
       method: isEditingMaintenance ? "PUT" : "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: requestBody,
     });
-
-    if (!isEditingMaintenance && savedMaintenance?.id && savedMaintenance.image?.imageSource) {
-      maintenanceImageRefs[savedMaintenance.id] = savedMaintenance.image.imageSource;
-      saveMaintenanceImageRefs();
-    }
 
     resetMaintenanceFormState();
     await refreshAllData();
@@ -4150,7 +4214,7 @@ async function deleteMaintenance(id) {
     if (typeof openUiModal === "function") {
       await openUiModal({
         title: "No se pudo eliminar",
-        bodyHtml: `<p>${error.message}</p>`,
+        bodyHtml: `<p>${escapeHtml(error.message)}</p>`,
       });
     }
     throw error;
@@ -4502,10 +4566,10 @@ function viewPlace(id) {
       title: "Detalle del lugar",
       bodyHtml: `
         <div class="place-detail-grid">
-          <div><strong>Nombre:</strong> ${place.nombre}</div>
-          <div><strong>Ubicacion:</strong> ${place.ubicacion || "Sin dato"}</div>
-          <div><strong>Contacto:</strong> ${place.contacto_nombre || "Sin dato"}</div>
-          <div><strong>Telefono:</strong> ${place.contacto_numero || "Sin dato"}</div>
+          <div><strong>Nombre:</strong> ${escapeHtml(place.nombre)}</div>
+          <div><strong>Ubicacion:</strong> ${escapeHtml(place.ubicacion || "Sin dato")}</div>
+          <div><strong>Contacto:</strong> ${escapeHtml(place.contacto_nombre || "Sin dato")}</div>
+          <div><strong>Telefono:</strong> ${escapeHtml(place.contacto_numero || "Sin dato")}</div>
         </div>
       `,
     });
@@ -4744,6 +4808,7 @@ function clearMaintenanceImagePreview() {
 }
 
 maintenanceImageInput?.addEventListener("change", async () => {
+  const generation = sessionGeneration;
   try {
     const selectedImage = maintenanceImageInput.files?.[0];
     const imageValidation = validateSelectedMaintenanceImage(selectedImage);
@@ -4756,6 +4821,7 @@ maintenanceImageInput?.addEventListener("change", async () => {
     }
 
     const preparedImage = await prepareMaintenanceImageData(selectedImage);
+    if (generation !== sessionGeneration) return;
     const dataUrl = preparedImage.dataUrl;
     if (!dataUrl) {
       clearMaintenanceImagePreview();
@@ -4831,6 +4897,7 @@ profileForm?.addEventListener("submit", async (event) => {
 });
 
 profilePhotoInput?.addEventListener("change", async () => {
+  const generation = sessionGeneration;
   const file = profilePhotoInput.files?.[0] || null;
   selectedProfilePhotoFile = null;
   selectedProfilePhotoDataUrl = "";
@@ -4843,6 +4910,7 @@ profilePhotoInput?.addEventListener("change", async () => {
   try {
     if (profilePhotoMessage) profilePhotoMessage.textContent = "Preparando vista previa...";
     const prepared = await prepareUploadImageData(file);
+    if (generation !== sessionGeneration) return;
     selectedProfilePhotoFile = file;
     selectedProfilePhotoDataUrl = prepared.dataUrl;
     profileForm.elements.profile_photo_url.value = prepared.dataUrl;
@@ -4850,6 +4918,7 @@ profilePhotoInput?.addEventListener("change", async () => {
     setProfileAvatar(prepared.dataUrl, nextName);
     if (profilePhotoMessage) profilePhotoMessage.textContent = "Foto lista para subir al guardar.";
   } catch (error) {
+    if (generation !== sessionGeneration) return;
     profilePhotoInput.value = "";
     profileForm.elements.profile_photo_url.value = getSession()?.profilePhotoUrl || "";
     selectedProfilePhotoFile = null;
@@ -5146,7 +5215,7 @@ async function exportMaintenanceToPdf({
     if (showModalErrors) {
       await openUiModal({
         title: "No se pudo exportar",
-        bodyHtml: `<p>${error.message}</p>`,
+        bodyHtml: `<p>${escapeHtml(error.message)}</p>`,
       });
     }
     return false;
@@ -5222,7 +5291,7 @@ function registerServiceWorker() {
   } catch (error) {
     console.error(error);
     setStatus(error.message);
-    maintenanceList.innerHTML = `<div class="empty">${error.message}</div>`;
+    maintenanceList.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
   }
 
   updateDebugCurrentView();

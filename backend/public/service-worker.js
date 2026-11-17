@@ -1,4 +1,4 @@
-const CACHE_NAME = "rodado-control-v21";
+const CACHE_NAME = "rodado-control-v22";
 const APP_SHELL = [
   "/",
   "/index.html",
@@ -14,6 +14,7 @@ const APP_SHELL = [
   "/apple-touch-icon.png",
   "/login-logo.png",
   "/splash-vertical.png",
+  "/splash-logo-transparent.png",
   "/assets/icons/tabler/arrow-left.svg",
   "/assets/icons/tabler/bell.svg",
   "/assets/icons/tabler/bike.svg",
@@ -42,79 +43,76 @@ const APP_SHELL = [
   "/assets/icons/tabler/x.svg",
 ];
 
+const STATIC_PATHS = new Set(APP_SHELL);
+
+function isAllowedStaticRequest(request) {
+  const url = new URL(request.url);
+  const shellNavigation = request.mode === "navigate" && ["/", "/index.html"].includes(url.pathname);
+  if (request.method !== "GET" || url.origin !== self.location.origin || (url.search && !shellNavigation) ||
+      !STATIC_PATHS.has(url.pathname) || request.headers.has("Authorization") ||
+      request.headers.has("Range")) return false;
+  const destination = request.destination;
+  if (url.pathname === "/" || url.pathname === "/index.html") {
+    return request.mode === "navigate" || destination === "document";
+  }
+  return ["", "style", "script", "image", "manifest"].includes(destination);
+}
+
+function isAllowedStaticResponse(pathname, response) {
+  if (!response || response.status !== 200 || response.type !== "basic" || response.redirected) return false;
+  const mime = (response.headers.get("Content-Type") || "").split(";")[0].trim();
+  if (pathname === "/" || pathname.endsWith(".html")) return mime === "text/html";
+  if (pathname.endsWith(".js")) return ["application/javascript", "text/javascript"].includes(mime);
+  if (pathname.endsWith(".css")) return mime === "text/css";
+  if (pathname.endsWith(".json")) return ["application/json", "application/manifest+json"].includes(mime);
+  return pathname.endsWith(".svg") ? mime === "image/svg+xml" : mime === "image/png";
+}
+
 self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL))
-  );
-  self.skipWaiting();
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    await Promise.all(APP_SHELL.map(async (path) => {
+      const response = await fetch(path, { credentials: "omit", cache: "reload" });
+      if (!isAllowedStaticResponse(path, response)) throw new Error(`Invalid shell response: ${path}`);
+      await cache.put(path, response);
+    }));
+    await self.skipWaiting();
+  })());
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
-        keys
-          .filter((key) => key !== CACHE_NAME)
-          .map((key) => caches.delete(key))
-      )
-    )
-  );
-  self.clients.claim();
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)));
+    await self.clients.claim();
+  })());
 });
 
-const API_PREFIXES = [
-  "/auth",
-  "/vehicles",
-  "/places",
-  "/maintenance",
-  "/notifications",
-  "/dashboard",
-  "/users",
-  "/admin",
-  "/api",
-];
-
-function isApiRequest(requestUrl) {
-  const pathname = new URL(requestUrl).pathname;
-  return API_PREFIXES.some((prefix) => pathname.startsWith(prefix));
-}
-
 self.addEventListener("fetch", (event) => {
-  if (event.request.method !== "GET") {
+  if (new URL(event.request.url).origin !== self.location.origin) return;
+  if (!isAllowedStaticRequest(event.request)) {
+    // Unknown routes, private images and APIs are always network-only.
+    event.respondWith(fetch(event.request, { cache: "no-store" }));
     return;
   }
-
-  if (isApiRequest(event.request.url)) {
-    event.respondWith(
-      fetch(event.request, { cache: "no-store" }).catch(() =>
-        new Response(JSON.stringify({ error: "Sin conexion" }), {
-          status: 503,
-          headers: { "Content-Type": "application/json" },
-        })
-      )
-    );
-    return;
-  }
-
-  event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
+  event.respondWith((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    const url = new URL(event.request.url);
+    const cacheKey = url.pathname;
+    const cached = await cache.match(cacheKey);
+    if (cached) return cached;
+    try {
+      const response = await fetch(event.request, { credentials: "omit" });
+      if (isAllowedStaticResponse(url.pathname, response)) await cache.put(cacheKey, response.clone());
+      return response;
+    } catch (error) {
+      if (event.request.mode === "navigate") {
+        const shell = await cache.match("/index.html");
+        if (shell) return shell;
       }
-
-      return fetch(event.request)
-        .then((networkResponse) => {
-          if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== "basic") {
-            return networkResponse;
-          }
-
-          const responseClone = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseClone));
-          return networkResponse;
-        })
-        .catch(() => caches.match("/index.html"));
-    })
-  );
+      throw error;
+    }
+  })());
 });
 
 
