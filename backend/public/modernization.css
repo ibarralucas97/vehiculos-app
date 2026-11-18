@@ -1,0 +1,261 @@
+/* F04: shared semantic tokens. F02/F03 layout follows below.
+   Loaded after the legacy stylesheet; no business-state selectors are removed. */
+:root, body[data-theme="light"] {
+  --bg:#f5f7fa; --surface:#fff; --surface-alt:#eef2f7; --surface-soft:#f8fafc;
+  --text:#182436; --muted:#526278; --line:#d6dee9; --border:var(--line);
+  --primary:#245ec7; --primary-deep:#16469e; --accent-soft:#eaf1ff;
+  --success:#17653e; --success-bg:#e7f5ed; --warning:#805300; --warning-bg:#fff3d6;
+  --danger:#ac2736; --danger-bg:#fcecef; --focus:#245ec7;
+  --shadow:0 8px 28px rgb(24 36 54 / .08); --overlay:rgb(15 23 42 / .48);
+  --radius-xl:20px; --radius-lg:16px; --radius-md:12px;
+}
+:root[data-theme="dark"], body[data-theme="dark"] {
+  --bg:#111827; --surface:#192334; --surface-alt:#243146; --surface-soft:#1d293b;
+  --text:#edf2f9; --muted:#b0bed0; --line:#3a4960; --border:var(--line);
+  --primary:#97bcff; --primary-deep:#b9d2ff; --accent-soft:#213c64;
+  --success:#8cdbb1; --success-bg:#173c30; --warning:#f3cc7b; --warning-bg:#40341f;
+  --danger:#ffafb8; --danger-bg:#482733; --focus:#a5c6ff;
+  --shadow:0 8px 28px rgb(0 0 0 / .18); --overlay:rgb(3 7 18 / .7);
+}
+html { scroll-padding:24px; }
+body[data-theme] { background:var(--bg); color:var(--text); line-height:1.55; }
+body[data-theme] *, body[data-theme] *::before, body[data-theme] *::after { box-sizing:border-box; }
+body[data-theme] :is(h1,h2,h3,p) { overflow-wrap:anywhere; }
+body[data-theme] :is(h1,h2,h3) { color:var(--text); line-height:1.25; letter-spacing:-.025em; }
+body[data-theme] h2 { font-size:clamp(1.4rem,2.5vw,1.85rem); }
+body[data-theme] h3 { font-size:1.08rem; }
+body[data-theme] :is(.section-copy,.inline-help,.message,.vehicle-detail-meta,.vehicle-detail-kicker,.menu-section-label,.settings-overview-label,.maintenance-detail-item strong,.admin-loading) { color:var(--muted); }
+body[data-theme] :is(input,select,textarea) {
+  min-width:0; max-width:100%; width:100%; min-height:44px; padding:10px 12px;
+  border:1px solid var(--line); border-radius:9px; background:var(--surface); color:var(--text); box-shadow:none;
+  font:inherit; font-size:16px;
+}
+body[data-theme] input::placeholder, body[data-theme] textarea::placeholder { color:var(--muted); opacity:.9; }
+body[data-theme] input[type="checkbox"] { width:22px; height:22px; min-height:22px; flex:0 0 22px; accent-color:var(--primary); }
+body[data-theme] label { min-width:0; color:var(--text); }
+body[data-theme] button { min-height:44px; border-radius:9px; transition:background-color .15s,border-color .15s; box-shadow:none; }
+body[data-theme] button:not(.vehicle-card-main):hover { transform:none; filter:none; }
+body[data-theme] button:disabled { opacity:.55; cursor:not-allowed; }
+body[data-theme] :is(button,.primary) { background:var(--primary); color:var(--bg); border:1px solid transparent; }
+body[data-theme="light"] :is(button,.primary) { color:#fff; }
+body[data-theme] :is(button.ghost,.icon-button,.modal-close,.field-toggle,.menu-panel button,.notification-filter-tab,.settings-nav button,.theme-options button,.vehicle-context-tab,.topbar-icon-button,.topbar-back-button) {
+  color:var(--text); background:var(--surface); border:1px solid var(--line);
+}
+body[data-theme] :is(button.ghost,.icon-button,.modal-close,.field-toggle,.menu-panel button,.notification-filter-tab,.settings-nav button,.theme-options button):hover { background:var(--surface-alt); border-color:var(--muted); color:var(--text); }
+body[data-theme] :is(.danger,.menu-danger-button) { color:var(--danger); background:var(--danger-bg); border-color:var(--danger); }
+body[data-theme] :is(a,button,input,select,textarea,[tabindex]):focus-visible { outline:3px solid var(--focus); outline-offset:3px; }
+body[data-theme] :is(.panel,.card,.login-card,.modal-content,.menu-panel,.settings-card,.vehicle-reminders-card,.notification-settings-panel,.settings-overview-card,.admin-panel,.admin-hero,.admin-metric-card,.admin-user-item,.admin-user-form,.activity-item,.empty,.vehicle-wizard-summary-card) { background:var(--surface); color:var(--text); border:1px solid var(--line); box-shadow:none; }
+body[data-theme] :is(.settings-overview-card,.vehicle-wizard-summary-card,.image-upload-preview,.maintenance-detail-item) { background:var(--surface-soft); border-color:var(--line); }
+body[data-theme] :is(.pill,.status-badge,.vehicle-detail-status,.admin-user-badges span) { background:var(--accent-soft); color:var(--primary); border:1px solid var(--line); }
+body[data-theme] :is(.is-atrasado,.is-overdue) { color:var(--danger); }
+body[data-theme] :is(.is-proximo,.is-upcoming) { color:var(--warning); }
+body[data-theme] :is(.is-ok,.is-scheduled) { color:var(--success); }
+body[data-theme] :is(.item-row,.maintenance-card,.maintenance-detail-grid,.maintenance-plan-item) { border-color:var(--line); background:var(--surface); color:var(--text); }
+body[data-theme] :is(.item-info strong,.vehicle-card-copy strong,.admin-user-main strong,.admin-metric-card strong,.maintenance-detail-item span) { color:var(--text); }
+body[data-theme] :is(.item-info span,.vehicle-card-model,.vehicle-card-plate,.admin-user-main span,.admin-user-main small,.admin-metric-card span,.admin-audit-item span,.admin-audit-item time,.admin-resource-card small,.notification-copy time,.notification-copy > span,.maintenance-plan-item p,.maintenance-plan-item span) { color:var(--muted); }
+body[data-theme] :is(.vehicle-card-plate,.vehicle-card-icon,.vehicle-list-summary-icon,.admin-resource-icon,.vehicle-card-quick-action) { background:var(--surface-alt); color:var(--primary); border-color:var(--line); }
+body[data-theme] .shadow-sm { box-shadow:none !important; }
+body[data-theme] .eyebrow { color:var(--primary); text-transform:uppercase; letter-spacing:.1em; font-size:.72rem; font-weight:800; margin:0 0 8px; }
+.skip-link { position:fixed; top:8px; left:12px; transform:translateY(-180%); z-index:100000; background:var(--surface); color:var(--text); padding:12px; border-radius:8px; }
+.skip-link:focus { transform:none; }
+
+/* F02: use available width; allow content, rather than viewport height, to define pages. */
+body[data-theme] .app-shell { width:min(1320px,calc(100% - 48px)); min-height:100dvh; padding:24px 0; }
+body[data-theme] #app-topbar { position:relative; display:flex; justify-content:space-between; gap:16px; min-height:72px; padding:12px 16px; background:var(--surface); border:1px solid var(--line); box-shadow:none; margin:0 0 24px; color:var(--text); }
+body[data-theme] #app-topbar .app-title-action { position:static !important; transform:none !important; left:auto !important; top:auto !important; flex:1; justify-content:flex-start; width:auto; background:transparent; border:0; color:var(--text); min-width:0; padding:0; }
+body[data-theme] #app-topbar :is(.app-title-copy strong,.app-title-copy strong span,.topbar-user-name) { color:var(--text); }
+body[data-theme] #app-topbar .app-title-copy > span { color:var(--muted); }
+body[data-theme] #app-topbar .app-title-mark { background:var(--accent-soft); color:var(--primary); }
+body[data-theme] #app-topbar :is(.topbar-icon-button,.topbar-back-button) { background:var(--surface); border-color:var(--line); color:var(--text); flex-shrink:0; }
+body[data-theme] .topbar-actions { flex-shrink:0; }
+body[data-theme] .menu-panel { width:min(320px,calc(100vw - 32px)); max-height:calc(100dvh - 100px); overflow-y:auto; padding:12px; box-shadow:var(--shadow); }
+body[data-theme] .menu-panel button { width:100%; justify-content:flex-start; text-align:left; }
+body[data-theme] #vehicles-screen { padding:clamp(18px,3vw,32px); }
+body[data-theme] .vehicles-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr)); gap:20px; }
+body[data-theme] .vehicle-card { margin:0; overflow:hidden; border:1px solid var(--line) !important; }
+body[data-theme] .vehicle-card-main { width:100%; background:var(--surface); color:var(--text); padding:20px; border:0; }
+body[data-theme] .vehicle-card-main:hover { background:var(--surface-soft); transform:none; }
+body[data-theme] .vehicle-card-shell { min-width:0; }
+body[data-theme] .vehicle-card-media { background:var(--surface-alt); }
+body[data-theme] #dashboard.vehicle-detail-page {
+  --vd-text:var(--text); --vd-muted:var(--muted); --vd-border:var(--line); --vd-surface:var(--surface);
+  --vd-surface-raised:var(--surface-soft); --vd-primary-light:var(--primary);
+  width:100%; max-width:none; height:auto; min-height:0; margin:0; padding:0 0 32px; overflow:visible;
+}
+body[data-theme] #dashboard.vehicle-detail-page .vehicle-detail-shell { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:20px; height:auto; min-height:0; padding:0; overflow:visible; }
+body[data-theme] #dashboard.vehicle-detail-page :is(.vehicle-detail-car-card,.vehicle-detail-km-card,.vehicle-detail-service-card) { position:static !important; transform:none !important; min-width:0; margin:0; background:var(--surface); border:1px solid var(--line); box-shadow:none; border-radius:16px; padding:24px; height:auto; }
+body[data-theme] #dashboard.vehicle-detail-page .vehicle-detail-car-card { grid-column:1/-1; grid-row:1; min-height:0; }
+body[data-theme] #dashboard.vehicle-detail-page .vehicle-detail-km-card { min-height:200px !important; display:flex; flex-direction:column; align-items:flex-start; justify-content:center; }
+body[data-theme] #dashboard.vehicle-detail-page .vehicle-detail-gauge { display:none; }
+body[data-theme] #dashboard.vehicle-detail-page .vehicle-detail-km { color:var(--text); font-size:clamp(2.4rem,5vw,4rem); line-height:1.15; text-shadow:none; }
+body[data-theme] #dashboard.vehicle-detail-page :is(.vehicle-detail-km-unit,.vehicle-detail-kicker,.vehicle-detail-meta) { color:var(--muted); }
+body[data-theme] #dashboard.vehicle-detail-page .vehicle-detail-service-card { display:flex; flex-wrap:wrap; align-items:flex-start; gap:16px; min-height:200px; }
+body[data-theme] #dashboard.vehicle-detail-page .vehicle-detail-service-copy { flex:1 1 180px; min-width:0; }
+body[data-theme] #dashboard.vehicle-detail-page .vehicle-detail-service-copy :is(strong,span) { color:var(--text); white-space:normal; overflow:visible; text-overflow:clip; }
+body[data-theme] #dashboard.vehicle-detail-page .vehicle-detail-service-copy p { color:var(--muted); }
+body[data-theme] #dashboard.vehicle-detail-page :is(.vehicle-detail-type-icon,.vehicle-detail-service-icon) { background:var(--accent-soft); color:var(--primary); border-color:var(--line); }
+body[data-theme] #dashboard.vehicle-detail-page .vehicle-detail-status { align-self:flex-start; position:static; background:var(--accent-soft); color:var(--primary); border:1px solid var(--line); white-space:normal; }
+body[data-theme] #dashboard.vehicle-detail-page .vehicle-detail-actions { position:static; grid-column:1/-1; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; margin:0; padding:0; transform:none; width:100%; }
+body[data-theme] #dashboard.vehicle-detail-page .vehicle-detail-action { display:flex; flex-direction:row; justify-content:center; gap:12px; min-width:0; min-height:72px; padding:16px; background:var(--surface); color:var(--text); border:1px solid var(--line); font-size:.95rem; border-radius:12px; }
+body[data-theme] #dashboard.vehicle-detail-page .vehicle-detail-action-main { background:var(--primary); color:var(--bg); }
+body[data-theme="light"] #dashboard.vehicle-detail-page .vehicle-detail-action-main { color:#fff; }
+body[data-theme] #dashboard.vehicle-detail-page .vehicle-detail-action-plus { position:static; width:28px; height:28px; background:transparent; border:0; box-shadow:none; transform:none; color:inherit; flex-shrink:0; }
+body[data-theme] #dashboard.vehicle-detail-page .vehicle-detail-action-icon { color:inherit; width:28px; height:28px; flex-shrink:0; }
+body[data-theme] .modal { padding:24px; background:var(--overlay); backdrop-filter:blur(3px); }
+body[data-theme] .modal-content { width:min(100%,640px); max-width:640px; max-height:calc(100dvh - 48px); padding:28px; border-radius:18px; overflow-y:auto; overscroll-behavior:contain; box-shadow:var(--shadow); }
+body[data-theme] .modal-content-wide { width:min(100%,1000px); max-width:1000px; }
+body[data-theme] .modal-close { width:44px; height:44px; min-width:44px; right:12px; top:12px; padding:10px; }
+body[data-theme] .modal-content > h2 { padding-right:42px; }
+body[data-theme] #dashboard .dashboard-section.open { width:min(900px,calc(100% - 48px)); max-width:900px; max-height:calc(100dvh - 48px); background:var(--surface); color:var(--text); padding:24px; border:1px solid var(--line); border-radius:18px; overflow-y:auto; box-shadow:0 0 0 100vmax var(--overlay); }
+body[data-theme] :is(.split-fields,.maintenance-plan-form-grid,.vehicle-reminders-grid) { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+body[data-theme] :is(.form-actions,.stack-actions,.notification-actions,.section-head) { flex-wrap:wrap; gap:12px; }
+body[data-theme] :is(.form-stack,.cards,.settings-grid) { min-width:0; }
+body[data-theme] .toggle-row { gap:16px; }
+body[data-theme] .maintenance-card-top { flex-wrap:wrap; }
+body[data-theme] .admin-screen { width:100%; margin:0 0 32px; color:var(--text); }
+body[data-theme] :is(.admin-resource-card,.admin-quick-actions button) { background:var(--surface-soft); color:var(--text); border-color:var(--line); }
+body[data-theme] .admin-resource-card:hover { background:var(--surface-alt); transform:none; }
+body[data-theme] .admin-audit-item { grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto; border-color:var(--line); overflow-wrap:anywhere; }
+body[data-theme] .admin-hero span { color:var(--muted); }
+
+/* F02: inbox, read state is explicit and hover never changes the palette. */
+body[data-theme] .notifications-inbox-content { width:min(100%,800px); max-width:800px; }
+body[data-theme] .notification-filter-tabs { gap:8px; }
+body[data-theme] .notification-filter-tab.is-active { background:var(--accent-soft); border-color:var(--primary); color:var(--primary); }
+body[data-theme] .notification-item { display:grid; grid-template-columns:8px minmax(0,1fr); gap:14px; width:100%; padding:18px; text-align:left; border-radius:12px; box-shadow:none; opacity:1; }
+body[data-theme] .notification-item.is-read { background:var(--surface); border:1px solid var(--line); color:var(--text); opacity:1; }
+body[data-theme] .notification-item.is-unread { background:var(--accent-soft); border:1px solid var(--line); color:var(--text); }
+body[data-theme] .notification-item.is-read:hover, body[data-theme] .notification-item.is-unread:hover { background:var(--surface-soft); border-color:var(--muted); color:var(--text); }
+body[data-theme] .notification-item.is-read .notification-state-dot { display:block; visibility:hidden; }
+body[data-theme] .notification-state-dot { margin-top:8px; width:7px; height:7px; background:var(--primary); box-shadow:none; }
+body[data-theme] .notification-copy { display:grid; gap:6px; min-width:0; }
+body[data-theme] .notification-copy strong { color:var(--text); display:flex; flex-wrap:wrap; gap:8px; font-size:.95rem; }
+body[data-theme] .notification-copy > span { font-size:.9rem; line-height:1.55; white-space:normal; }
+body[data-theme] .notification-copy time { font-size:.78rem; }
+body[data-theme] .notification-new-label { background:var(--surface); border:1px solid var(--line); color:var(--primary); font-size:.68rem; padding:2px 7px; border-radius:5px; }
+
+/* F03: central settings, ordinary buttons with aria-current rather than incomplete ARIA tabs. */
+body[data-theme] #settings-modal .modal-content { width:min(1100px,100%); max-width:1100px; }
+.settings-workspace { display:grid; grid-template-columns:220px minmax(0,1fr); gap:28px; margin-top:24px; }
+body[data-theme] .settings-nav { display:flex; flex-direction:column; align-items:stretch; gap:6px; border-right:1px solid var(--line); padding-right:20px; }
+body[data-theme] .settings-nav button { text-align:left; padding:10px 12px; border-color:transparent; font-size:.9rem; }
+body[data-theme] .settings-nav button[aria-current] { background:var(--accent-soft); color:var(--primary); border-color:var(--line); font-weight:800; }
+body[data-theme] .settings-grid { display:block; }
+body[data-theme] .settings-grid > .settings-card { border:0; padding:0; border-radius:0; }
+body[data-theme] .settings-overview-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+body[data-theme] .theme-options { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin:24px 0; }
+body[data-theme] .theme-options button { display:grid; gap:12px; padding:14px; text-align:left; }
+body[data-theme] .theme-options button[aria-pressed="true"] { border:2px solid var(--primary); background:var(--accent-soft); color:var(--primary); }
+.theme-swatch { display:block; height:72px; border:1px solid var(--line); border-radius:6px; box-shadow:inset 18px 0 rgb(120 140 170 / .15); }
+.swatch-light { background:#f5f7fa; }.swatch-dark { background:#111827; }.swatch-system { background:linear-gradient(90deg,#f5f7fa 50%,#111827 50%); }
+.settings-link-list { display:grid; gap:12px; margin-top:16px; }
+body[data-theme] .settings-link-list button { text-align:left; padding:16px; }
+.settings-link-list span { display:block; font-size:.85rem; color:var(--muted); margin-top:4px; font-weight:400; }
+.about-list { display:grid; grid-template-columns:120px minmax(0,1fr); gap:12px; }
+.about-list dd { margin:0; color:var(--muted); }
+body[data-theme] .vehicle-reminders-layout { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+body[data-theme] .maintenance-plans-manager { grid-column:1/-1; border-top:3px solid var(--primary); }
+body[data-theme] .maintenance-plan-item { display:grid; grid-template-columns:8px minmax(0,1fr) auto; gap:12px; padding:16px; }
+body[data-theme] .maintenance-plan-item em { color:var(--primary); }
+body[data-theme] .maintenance-plan-actions button { min-height:44px; padding:8px 12px; }
+body[data-theme] .maintenance-plan-form-grid { border:1px solid var(--line); padding:20px; border-radius:12px; }
+body[data-theme] .maintenance-plan-form-grid legend { width:auto; float:none; font-size:1rem; font-weight:700; color:var(--text); padding:0 8px; }
+body[data-theme] :is(.vehicle-reminders-summary,.vehicle-reminders-summary-card) { background:var(--surface-soft); color:var(--text); }
+body[data-theme] .vehicle-reminders-actions { grid-column:1/-1; }
+
+/* Login shares the same theme and comfortable form rhythm. */
+body[data-theme] #welcome-screen { display:grid; grid-template-columns:minmax(0,1fr) minmax(320px,440px); align-items:center; gap:clamp(32px,6vw,96px); width:100%; max-width:none; min-height:75dvh; padding:40px; border:0; background:transparent; box-shadow:none; }
+body[data-theme] #welcome-screen .hero-copy { padding:0; text-align:left; max-width:540px; }
+body[data-theme] #welcome-screen .hero-title { color:var(--text); font-size:clamp(1.7rem,3vw,2.5rem); line-height:1.25; }
+body[data-theme] .login-card { width:100%; max-width:none; padding:28px; border-radius:20px; }
+body[data-theme] .login-brand-logo { max-width:240px; width:100%; height:auto; margin:0 0 24px; }
+.login-appearance { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:24px; font-size:.8rem; }
+body[data-theme] .login-appearance select { width:auto; max-width:70%; font-size:.85rem; }
+body[data-theme] .login-kicker { color:var(--primary); }
+body[data-theme] .app-footer { color:var(--muted); }
+
+@media (max-width:900px) {
+  body[data-theme] .app-shell { width:calc(100% - 32px); padding:16px 0; }
+  body[data-theme] #welcome-screen { gap:28px; padding:16px 0; }
+  .settings-workspace { grid-template-columns:180px minmax(0,1fr); gap:20px; }
+  body[data-theme] .modal { padding:16px; }
+  body[data-theme] .modal-content { max-height:calc(100dvh - 32px); padding:24px; }
+  body[data-theme] .admin-audit-item { grid-template-columns:1fr; }
+}
+@media (max-width:600px) {
+  body[data-theme] .app-shell { width:calc(100% - 24px); padding:12px 0; }
+  body[data-theme] #app-topbar { gap:8px; padding:10px; margin-bottom:16px; }
+  body[data-theme] #app-topbar .app-title-copy strong { font-size:.95rem; }
+  body[data-theme] #app-topbar .app-title-copy > span, body[data-theme] .topbar-user-name { display:none !important; }
+  body[data-theme] #app-topbar .app-title-mark { display:none; }
+  body[data-theme] #dashboard.vehicle-detail-page .vehicle-detail-shell { grid-template-columns:minmax(0,1fr); gap:12px; }
+  body[data-theme] #dashboard.vehicle-detail-page :is(.vehicle-detail-car-card,.vehicle-detail-km-card,.vehicle-detail-service-card) { padding:20px; min-height:0 !important; }
+  body[data-theme] #dashboard.vehicle-detail-page .vehicle-detail-actions { gap:8px; }
+  body[data-theme] #dashboard.vehicle-detail-page .vehicle-detail-action { flex-direction:column; font-size:.78rem; padding:12px 6px; gap:8px; min-height:92px; }
+  body[data-theme] #dashboard.vehicle-detail-page #current-vehicle-name { font-size:1.5rem; }
+  body[data-theme] #dashboard .dashboard-section.open { width:calc(100% - 24px); max-height:calc(100dvh - 24px); padding:18px; }
+  body[data-theme] .modal { padding:12px; }
+  body[data-theme] .modal-content { max-height:calc(100dvh - 24px); padding:20px 16px; border-radius:14px; }
+  body[data-theme] :is(.split-fields,.maintenance-plan-form-grid,.vehicle-reminders-grid,.vehicle-reminders-layout) { grid-template-columns:minmax(0,1fr); }
+  body[data-theme] .maintenance-plan-item { grid-template-columns:8px minmax(0,1fr); }
+  body[data-theme] .maintenance-plan-item em { grid-column:2; }
+  .settings-workspace { grid-template-columns:minmax(0,1fr); gap:24px; }
+  body[data-theme] .settings-nav { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); border:0; border-bottom:1px solid var(--line); padding:0 0 16px; gap:4px; }
+  body[data-theme] .settings-nav button { padding:10px 8px; font-size:.82rem; }
+  body[data-theme] .theme-options { gap:8px; }
+  body[data-theme] .theme-options button { padding:10px; }
+  .theme-swatch { height:52px; }
+  body[data-theme] .notification-item { padding:14px; gap:10px; }
+  body[data-theme] #welcome-screen { grid-template-columns:minmax(0,1fr); min-height:0; padding:16px 0; gap:24px; }
+  body[data-theme] #welcome-screen .hero-copy { text-align:center; }
+  body[data-theme] #welcome-screen .hero-title { font-size:1.3rem; }
+  body[data-theme] .login-brand-logo { max-width:170px; margin:0 auto 12px; }
+  body[data-theme] .login-card { padding:24px 20px; }
+  .about-list { grid-template-columns:minmax(0,1fr); gap:6px; }.about-list dd { margin-bottom:12px; }
+  body[data-theme] .item-row { flex-wrap:wrap; gap:12px; }
+  body[data-theme] .item-actions { margin-left:auto; }
+}
+@media (prefers-reduced-motion:reduce) {
+  *, *::before, *::after { animation-duration:.01ms !important; transition-duration:.01ms !important; scroll-behavior:auto !important; }
+}
+body[data-theme] #dashboard.vehicle-detail-page .vehicle-detail-shell { grid-template-rows:auto; }
+body[data-theme] #dashboard.vehicle-detail-page .vehicle-detail-kicker { margin:0 0 12px; }
+/* Remove fixed dark framing and legacy title fills from both themes. */
+body[data-theme] #dashboard.vehicle-detail-page { background:transparent; box-shadow:none; border:0; border-radius:0; }
+body[data-theme] #dashboard.vehicle-detail-page .vehicle-detail-shell { max-width:none; }
+body[data-theme] #app-topbar .app-title-copy strong span:first-child { color:var(--text) !important; -webkit-text-fill-color:var(--text) !important; }
+body[data-theme] #app-topbar .app-title-copy strong span:last-child { color:var(--primary) !important; -webkit-text-fill-color:var(--primary) !important; }
+body[data-theme] :is(.app-footer,.pwa-install-banner,.refresh-feedback-pill,.activity-item-body,.toast) { background:var(--surface); color:var(--text); border:1px solid var(--line); box-shadow:none; }
+body[data-theme] .pwa-install-banner { width:min(1320px,calc(100% - 24px)); margin:12px auto 0; border-radius:12px; }
+body[data-theme] :is(.pwa-install-banner-title,.pwa-install-banner-text,.pwa-install-banner-subtext) { color:var(--muted); }
+body[data-theme] #welcome-screen .hero-copy { text-align:left; }
+body[data-theme="light"] .login-brand-logo { filter:brightness(.35) saturate(.8); }
+body[data-theme] #dashboard.vehicle-detail-page .vehicle-km-odometer { display:none; }
+body[data-theme] .maintenance-plans-more { background:transparent; color:var(--primary); border:0; padding:8px 0; text-decoration:underline; }
+@media(max-width:600px) { body[data-theme] #welcome-screen .hero-copy { text-align:center; } }
+body[data-theme] #dashboard.vehicle-detail-page { --vd-text-muted:var(--muted); }
+body[data-theme] #dashboard.vehicle-detail-page .vehicle-detail-actions { background:transparent; border:0; box-shadow:none; border-radius:0; }
+body[data-theme] #dashboard.vehicle-detail-page .vehicle-detail-action-plus { color:inherit !important; }
+body[data-theme] .notification-item:is(.is-read,.is-unread) .notification-copy :is(span,time) { color:var(--muted); }
+body[data-theme] .notification-item.is-unread .notification-state-dot { background:var(--primary); border:0; box-shadow:none; }
+body[data-theme] .maintenance-plan-item em { color:var(--text); background:var(--surface-alt); }
+body[data-theme] .app-footer-card { background:transparent; border:0; box-shadow:none; }
+.skip-link:not(:focus) { clip-path:inset(50%); width:1px; height:1px; overflow:hidden; white-space:nowrap; }
+body[data-theme] .admin-hero > div > p { color:var(--primary); }
+body[data-theme] .notification-item.is-read:focus-visible,
+body[data-theme] .notification-item.is-unread:focus-visible { background:var(--surface-soft); color:var(--text); border-color:var(--muted); }
+body[data-theme] .notification-read-label { color:var(--muted); font-size:.68rem; font-weight:500; padding:2px 0; }
+/* Vehicle visual selectors remain meaningful in both themes and wrap on small screens. */
+body[data-theme] .vehicle-color-options { flex-wrap:wrap; overflow:visible; gap:12px; padding:6px; }
+body[data-theme] .vehicle-color-chip,
+body[data-theme] .vehicle-color-chip:hover,
+body[data-theme] .vehicle-color-chip.is-active { background:var(--vehicle-color); box-shadow:none; transform:none; border:2px solid var(--line); }
+body[data-theme] .vehicle-color-chip.is-active { outline:3px solid var(--primary); outline-offset:2px; }
+body[data-theme] .vehicle-type-chip { background:var(--surface); color:var(--text); opacity:1; box-shadow:none; border:1px solid var(--line); }
+body[data-theme] .vehicle-type-chip.is-active { background:var(--accent-soft); border-color:var(--primary); transform:none; }
+body[data-theme] .vehicle-type-chip:is(.is-active,:hover) :is(.vehicle-type-chip-icon,span:nth-child(2)) { color:var(--primary); }
+body[data-theme] :is(.vehicle-color-chip,.vehicle-type-chip).is-active :is(.vehicle-color-chip-check,.vehicle-type-chip-check) { background:var(--primary); }
+body[data-theme="dark"] :is(.vehicle-color-chip-check,.vehicle-type-chip-check)::before { border-color:var(--bg); }
+body[data-theme] .helper-copy { color:var(--muted); }
+body[data-theme] .notification-filter-tabs > button { width:auto; flex:1; }
+body[data-theme] .notification-copy > span, body[data-theme] .notification-copy time { font-weight:400; }

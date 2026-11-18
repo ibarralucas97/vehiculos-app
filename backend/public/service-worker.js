@@ -1,8 +1,11 @@
-const CACHE_NAME = "rodado-control-v22";
+const CACHE_NAME = "rodado-control-v23";
 const APP_SHELL = [
   "/",
   "/index.html",
   "/styles.css",
+  "/modernization.css",
+  "/appearance.js",
+  "/frontend-ui.js",
   "/app.js",
   "/dashboard-enhancements.js",
   "/manifest.json",

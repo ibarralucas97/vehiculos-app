@@ -488,7 +488,7 @@ button:active {
   transform: translateY(0);
 }
 
-button:not(.secondary):not(.ghost):not(.field-toggle):not(.vehicle-color-chip) {
+:where(button:not(.secondary):not(.ghost):not(.field-toggle):not(.vehicle-color-chip)) {
   background: linear-gradient(135deg, #2D6FEA, #5B8DFF);
   color: #fff;
   box-shadow: 0 12px 24px rgba(45, 111, 234, 0.22);
