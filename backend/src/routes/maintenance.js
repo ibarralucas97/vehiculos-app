@@ -133,20 +133,6 @@ router.post("/", async (req, res) => {
       createdImage = imageResult.rows[0];
     }
 
-    await client.query(
-      `UPDATE vehiculos
-       SET km_actual = CASE
-             WHEN km_actual IS NULL OR km_actual < $1 THEN $1
-             ELSE km_actual
-           END,
-           km_updated_at = CASE
-             WHEN km_actual IS NULL OR km_actual < $1 THEN NOW()
-             ELSE km_updated_at
-           END
-       WHERE id = $2 AND user_id = $3`,
-      [data.km, data.vehiculo_id, userId]
-    );
-
     await logActivity(client, {
       userId,
       action: "maintenance.create",
@@ -441,20 +427,6 @@ router.put("/:id", async (req, res) => {
     }
     if (previousPlanId) await recalculatePlan(client, previousPlanId, userId);
     if (maintenancePlanId && Number(maintenancePlanId) !== Number(previousPlanId)) await recalculatePlan(client, maintenancePlanId, userId);
-
-    await client.query(
-      `UPDATE vehiculos
-       SET km_actual = CASE
-             WHEN km_actual IS NULL OR km_actual < $1 THEN $1
-             ELSE km_actual
-           END,
-           km_updated_at = CASE
-             WHEN km_actual IS NULL OR km_actual < $1 THEN NOW()
-             ELSE km_updated_at
-           END
-       WHERE id = $2 AND user_id = $3`,
-      [data.km, data.vehiculo_id, userId]
-    );
 
     await logActivity(client, {
       userId,
