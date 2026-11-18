@@ -38,8 +38,18 @@ function renderPlanTimeline(plans=currentMaintenancePlans){
 }
 
 async function loadMaintenancePlans(){
-  if(!selectedVehicleId){currentMaintenancePlans=[];return [];}
-  currentMaintenancePlans=await fetchJson(`/maintenance-plans?vehicle_id=${selectedVehicleId}`);
+  const generation = sessionGeneration;
+  const vehicleId = selectedVehicleId;
+  if(!vehicleId){currentMaintenancePlans=[];return [];}
+  let plans;
+  try {
+    plans = await fetchJson(`/maintenance-plans?vehicle_id=${vehicleId}`);
+  } catch (error) {
+    if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return [];
+    throw error;
+  }
+  if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return [];
+  currentMaintenancePlans = plans;
   const select=document.getElementById("maintenance-plan-select");
   if(select){const selected=select.value;select.innerHTML='<option value="">Eventual · no reinicia ningún plan</option>'+currentMaintenancePlans.filter(p=>p.is_active).map(p=>`<option value="${safeRecordId(p.id)}">${escapeHtml(p.name)}</option>`).join("");select.value=selected;}
   const list=document.getElementById("maintenance-plans-list");if(list)list.innerHTML=renderPlanTimeline(currentMaintenancePlans);
@@ -294,12 +304,13 @@ function renderOverview(data) {
   renderReminderCount(alerts.length);
 }
 
-async function loadDashboardOverview() {
+async function loadDashboardOverview({ throwOnError = false } = {}) {
   const generation = sessionGeneration;
+  const vehicleId = selectedVehicleId;
   if (!hasOverviewUi) return;
   const session = getSession?.();
 
-  if (!session?.id || !selectedVehicleId) {
+  if (!session?.id || !vehicleId) {
     clearOverview();
     return;
   }
@@ -310,14 +321,14 @@ async function loadDashboardOverview() {
   overviewNextService.textContent = "Calculando";
 
   try {
-    const [data,plans] = await Promise.all([fetchJson(`/dashboard/overview?vehiculo_id=${selectedVehicleId}`),loadMaintenancePlans()]);
-    if (generation !== sessionGeneration) return;
+    const [data,plans] = await Promise.all([fetchJson(`/dashboard/overview?vehiculo_id=${vehicleId}`),loadMaintenancePlans()]);
+    if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return;
     renderOverview(data);
     const urgent=sortPlans(plans.filter(p=>p.is_active))[0];
     if(urgent){overviewStatusLabel.textContent=urgent.status_label;overviewStatusLabel.className=`vehicle-detail-status is-${urgent.status}`;overviewNextService.textContent=urgent.name;overviewStatusCopy.textContent=planDetailText(urgent);}
     else{overviewStatusLabel.textContent="Sin planes";overviewStatusLabel.className="vehicle-detail-status";overviewNextService.textContent="Configurá el primero";overviewStatusCopy.textContent="Los recordatorios generales existentes se conservan como legacy.";}
   } catch (error) {
-    if (generation !== sessionGeneration) return;
+    if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return;
     overviewStatusLabel.textContent = "Error";
     overviewStatusLabel.className = "vehicle-detail-status is-atrasado";
     overviewStatusCopy.textContent = error.message;
@@ -326,6 +337,7 @@ async function loadDashboardOverview() {
       remindersList.innerHTML = `<div class="vehicle-detail-empty">${escapeHtml(error.message)}</div>`;
     }
     renderReminderCount(0);
+    if (throwOnError) throw error;
   }
 }
 
@@ -344,17 +356,23 @@ goBackToVehicles = function patchedGoBackToVehicles(origin) {
 };
 
 const originalRefreshAllData = refreshAllData;
-refreshAllData = async function patchedRefreshAllData() {
+refreshAllData = async function patchedRefreshAllData(options = {}) {
+  const generation = sessionGeneration;
+  const vehicleId = selectedVehicleId;
   await originalRefreshAllData();
-  if (selectedVehicleId) {
-    await loadDashboardOverview();
+  if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return;
+  if (vehicleId) {
+    await loadDashboardOverview(options);
   }
 };
 
 const originalLoadMaintenance = loadMaintenance;
 loadMaintenance = async function patchedLoadMaintenance(options = {}) {
+  const generation = sessionGeneration;
+  const vehicleId = selectedVehicleId;
   const result = await originalLoadMaintenance(options);
-  if (selectedVehicleId) {
+  if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return;
+  if (vehicleId) {
     await loadDashboardOverview();
   }
   return result;

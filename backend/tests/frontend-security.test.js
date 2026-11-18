@@ -8,7 +8,7 @@ const app = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
 const sw = fs.readFileSync(path.join(publicDir, 'service-worker.js'), 'utf8');
 
 function appContext(names, overrides = {}) {
-  const context = vm.createContext({ URL, console, window: { location: { origin: 'https://test.local' } }, ...overrides });
+  const context = vm.createContext({ URL, console, maintenanceSaveGeneration: null, sessionGeneration: 0, selectedVehicleId: null, window: { location: { origin: 'https://test.local' } }, ...overrides });
   for (const name of names) {
     const match = app.match(new RegExp(`(?:async )?function ${name}\\([^]*?^}`, 'm'));
     assert.ok(match, name);
@@ -392,7 +392,8 @@ test('H02: stale notification request cannot unlock or render the next account i
 
 test('H02: late dashboard failure does not overwrite the next account overview', async () => {
   const { c, element } = effectiveDashboard(); let fail;
-  c.fetchJson = () => new Promise((_resolve, reject) => { fail = reject; });
+  const response = new Promise((_resolve, reject) => { fail = reject; });
+  c.fetchJson = () => response;
   const pending = c.loadDashboardOverview();
   c.saveSession({ id: 2 });
   element('overview-status-label').textContent = 'B';

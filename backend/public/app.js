@@ -6,6 +6,7 @@ let vehicleModalMode = "create";
 let editingVehicleReminderId = null;
 let editingPlaceId = null;
 let editingMaintenanceId = null;
+let maintenanceSaveGeneration = null;
 let reopenHistoryAfterMaintenanceDetail = false;
 let maintenanceDetailTrigger = null;
 const SESSION_KEY = "mygarage_session";
@@ -1348,7 +1349,9 @@ async function openActivityModal() {
   }
 }
 
-async function refreshCurrentContext({ silent = false } = {}) {
+async function refreshCurrentContext({ silent = false, maintenanceId = null } = {}) {
+  const generation = sessionGeneration;
+  const vehicleId = selectedVehicleId;
   const session = getSession();
   if (!session?.id) return;
 
@@ -1368,17 +1371,16 @@ async function refreshCurrentContext({ silent = false } = {}) {
     }
 
     if (getCurrentView() === "dashboard") {
-      await refreshAllData();
+      await refreshAllData({ throwOnError: true });
+      if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return;
       syncSelectedVehicleContext();
 
-      if (typeof loadDashboardOverview === "function") {
-        await loadDashboardOverview();
-      }
-
-      if (isCollapsibleSectionOpen(historySection) && hasActiveFilters()) {
-        await loadMaintenance();
+      if (isCollapsibleSectionOpen(historySection)) {
+        await loadMaintenance({ highlightId: maintenanceId });
       }
     }
+
+    if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return;
 
     if (isModalOpen("places-modal")) {
       await loadPlacesList();
@@ -1406,12 +1408,17 @@ async function refreshCurrentContext({ silent = false } = {}) {
       showToast("Datos actualizados", { tone: "success" });
     }
   } catch (error) {
+    if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return;
     console.error(error);
     showRefreshFeedback("No se pudieron actualizar los datos");
     hideRefreshFeedback({ tone: "error", delay: 1400 });
     showToast("No se pudieron actualizar los datos", { tone: "error", duration: 3400 });
   } finally {
-    window.setTimeout(() => topbarTitleAction?.classList.remove("is-refreshing"), 320);
+    window.setTimeout(() => {
+      if (generation === sessionGeneration && vehicleId === selectedVehicleId) {
+        topbarTitleAction?.classList.remove("is-refreshing");
+      }
+    }, 320);
   }
 }
 
@@ -1930,6 +1937,7 @@ function resetMaintenanceFormState() {
   clearMaintenanceImagePreview();
   if (maintenanceSubmitButton) {
     maintenanceSubmitButton.textContent = "Guardar mantenimiento";
+    maintenanceSubmitButton.disabled = maintenanceSaveGeneration === sessionGeneration;
   }
   if (formMessage) {
     formMessage.textContent = "";
@@ -2723,7 +2731,7 @@ function buildVehicleReminderSummary(reminder, vehicle) {
   if (!reminder) {
     return {
       dateText: "Proximo mantenimiento estimado: sin fecha aun.",
-      kmText: "Faltan aproximadamente km por calcular.",
+      kmText: "Faltan datos para calcular los kilómetros pendientes.",
       noteText: "Completa los intervalos del vehiculo para empezar a calcular avisos.",
     };
   }
@@ -2732,11 +2740,16 @@ function buildVehicleReminderSummary(reminder, vehicle) {
     ? `Proximo mantenimiento estimado: ${formatReminderDate(reminder.nextDate)}.`
     : "Proximo mantenimiento estimado: sin fecha aun.";
 
-  let kmText = "Faltan aproximadamente km por calcular.";
-  if (reminder.kmRemaining !== null && reminder.kmRemaining !== undefined) {
-    kmText = `Faltan aproximadamente ${Number(reminder.kmRemaining).toLocaleString("es-AR")} km.`;
-  } else if (reminder.nextKm !== null && reminder.nextKm !== undefined) {
-    kmText = `Proximo mantenimiento estimado cerca de ${Number(reminder.nextKm).toLocaleString("es-AR")} km.`;
+  let kmText = "Faltan datos para calcular los kilómetros pendientes.";
+  const remaining = reminder.kmRemaining;
+  if (remaining !== null && remaining !== undefined && remaining !== "" && Number.isFinite(Number(remaining))) {
+    const km = Number(remaining);
+    const distance = Math.abs(km).toLocaleString("es-AR");
+    kmText = km > 0
+      ? `Faltan ${distance} km para el mantenimiento`
+      : km === 0
+        ? "El mantenimiento corresponde ahora"
+        : `Mantenimiento vencido por ${distance} km`;
   }
 
   let noteText = reminder.message || "Completa los datos base del vehiculo para mejorar los avisos.";
@@ -2892,7 +2905,9 @@ async function saveKmUpdateFromModal(vehicle) {
     return false;
   }
 
-  const session = getSession();
+  const generation = sessionGeneration;
+  const vehicleId = selectedVehicleId;
+  let saved = false;
 
   try {
     showAppLoading("Actualizando kilometraje...");
@@ -2906,23 +2921,35 @@ async function saveKmUpdateFromModal(vehicle) {
       }),
     });
 
+    saved = true;
+    if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return true;
     currentVehicles = currentVehicles.map((item) => (item.id === updatedVehicle.id ? { ...item, ...updatedVehicle } : item));
     renderCurrentVehicleKm();
-    await refreshAllData();
+    await refreshAllData({ throwOnError: true });
+    if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return true;
     syncSelectedVehicleContext();
-    if (typeof loadDashboardOverview === "function") {
-      await loadDashboardOverview();
-    }
     setStatus("KM actualizado");
     showToast("Kilometraje actualizado correctamente", { tone: "success" });
     return true;
   } catch (error) {
+    if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return saved;
+    if (saved) {
+      console.error("Kilometraje guardado; fallo de sincronización", error);
+      showSavedSyncWarning("Kilometraje actualizado correctamente");
+      return true;
+    }
     if (feedback) feedback.textContent = error.message || "No se pudo actualizar el kilometraje.";
     showToast(error.message || "No se pudo actualizar el kilometraje", { tone: "error" });
     return false;
   } finally {
     hideAppLoading();
   }
+}
+
+function showSavedSyncWarning(confirmation) {
+  const message = `${confirmation}. No se pudieron actualizar todos los datos. Tocá el título superior para actualizar; no repitas el guardado.`;
+  setStatus(message);
+  showToast(message, { tone: "warning", duration: 10000 });
 }
 
 function setHistoryState(state, detail = "") {
@@ -3270,12 +3297,14 @@ function renderMaintenance(items) {
 }
 
 async function loadSelects() {
- const session = getSession();
+ const generation = sessionGeneration;
+  const vehicleId = selectedVehicleId;
 
 const [vehicles, places] = await Promise.all([
   fetchJson(`/vehicles`),
   fetchJson(`/places`),
 ]);
+  if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return;
 
   if (vehicleSelect) {
     vehicleSelect.innerHTML = optionMarkup(vehicles, "nombre");
@@ -3300,10 +3329,12 @@ function sortMaintenanceByMostRecent(items) {
 
 
 async function loadPlacesList() {
-  const session = getSession();
+  const generation = sessionGeneration;
+  const vehicleId = selectedVehicleId;
 
   const places = await fetchJson(`/places`);
 
+  if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return;
   currentPlaces = places;
 
   const container = document.getElementById("places-list");
@@ -3478,11 +3509,13 @@ document.addEventListener("click", (e) => {
 });
 
 async function loadVehiclesList() {
-  const session = getSession();
+  const generation = sessionGeneration;
+  const vehicleId = selectedVehicleId;
   if (!vehiclesListModal) return;
 
   const vehicles = (await fetchJson(`/vehicles`)).map(normalizeVehicleRecord);
 
+  if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return;
   currentVehicles = vehicles;
 
   const container = vehiclesListModal;
@@ -3567,8 +3600,10 @@ function viewVehicle(id) {
 
 
 
-async function loadMaintenance() {
-  if (!selectedVehicleId) {
+async function loadMaintenance({ highlightId = null } = {}) {
+  const generation = sessionGeneration;
+  const vehicleId = selectedVehicleId;
+  if (!vehicleId) {
     maintenanceList.innerHTML = '<div class="empty">Primero selecciona un vehiculo.</div>';
     setStatus("Selecciona un vehiculo");
     return;
@@ -3587,10 +3622,7 @@ async function loadMaintenance() {
   const usingFilters = params.toString().length > 0;
 
   setHistoryState("loading");
-  const session = getSession();
-    if (selectedVehicleId) {
-    params.set("vehiculo_id", String(selectedVehicleId));
-  }
+  params.set("vehiculo_id", String(vehicleId));
 
   if (usingFilters) {
     historyTitle.textContent = "Historial filtrado";
@@ -3602,21 +3634,32 @@ async function loadMaintenance() {
 
   const query = params.toString();
   const url = query ? `/maintenance?${query}` : "/maintenance";
-  const items = await fetchJson(url);
+  let items;
+  try {
+    items = await fetchJson(url);
+  } catch (error) {
+    if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return;
+    throw error;
+  }
+  if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return;
 
   if (items.length === 0) {
     setHistoryState("empty");
     return;
   }
 
-  const displayedItems = usingFilters
-    ? items
-    : sortMaintenanceByMostRecent(items).slice(0, 3);
+  const sortedItems = sortMaintenanceByMostRecent(items);
+  const highlighted = items.find(item => Number(item.id) === Number(highlightId));
+  const displayedItems = highlighted
+    ? [highlighted, ...sortedItems.filter(item => item !== highlighted).slice(0, 2)]
+    : usingFilters ? items : sortedItems.slice(0, 3);
 
   renderMaintenance(displayedItems);
-  historyCopy.textContent = usingFilters
-    ? "Resultados segun los filtros aplicados al vehiculo seleccionado."
-    : `Mostrando los ultimos ${displayedItems.length} mantenimientos.`;
+  historyCopy.textContent = highlighted
+    ? "Mantenimiento guardado mostrado primero. Se limpiaron los filtros para mostrarlo."
+    : usingFilters
+      ? "Resultados segun los filtros aplicados al vehiculo seleccionado."
+      : `Mostrando los ultimos ${displayedItems.length} mantenimientos.`;
   setStatus(`${displayedItems.length} registros`);
 }
 
@@ -4087,6 +4130,10 @@ placeForm?.addEventListener("submit", async (e) => {
 maintenanceForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
   const generation = sessionGeneration;
+  if (maintenanceSaveGeneration === generation) return;
+  const vehicleId = selectedVehicleId;
+  let saved = false;
+  let savedMaintenance = null;
 
   if (!selectedVehicleId) {
     formMessage.textContent = "Primero selecciona un vehiculo.";
@@ -4111,11 +4158,12 @@ maintenanceForm?.addEventListener("submit", async (event) => {
   payload.vehiculo_id = selectedVehicleId;
   payload.lugar_id = Number(payload.lugar_id);
 
+  maintenanceSaveGeneration = generation;
   try {
     payload.km = normalizeNumericPayloadValue(payload.km, NUMERIC_FIELD_CONFIG.km);
     payload.cost = normalizeNumericPayloadValue(payload.cost, NUMERIC_FIELD_CONFIG.cost);
     const preparedImage = await prepareMaintenanceImageData(selectedImage);
-    if (generation !== sessionGeneration) return;
+    if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return;
     const imageRef = preparedImage.dataUrl;
     const session = getSession();
 
@@ -4124,7 +4172,7 @@ maintenanceForm?.addEventListener("submit", async (event) => {
       image_mime_type: preparedImage.mimeType,
     });
 
-    await fetchJson(isEditingMaintenance ? `/maintenance/${editingMaintenanceId}` : `/maintenance`, {
+    savedMaintenance = await fetchJson(isEditingMaintenance ? `/maintenance/${editingMaintenanceId}` : `/maintenance`, {
       method: isEditingMaintenance ? "PUT" : "POST",
       headers: {
         "Content-Type": "application/json",
@@ -4132,29 +4180,47 @@ maintenanceForm?.addEventListener("submit", async (event) => {
       body: requestBody,
     });
 
+    saved = true;
+    if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return;
+    const cachedMaintenance = getMaintenanceRecord(savedMaintenance.id);
+    savedMaintenance = {
+      ...cachedMaintenance,
+      ...savedMaintenance,
+      image_source: savedMaintenance.image?.imageSource || cachedMaintenance?.image_source || "",
+    };
+    const confirmation = isEditingMaintenance
+      ? "Mantenimiento actualizado correctamente"
+      : "Mantenimiento registrado correctamente";
     resetMaintenanceFormState();
-    await refreshAllData();
-    if (hasActiveFilters()) {
-      await loadMaintenance();
-    }
-    formMessage.textContent = isEditingMaintenance
-      ? "Mantenimiento actualizado correctamente."
-      : imageRef
-        ? "Mantenimiento e imagen guardados correctamente."
-        : "Mantenimiento guardado correctamente.";
-    setStatus(isEditingMaintenance ? "Mantenimiento actualizado" : "Mantenimiento guardado");
-    showToast(
-      isEditingMaintenance
-        ? "Mantenimiento actualizado"
-        : imageRef
-          ? "Mantenimiento e imagen guardados"
-          : "Mantenimiento guardado",
-      { tone: "success" }
-    );
+    filtersForm.reset();
+    focusDashboardSection(historySection);
+    renderMaintenance([savedMaintenance]);
+    historyCopy.textContent = "Registro guardado. Se limpiaron los filtros para mostrarlo.";
+    setStatus(confirmation);
+    showToast(confirmation, { tone: "success" });
+    await loadMaintenance({ highlightId: savedMaintenance.id });
+    if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return;
+    await refreshAllData({ throwOnError: true });
   } catch (error) {
-    formMessage.textContent = error.message;
+    if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return;
+    if (saved) {
+      console.error("Mantenimiento guardado; fallo de sincronización", error);
+      // Keep the confirmed record visible even when loading the history failed.
+      renderMaintenance([savedMaintenance]);
+      historyCopy.innerHTML = `Registro guardado. No se pudieron actualizar todos los datos.
+        <button type="button" class="ghost" onclick="refreshCurrentContext({ maintenanceId: ${safeRecordId(savedMaintenance.id)} })">Actualizar datos</button>`;
+      showSavedSyncWarning(isEditingMaintenance
+        ? "Mantenimiento actualizado correctamente"
+        : "Mantenimiento registrado correctamente");
+    } else {
+      formMessage.textContent = error.message;
+    }
   } finally {
-    setButtonLoading(maintenanceSubmitButton, false, isEditingMaintenance ? "Guardando..." : "Guardando...");
+    if (maintenanceSaveGeneration === generation) maintenanceSaveGeneration = null;
+    if (generation === sessionGeneration) {
+      setButtonLoading(maintenanceSubmitButton, false, "Guardando...");
+      if (saved) maintenanceSubmitButton.textContent = "Guardar mantenimiento";
+    }
   }
 });
 
@@ -4656,9 +4722,14 @@ function hideAppLoading() {
 
 
 async function refreshAllData() {
-  await loadSelects();          // ðŸ‘ˆ dropdowns
-  await loadVehiclesList();     // ðŸ‘ˆ modal
-  await loadPlacesList();       // ðŸ‘ˆ modal
+  const generation = sessionGeneration;
+  const vehicleId = selectedVehicleId;
+  await loadSelects();
+  if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return;
+  await loadVehiclesList();
+  if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return;
+  await loadPlacesList();
+  if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return;
   renderCurrentVehicleKm();
 }
 
