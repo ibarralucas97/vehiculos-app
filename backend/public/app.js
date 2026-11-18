@@ -490,6 +490,7 @@ function clearPrivateMaintenanceState() {
   sessionGeneration += 1;
   removeLegacyMaintenanceImages();
   currentMaintenanceRecords.clear();
+  if (typeof clearFrontendSettingsContext === "function") clearFrontendSettingsContext();
   clearPrivatePhotoState();
   currentNotifications = [];
   notificationsState = {
@@ -542,7 +543,7 @@ function clearPrivatePhotoState() {
 }
 
 function getPreferredTheme() {
-  return "dark";
+  return window.RodadoAppearance?.preference() || "system";
 }
 
 function buildIconMarkup(name) {
@@ -940,7 +941,7 @@ function renderNotificationsInbox() {
       <span class="notification-copy">
         <strong>
           ${escapeHtml(notification.title || "Rodado Control")}
-          ${notification.unread ? '<span class="notification-new-label">Nueva</span>' : ""}
+          ${notification.unread ? '<span class="notification-new-label">No leída</span>' : '<span class="notification-read-label">Leída</span>'}
         </strong>
         <span>${escapeHtml(notification.body || "Notificacion")}</span>
         <time datetime="${escapeHtml(notification.createdAt || "")}">${escapeHtml(formatNotificationTime(notification.createdAt))}</time>
@@ -1431,19 +1432,9 @@ function syncLoginBrandLogo(theme = document.body.dataset.theme) {
   }
 }
 
-function applyTheme() {
-  document.body.dataset.theme = "dark";
-  syncLoginBrandLogo("dark");
-
-  if (themeColorMeta) {
-    themeColorMeta.setAttribute("content", DARK_THEME_COLOR);
-  }
-
-  try {
-    localStorage.removeItem("mygarage_theme");
-  } catch (_error) {
-    // Ignore storage issues on private sessions.
-  }
+function applyTheme(preference = getPreferredTheme()) {
+  const theme = window.RodadoAppearance?.apply(preference) || "dark";
+  syncLoginBrandLogo(theme);
 }
 
 function syncFooterYear() {
