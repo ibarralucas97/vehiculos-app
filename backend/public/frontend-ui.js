@@ -4,11 +4,10 @@
   const vehiclePicker = document.getElementById('settings-vehicle-select');
   window.clearFrontendSettingsContext = () => {
     vehiclePicker.replaceChildren(new Option('Elegir vehículo', ''));
-    settings.querySelectorAll('[data-settings-vehicle-context]').forEach(node => { node.textContent = ''; });
-    settings.querySelectorAll('[data-settings-action="vehicle"], [data-settings-action="plans"], [data-settings-action="reminders"], [data-settings-action="odometer"]').forEach(button => { button.disabled = true; });
+    settings.querySelectorAll('[data-settings-action="vehicle"]').forEach(button => { button.disabled = true; });
   };
   function showSettingsSection(name, focus = false) {
-    if (!document.querySelector(`[data-settings-section="${name}"]`)) return;
+    if (name !== "index" && !document.querySelector(`[data-settings-section="${name}"]`)) return;
     if (name === 'notifications' && getSession()?.role === 'superadmin') name = 'security';
     settings.querySelectorAll('[data-settings-section]').forEach(panel => panel.classList.toggle('hidden', panel.dataset.settingsSection !== name));
     settings.querySelectorAll('.settings-nav [data-settings-target]').forEach(button => {
@@ -16,21 +15,15 @@
       else button.removeAttribute('aria-current');
       button.classList.toggle('hidden', button.dataset.settingsTarget === 'notifications' && getSession()?.role === 'superadmin');
     });
+    settings.classList.toggle('settings-detail', name !== 'index');
     updateVehicleContext();
-    if (focus) {
+    if (focus && name === 'index') settings.querySelector('.settings-nav button')?.focus();
+    if (focus && name !== 'index') {
       const heading = settings.querySelector(`[data-settings-section="${name}"] h3`);
       heading?.setAttribute('tabindex', '-1'); heading?.focus();
     }
   }
   function updateVehicleContext() {
-    const vehicle = currentVehicles.find(item => Number(item.id) === Number(selectedVehicleId));
-    settings.querySelectorAll('[data-settings-vehicle-context]').forEach(node => {
-      node.textContent = vehicle ? `Vehículo: ${vehicle.nombre}${vehicle.patente ? ` · ${vehicle.patente}` : ''}` : 'Primero elegí un vehículo en la sección Vehículos.';
-    });
-    for (const action of ['plans', 'reminders', 'odometer']) {
-      const button = settings.querySelector(`[data-settings-action="${action}"]`);
-      if (button) button.disabled = !vehicle;
-    }
     const selected = vehiclePicker.value || String(selectedVehicleId || '');
     vehiclePicker.replaceChildren(new Option('Elegir vehículo', ''));
     currentVehicles.forEach(item => vehiclePicker.add(new Option(item.nombre || 'Vehículo', String(item.id))));
@@ -40,14 +33,18 @@
   vehiclePicker.addEventListener('change', () => {
     settings.querySelector('[data-settings-action="vehicle"]').disabled = !vehiclePicker.value;
   });
-  document.addEventListener('change', event => {
-    if (event.target.matches('[data-theme-select]')) window.RodadoAppearance.apply(event.target.value, true);
-  });
   document.addEventListener('click', async event => {
+    const menu = event.target.closest('[data-dialog-menu]');
+    if (menu) {
+      closeModal(menu.closest('.modal').id);
+      menuButton.click();
+      queueMicrotask(() => menuPanel.querySelector('button:not(.hidden)')?.focus());
+      return;
+    }
     const theme = event.target.closest('[data-theme-choice]');
     if (theme) window.RodadoAppearance.apply(theme.dataset.themeChoice, true);
     const tab = event.target.closest('[data-settings-target]');
-    if (tab) showSettingsSection(tab.dataset.settingsTarget, !tab.closest('.settings-nav'));
+    if (tab) showSettingsSection(tab.dataset.settingsTarget, true);
     const notifications = event.target.closest('[data-open-notification-settings]');
     if (notifications) {
       closeModal('vehicle-reminders-modal');
@@ -64,13 +61,6 @@
     if (action === 'places') { openPlacesModal(); return; }
     if (action === 'vehicle') { selectVehicle(id); return; }
     if (action === 'create-vehicle') { openVehicleCreateModal(); return; }
-    if (['plans', 'reminders', 'odometer'].includes(action)) {
-      const generation = sessionGeneration, vehicleId = selectedVehicleId;
-      await openVehicleRemindersModal(vehicleId);
-      if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return;
-      const target = document.getElementById(action === 'plans' ? 'reminder-plans' : action === 'odometer' ? 'reminder-odometer' : 'reminder-general');
-      target?.setAttribute('tabindex', '-1'); target?.focus(); target?.scrollIntoView({ block: 'start' });
-    }
   });
 
   // Track visible dialogs without replacing application navigation or resetting forms.
@@ -89,7 +79,7 @@
         dialog.setAttribute('role', 'dialog'); dialog.setAttribute('aria-modal', 'true');
         const heading = dialog.querySelector('h2');
         if (heading) { if (!heading.id) heading.id = `${dialog.id}-heading`; dialog.setAttribute('aria-labelledby', heading.id); }
-        if (dialog === settings) showSettingsSection(getSession()?.mustChangePassword ? 'security' : 'appearance');
+        if (dialog === settings) showSettingsSection(getSession()?.mustChangePassword ? 'security' : 'index');
         if (!dialog.contains(document.activeElement)) focusable(dialog)[0]?.focus();
       } else if (!visible(dialog) && index >= 0) {
         opened.splice(index, 1);

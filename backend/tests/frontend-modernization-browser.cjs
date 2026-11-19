@@ -68,7 +68,7 @@ const server = http.createServer(async (req,res) => {
         return nodes.filter(node=>node.scrollWidth>node.clientWidth+2).map(node=>({id:node.id,cls:node.className,width:node.clientWidth,scroll:node.scrollWidth}));
       });
       assert.deepEqual(overflow,[],`${name} ${width} ${theme} overflow ${JSON.stringify(overflow)}`);
-      await page.screenshot({path:path.join(output,`${width}-${theme}-${name}.png`),fullPage:true});
+      await page.screenshot({path:path.join(output,`${width}-${theme}-${name}.png`),fullPage:false});
       results.push({name,width,theme});
       if (width===390) {
         const audit = await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();
@@ -77,7 +77,7 @@ const server = http.createServer(async (req,res) => {
       }
     }
     for(const width of widths) {
-      await page.setViewportSize({width,height:900});
+      await page.setViewportSize({width,height:width === 390 ? 844 : 900});
       for(const theme of ['light','dark']) {
         await page.evaluate(value=>window.RodadoAppearance.apply(value,true),theme);
         await check('login',width,theme);
@@ -91,7 +91,7 @@ const server = http.createServer(async (req,res) => {
     await page.waitForSelector('#dashboard:not(.hidden)');
     await page.waitForFunction(()=>document.getElementById('overview-next-service').textContent==='Cambio de aceite');
     for(const width of widths) {
-      await page.setViewportSize({width,height:900});
+      await page.setViewportSize({width,height:width === 390 ? 844 : 900});
       for(const theme of ['light','dark']) {
         await page.evaluate(value=>window.RodadoAppearance.apply(value,true),theme);
         await page.evaluate(()=>goBackToVehicles()); await check('vehicles',width,theme);
@@ -100,9 +100,10 @@ const server = http.createServer(async (req,res) => {
         await check('dashboard',width,theme);
         await page.evaluate(()=>openSettingsModal());
         await check('settings',width,theme);
-        for(const section of ['notifications','security','vehicles','plans','reminders','places','about']) {
+        for(const section of ['appearance','account','notifications','security','vehicles','places','about']) {
           await page.locator(`.settings-nav [data-settings-target=${section}]`).click();
           await check(`settings-${section}`,width,theme);
+          await page.locator('.settings-index').click();
         }
         await page.keyboard.press('Escape');
         await page.evaluate(()=>openGlobalNotificationsModal());
@@ -125,6 +126,19 @@ const server = http.createServer(async (req,res) => {
         await check('history',width,theme); await page.keyboard.press('Escape');
       }
     }
+    // The detail menu remains available alongside the dedicated back navigation.
+    await page.locator('#vehicle-menu-slot #menu-toggle').click();
+    await page.locator('#menu-settings').click();
+    await page.locator('#settings-modal [data-dialog-menu]').click();
+    await page.locator('#menu-current-reminders').click();
+    await page.waitForSelector('#vehicle-reminders-modal:not(.hidden)');
+    await page.keyboard.press('Escape');
+    await page.locator('#vehicle-menu-slot #menu-toggle').click();
+    await page.locator('#menu-settings').click();
+    await page.locator('[data-settings-target=places]').click();
+    await page.locator('[data-settings-action=places]').click();
+    await page.waitForSelector('#places-modal:not(.hidden)');
+    await page.keyboard.press('Escape');
     // Theme does not reset the maintenance draft or vehicle context.
     await page.locator('#hero-maintenance-button').click();
     await page.locator('#maintenance-form [name=accion]').fill('Borrador persistente');
@@ -169,11 +183,11 @@ const server = http.createServer(async (req,res) => {
     await page.waitForFunction(()=>currentVehicles.length>0);
     await page.evaluate(()=>selectVehicle(1));
     await page.evaluate(()=>openSettingsModal());
-    await page.locator('.settings-nav [data-settings-target=plans]').click();
-    assert.ok((await page.locator('#settings-section-plans [data-settings-vehicle-context]').textContent()).includes('Vehículo familiar'));
+    await page.locator('.settings-nav [data-settings-target=vehicles]').click();
+    assert.equal(await page.locator('#settings-vehicle-select').inputValue(),'1');
     await page.evaluate(()=>{saveSession({id:3,username:'other',role:'user'});});
     assert.equal(await page.locator('#settings-vehicle-select option').count(),1);
-    assert.equal(await page.locator('#settings-section-plans [data-settings-vehicle-context]').textContent(),'');
+    assert.equal(await page.locator('#settings-vehicle-select').inputValue(),'');
     await page.evaluate(()=>logout());
     await page.waitForSelector('#welcome-screen:not(.hidden)');
     assert.equal(await page.evaluate(()=>currentMaintenanceRecords.size),0);
@@ -181,7 +195,7 @@ const server = http.createServer(async (req,res) => {
     // Theme the existing administration without changing its behavior.
     await page.evaluate(()=>{ saveSession({id:2,username:'admin',role:'superadmin',nombre:'Admin'}); updateSessionUI(); });
     for(const width of widths) {
-      await page.setViewportSize({width,height:900});
+      await page.setViewportSize({width,height:width === 390 ? 844 : 900});
       for(const theme of ['light','dark']) {
         await page.evaluate(value=>{window.RodadoAppearance.apply(value,true);openAdminDashboard();},theme);
         await page.waitForSelector('.admin-metric-card'); await check('admin',width,theme);
@@ -192,12 +206,12 @@ const server = http.createServer(async (req,res) => {
     await page.waitForSelector('#welcome-screen:not(.hidden)');
     await page.evaluate(()=>navigator.serviceWorker.ready);
     await page.waitForFunction(()=>navigator.serviceWorker.controller);
-    const cached = await page.evaluate(async()=>{const cache=await caches.open('rodado-control-v23');return (await cache.keys()).map(request=>new URL(request.url).pathname);});
+    const cached = await page.evaluate(async()=>{const cache=await caches.open('rodado-control-v24');return (await cache.keys()).map(request=>new URL(request.url).pathname);});
     for(const resource of ['/appearance.js','/frontend-ui.js','/modernization.css']) assert.ok(cached.includes(resource));
     assert.ok(!cached.some(resource=>/^\/(vehicles|maintenance|users|notifications|auth)/.test(resource)));
     await context.setOffline(true); await page.reload();
     await page.waitForSelector('#welcome-screen:not(.hidden)');
-    assert.equal(await page.locator('[data-theme-select]').count(),1);
+    assert.equal(await page.locator('.login-appearance [data-theme-choice]').count(),3);
     await context.setOffline(false);
     assert.deepEqual(errors,[]);
     assert.ok(accessibility.every(audit=>audit.violations.length===0), 'See accessibility.json for WCAG violations');

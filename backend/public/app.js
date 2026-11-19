@@ -182,7 +182,6 @@ const menuCurrentVehicleGroup = document.getElementById("menu-current-vehicle-gr
 const menuCurrentVehicleName = document.getElementById("menu-current-vehicle-name");
 const menuCurrentDashboardButton = document.getElementById("menu-current-dashboard");
 const menuCurrentMaintenanceButton = document.getElementById("menu-current-maintenance");
-const menuCurrentPlacesButton = document.getElementById("menu-current-places");
 const menuCurrentRemindersButton = document.getElementById("menu-current-reminders");
 const menuCurrentActivityButton = document.getElementById("menu-current-activity");
 const menuCurrentEditButton = document.getElementById("menu-current-edit");
@@ -261,8 +260,6 @@ const toastStack = document.getElementById("toast-stack");
 
 const DARK_THEME_COLOR = "#020B24";
 const PWA_INSTALL_DISMISS_KEY = "mygarage_pwa_install_dismissed";
-const LOGIN_LOGO_DARK_SRC = "/splash-logo-transparent.png";
-const loginBrandLogo = document.getElementById("login-brand-logo");
 const footerYear = document.getElementById("footer-year");
 const maintenanceDetailModal = document.getElementById("maintenance-detail-modal");
 const maintenanceDetailTitle = document.getElementById("maintenance-detail-title");
@@ -490,6 +487,7 @@ function clearPrivateMaintenanceState() {
   sessionGeneration += 1;
   removeLegacyMaintenanceImages();
   currentMaintenanceRecords.clear();
+  document.getElementById("detail-photo")?.replaceChildren();
   if (typeof clearFrontendSettingsContext === "function") clearFrontendSettingsContext();
   clearPrivatePhotoState();
   currentNotifications = [];
@@ -937,6 +935,7 @@ function renderNotificationsInbox() {
       type="button"
       data-notification-id="${Number(notification.id)}"
     >
+      <span class="notice-icon" aria-hidden="true">${buildIconMarkup(notification.type === "km_update_needed" ? "odometer" : String(notification.type || "").startsWith("maintenance") ? "maintenance" : "bell")}</span>
       <span class="notification-state-dot" aria-hidden="true"></span>
       <span class="notification-copy">
         <strong>
@@ -1423,18 +1422,9 @@ async function refreshCurrentContext({ silent = false, maintenanceId = null } = 
   }
 }
 
-function syncLoginBrandLogo(theme = document.body.dataset.theme) {
-  if (!loginBrandLogo) return;
-
-  const nextSrc = LOGIN_LOGO_DARK_SRC;
-  if (!loginBrandLogo.getAttribute("src") || loginBrandLogo.getAttribute("src") !== nextSrc) {
-    loginBrandLogo.setAttribute("src", nextSrc);
-  }
-}
 
 function applyTheme(preference = getPreferredTheme()) {
-  const theme = window.RodadoAppearance?.apply(preference) || "dark";
-  syncLoginBrandLogo(theme);
+  window.RodadoAppearance?.apply(preference);
 }
 
 function syncFooterYear() {
@@ -1940,6 +1930,10 @@ const vehiclesScreen = document.getElementById("vehicles-screen");
 
 function updateTopbarContext() {
   const inVehicleDetail = getCurrentView() === "dashboard";
+  const menuSlot = inVehicleDetail
+    ? document.getElementById("vehicle-menu-slot")
+    : topbarBackButton?.parentElement;
+  if (menuSlot && menuButton.parentElement !== menuSlot) menuSlot.prepend(menuButton);
   topbarBackButton?.classList.toggle("hidden", !inVehicleDetail);
   topbarBackButton?.toggleAttribute("disabled", !inVehicleDetail);
 }
@@ -2061,7 +2055,7 @@ function updateAuthModeUI(isLoggedIn = Boolean(normalizeSessionUser(getSession()
   }
 
   if (authTitle) {
-    authTitle.textContent = isRegisterView ? "Crea tu cuenta" : "Ingresa a tu cuenta";
+    authTitle.textContent = isRegisterView ? "Crea tu cuenta" : "Ingresá a tu cuenta";
   }
 
   if (!isLoggedIn && sessionCopy) {
@@ -3390,28 +3384,30 @@ async function loadVehiclesScreen() {
 `).join("");
 }
 
-buildVehicleIdentityMarkup = function patchedBuildVehicleIdentityMarkup(vehicle = {}) {
+function vehicleMediaMarkup(vehicle) {
   const typeConfig = getVehicleTypeConfig(vehicle.vehicle_type);
-  const colorConfig = getVehicleColorConfig(vehicle.vehicle_color);
-  const modelLabel = vehicle.modelo ? escapeHtml(vehicle.modelo) : "";
-  const plateLabel = vehicle.patente ? escapeHtml(vehicle.patente) : "Sin patente";
   const photoUrl = String(vehicle.photo_url || "").trim();
   const alt = photoUrl ? `Foto de ${escapeHtml(vehicle.nombre || "vehiculo")}` : "";
 
+  return `<div class="vehicle-card-media${photoUrl ? "" : " is-fallback"}">
+          ${photoUrl ? `<img class="vehicle-card-thumb" src="${escapeHtml(photoUrl)}" alt="${alt}" loading="lazy" onerror="handleVehicleThumbError(this)" />` : ""}
+          <div class="vehicle-card-icon" aria-hidden="true">${buildIconMarkup(typeConfig.icon)}</div>
+        </div>`;
+}
+
+buildVehicleIdentityMarkup = function patchedBuildVehicleIdentityMarkup(vehicle = {}) {
+  const colorConfig = getVehicleColorConfig(vehicle.vehicle_color);
+  const modelLabel = vehicle.modelo ? escapeHtml(vehicle.modelo) : "";
+  const plateLabel = vehicle.patente ? escapeHtml(vehicle.patente) : "Sin patente";
   return `
     <div class="vehicle-card-shell" style="--vehicle-color:${colorConfig.hex}">
       <div class="vehicle-card-head">
-        <div class="vehicle-card-media${photoUrl ? "" : " is-fallback"}">
-          ${photoUrl ? `<img class="vehicle-card-thumb" src="${escapeHtml(photoUrl)}" alt="${alt}" loading="lazy" onerror="handleVehicleThumbError(this)" />` : ""}
-          <div class="vehicle-card-icon" aria-hidden="true">${buildIconMarkup(typeConfig.icon)}</div>
-        </div>
+        ${vehicleMediaMarkup(vehicle)}
         <div class="vehicle-card-copy">
           <strong>${escapeHtml(vehicle.nombre || "Vehiculo")}</strong>
           ${modelLabel ? `<span class="vehicle-card-model">${modelLabel}</span>` : ""}
+          <span class="vehicle-card-plate">${plateLabel}</span>
         </div>
-      </div>
-      <div class="vehicle-card-meta">
-        <span class="vehicle-card-plate">${plateLabel}</span>
       </div>
     </div>
   `;
@@ -3920,7 +3916,6 @@ menuSettingsButton?.addEventListener("click", openSettingsModal);
 menuActivityButton?.addEventListener("click", openActivityModal);
 menuCurrentDashboardButton?.addEventListener("click", openCurrentVehicleDashboard);
 menuCurrentMaintenanceButton?.addEventListener("click", openCurrentVehicleMaintenance);
-menuCurrentPlacesButton?.addEventListener("click", openCurrentVehiclePlaces);
 menuCurrentRemindersButton?.addEventListener("click", openCurrentVehicleReminders);
 menuCurrentActivityButton?.addEventListener("click", openCurrentVehicleActivity);
 menuCurrentEditButton?.addEventListener("click", () => {
@@ -5381,10 +5376,9 @@ function decorateMenuButtons() {
   const iconMap = [
     [menuHomeButton, 'home', 'Inicio'],
     [menuProfileButton, 'account', 'Mi perfil'],
-    [menuSettingsButton, 'settings', 'Ajustes de la app'],
+    [menuSettingsButton, 'settings', 'Configuración'],
     [menuActivityButton, 'activity', 'Actividad'],
-    [menuCurrentPlacesButton, 'place', 'Lugares'],
-    [menuCurrentRemindersButton, 'bell', 'Recordatorios'],
+    [menuCurrentRemindersButton, 'bell', 'Planes y recordatorios'],
     [menuCurrentEditButton, 'edit', 'Editar vehiculo'],
     [menuCurrentDeleteButton, 'delete', 'Eliminar vehiculo'],
     [menuLogoutButton, 'logout', 'Cerrar sesion'],
@@ -5409,7 +5403,7 @@ function renderVehicleDetailFunctionalIcons() {
     vehicleDetailOdometerIcon.innerHTML = buildIconMarkup("odometer");
   }
   if (vehicleDetailMaintenanceIcon) {
-    vehicleDetailMaintenanceIcon.innerHTML = buildIconMarkup("plus");
+    vehicleDetailMaintenanceIcon.innerHTML = buildIconMarkup("maintenance");
   }
   if (vehicleDetailHistoryIcon) {
     vehicleDetailHistoryIcon.innerHTML = buildIconMarkup("history");
@@ -5418,6 +5412,7 @@ function renderVehicleDetailFunctionalIcons() {
 
 function renderVehicleHero() {
   const vehicle = getSelectedVehicle();
+  document.getElementById("detail-photo").innerHTML = vehicle ? vehicleMediaMarkup(vehicle) : "";
   const typeConfig = getVehicleTypeConfig(vehicle?.vehicle_type);
   const identity = [vehicle?.nombre, vehicle?.modelo]
     .map((value) => String(value || "").trim())
