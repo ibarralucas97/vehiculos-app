@@ -48,6 +48,12 @@ test('F02/F04: new public resources are in the PWA allowlist; API policy remains
   for (const name of ['appearance.js', 'frontend-ui.js', 'modernization.css']) {
     assert.ok(worker.includes(`"/${name}"`)); assert.ok(html.includes(`"/${name}"`));
   }
-  assert.match(worker, /rodado-control-v23/);
+  assert.match(worker, /rodado-control-v24/);
   assert.match(worker, /if \(!isAllowedStaticRequest\(event.request\)\)/);
+});
+
+test('Información muestra la versión declarada por la aplicación', () => {
+  const html = fs.readFileSync(path.join(publicDir, 'index.html'), 'utf8');
+  const version = require('../package.json').version;
+  assert.ok(html.includes(`<dd id="app-version">${version}</dd>`));
 });
