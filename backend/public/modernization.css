@@ -372,3 +372,8 @@ body[data-theme] .inbox-tools { column-gap:4px; }
 body[data-theme] .inbox-tools button { padding-inline:10px; }
 body[data-theme] #notifications-mark-all-read { font-size:.72rem; }
 body[data-theme] .pwa-install-banner { width:min(1180px,calc(100% - 28px)); margin:0 auto 14px; }
+
+body[data-theme="light"] #app-topbar .menu-panel button { color:var(--text); }
+body[data-theme="light"] #app-topbar .menu-panel :is(.menu-section-label,.menu-current-vehicle-name) { color:var(--muted); }
+body[data-theme="light"] #app-topbar .menu-panel .menu-danger-button { color:var(--danger); }
+body[data-theme="light"] #app-topbar .menu-panel button:hover .menu-button-icon { color:var(--brand); }
