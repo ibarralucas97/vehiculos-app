@@ -48,7 +48,7 @@ test('F02/F04: new public resources are in the PWA allowlist; API policy remains
   for (const name of ['appearance.js', 'frontend-ui.js', 'modernization.css']) {
     assert.ok(worker.includes(`"/${name}"`)); assert.ok(html.includes(`"/${name}"`));
   }
-  assert.match(worker, /rodado-control-v24/);
+  assert.match(worker, /rodado-control-v25/);
   assert.match(worker, /if \(!isAllowedStaticRequest\(event.request\)\)/);
 });
 
