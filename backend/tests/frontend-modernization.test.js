@@ -48,7 +48,7 @@ test('F02/F04: new public resources are in the PWA allowlist; API policy remains
   for (const name of ['appearance.js', 'frontend-ui.js', 'modernization.css']) {
     assert.ok(worker.includes(`"/${name}"`)); assert.ok(html.includes(`"/${name}"`));
   }
-  assert.match(worker, /rodado-control-v26/);
+  assert.match(worker, /rodado-control-v27/);
   assert.match(worker, /if \(!isAllowedStaticRequest\(event.request\)\)/);
 });
 
@@ -56,4 +56,45 @@ test('Información muestra la versión declarada por la aplicación', () => {
   const html = fs.readFileSync(path.join(publicDir, 'index.html'), 'utf8');
   const version = require('../package.json').version;
   assert.ok(html.includes(`<dd id="app-version">${version}</dd>`));
+});
+
+test('U01: checks at startup and foreground are throttled, offline and failed checks are silent', async () => {
+  const app = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
+  const registerClient = app.match(/^function registerServiceWorker\(\) \{[^]*?^\}/m)[0];
+  const events = {};
+  const listen = (name, fn) => { events[name] = fn; };
+  let registrations = 0, checks = 0, now = 0, finish;
+  const registration = { update: async () => {
+    checks++;
+    if (checks === 1) await new Promise(resolve => { finish = resolve; });
+    else throw new Error('offline during update');
+  } };
+  const navigator = { onLine:true, serviceWorker:{
+    addEventListener:listen,
+    register:async () => { registrations++; return registration; },
+  } };
+  const document = { readyState:'interactive', hidden:false, getElementById:() => null, addEventListener:listen };
+  vm.runInNewContext(registerClient + '\nregisterServiceWorker()', {
+    navigator, document, window:{ addEventListener:listen }, performance:{ now:() => now },
+  });
+  const pending = events.load();
+  await Promise.resolve();
+  await events.visibilitychange();
+  assert.equal(checks, 1);
+  finish();
+  await pending;
+  await events.visibilitychange();
+  assert.equal(checks, 1);
+  now += 30 * 60 * 1000;
+  document.hidden = true;
+  await events.visibilitychange();
+  navigator.onLine = false;
+  document.hidden = false;
+  await events.visibilitychange();
+  assert.equal(checks, 1);
+  navigator.onLine = true;
+  await events.online();
+  await events.visibilitychange();
+  assert.equal(checks, 2);
+  assert.equal(registrations, 1);
 });
