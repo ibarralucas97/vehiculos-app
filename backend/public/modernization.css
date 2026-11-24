@@ -377,3 +377,98 @@ body[data-theme="light"] #app-topbar .menu-panel button { color:var(--text); }
 body[data-theme="light"] #app-topbar .menu-panel :is(.menu-section-label,.menu-current-vehicle-name) { color:var(--muted); }
 body[data-theme="light"] #app-topbar .menu-panel .menu-danger-button { color:var(--danger); }
 body[data-theme="light"] #app-topbar .menu-panel button:hover .menu-button-icon { color:var(--brand); }
+
+/* Desktop frame and navigation. The existing menu state controls the second header row. */
+@media (min-width:1024px) {
+  body[data-theme] {
+    --desktop-frame:min(1680px, calc(100% - 48px));
+  }
+  body[data-theme] .app-shell,
+  body[data-theme] .pwa-install-banner {
+    width:var(--desktop-frame);
+  }
+  body[data-theme] .app-shell {
+    padding:24px;
+  }
+  body[data-theme] #welcome-screen {
+    max-width:1120px;
+    margin-inline:auto;
+  }
+  body[data-theme] #app-topbar {
+    flex-wrap:wrap;
+    margin-bottom:18px;
+  }
+  #app-topbar .topbar-menu {
+    display:none;
+  }
+  html.menu-open {
+    overflow:auto;
+  }
+  .menu-open #menu-backdrop {
+    display:none;
+  }
+  .menu-open #app-topbar .topbar-menu {
+    display:block;
+    position:static;
+    flex-basis:100%;
+  }
+  body[data-theme] #app-topbar .menu-panel {
+    position:static;
+    display:flex;
+    flex-flow:row wrap;
+    align-items:flex-end;
+    gap:12px 24px;
+    width:100%;
+    max-height:none;
+    padding:12px 4px 4px;
+    background:transparent;
+    border:0;
+    border-top:1px solid var(--line);
+    border-radius:0;
+    box-shadow:none;
+  }
+  #app-topbar .menu-section {
+    display:flex;
+    flex-wrap:wrap;
+    align-items:center;
+  }
+  #app-topbar .menu-section-label {
+    flex-basis:100%;
+    margin:0;
+  }
+  #app-topbar .menu-panel button {
+    width:auto;
+  }
+  #app-topbar .menu-section-logout {
+    margin:0 0 0 auto;
+    padding:0;
+    border:0;
+  }
+  body[data-theme] #vehicles-screen .vehicles-grid {
+    grid-template-columns:repeat(auto-fit,minmax(300px,1fr));
+    gap:16px;
+    margin:16px 0;
+  }
+  #vehicles-grid > .vehicle-card:only-child {
+    max-width:calc((100% - 16px) / 2);
+  }
+  body[data-theme] #vehicles-screen > .primary {
+    width:auto;
+    margin:0 0 20px;
+  }
+  body[data-theme] :is(#settings-modal,#notifications-inbox-modal) .modal-content {
+    width:var(--desktop-frame);
+    max-width:1280px;
+  }
+  body[data-theme] .settings-nav {
+    grid-template-columns:repeat(3,minmax(0,1fr));
+  }
+  body[data-theme] :is(#maintenance-form,#filters-form) {
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    align-items:start;
+  }
+  #maintenance-form :is(.image-preview,.message) {
+    grid-column:1/-1;
+  }
+}
