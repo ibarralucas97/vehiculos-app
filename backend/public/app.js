@@ -5293,15 +5293,76 @@ topbarTitleAction?.addEventListener("keydown", (event) => {
 });
 
 function registerServiceWorker() {
-  if (!("serviceWorker" in navigator)) {
-    return;
+  const workers = navigator.serviceWorker;
+  if (!workers) return;
+
+  const notice = document.getElementById("pwa-update-notice");
+  let previousController = workers.controller;
+  let reloading = false;
+  workers.addEventListener("controllerchange", () => {
+    const current = workers.controller;
+    if (current && previousController && current !== previousController && notice && !reloading) {
+      notice.hidden = false;
+    }
+    previousController = current;
+  });
+
+  if (notice) {
+    // Keep only DOM references. Failed submissions and hidden wizard steps can still hold drafts.
+    const edited = new WeakSet();
+    function markEdit(event) {
+      const field = event.target;
+      if (field.matches("input, select, textarea")) edited.add(field.form || field);
+    }
+    document.addEventListener("input", markEdit);
+    document.addEventListener("change", markEdit);
+    document.addEventListener("click", event => {
+      const option = event.target.closest("button[aria-pressed]");
+      if (option?.form) edited.add(option.form);
+    });
+    document.addEventListener("reset", event => {
+      queueMicrotask(() => { if (!event.defaultPrevented) edited.delete(event.target); });
+    });
+    let returnFocus;
+    notice.addEventListener("focusin", event => {
+      if (!notice.contains(event.relatedTarget)) returnFocus = event.relatedTarget;
+    });
+    document.getElementById("pwa-update-later").addEventListener("click", () => {
+      notice.hidden = true;
+      if (returnFocus?.getClientRects().length) returnFocus.focus();
+      else document.getElementById("main-content")?.focus({ preventScroll: true });
+    });
+    document.getElementById("pwa-update-now").addEventListener("click", () => {
+      if (notice.hidden || reloading) return;
+      const hasDraft = [...document.querySelectorAll("form, input, select, textarea")].some(node =>
+        edited.has(node) && !node.closest("#welcome-screen.hidden"));
+      if (hasDraft && !window.confirm("Puede haber cambios sin guardar. ¿Querés descartarlos y actualizar ahora?")) return;
+      reloading = true;
+      window.location.reload();
+    });
   }
 
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/service-worker.js").catch((error) => {
-      console.error("No se pudo registrar el service worker", error);
-    });
-  });
+  let registration;
+  let checking = false;
+  let lastCheck = -Infinity;
+  const checkInterval = 30 * 60 * 1000;
+  async function checkForUpdate() {
+    if (document.hidden || !navigator.onLine || checking || performance.now() - lastCheck < checkInterval) return;
+    checking = true;
+    lastCheck = performance.now();
+    try {
+      registration ??= await workers.register("/service-worker.js");
+      if (!registration.installing) await registration.update();
+    } catch {
+      // Connectivity can disappear after the online check. Keep the current page usable.
+    } finally {
+      checking = false;
+    }
+  }
+  if (document.readyState === "complete") checkForUpdate();
+  else window.addEventListener("load", checkForUpdate, { once: true });
+  document.addEventListener("visibilitychange", checkForUpdate);
+  window.addEventListener("online", checkForUpdate);
 }
 
 

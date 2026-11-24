@@ -472,3 +472,25 @@ body[data-theme="light"] #app-topbar .menu-panel button:hover .menu-button-icon 
     grid-column:1/-1;
   }
 }
+
+/* Update notice stays below dialogs so it never covers an active modal form. */
+#pwa-update-notice {
+  position:fixed;
+  z-index:1500;
+  inset-inline-end:max(12px, env(safe-area-inset-right));
+  bottom:max(12px, env(safe-area-inset-bottom));
+  width:min(24rem, calc(100% - 24px));
+  max-height:calc(100dvh - 24px);
+  overflow:auto;
+  padding:16px;
+  border:1px solid var(--line);
+  border-inline-start:4px solid var(--primary);
+  border-radius:var(--radius-lg);
+  background:var(--surface);
+  color:var(--text);
+  box-shadow:var(--elevation);
+}
+#pwa-update-notice h2 { margin:0; font-size:1.1rem; }
+#pwa-update-notice p { margin:6px 0 12px; color:var(--muted); }
+.pwa-update-actions { display:flex; flex-wrap:wrap; gap:8px; }
+.pwa-update-actions button { width:auto; }
