@@ -206,7 +206,7 @@ const server = http.createServer(async (req,res) => {
     await page.waitForSelector('#welcome-screen:not(.hidden)');
     await page.evaluate(()=>navigator.serviceWorker.ready);
     await page.waitForFunction(()=>navigator.serviceWorker.controller);
-    const cached = await page.evaluate(async()=>{const cache=await caches.open('rodado-control-v27');return (await cache.keys()).map(request=>new URL(request.url).pathname);});
+    const cached = await page.evaluate(async()=>{const cache=await caches.open('rodado-control-v28');return (await cache.keys()).map(request=>new URL(request.url).pathname);});
     for(const resource of ['/appearance.js','/frontend-ui.js','/modernization.css']) assert.ok(cached.includes(resource));
     assert.ok(!cached.some(resource=>/^\/(vehicles|maintenance|users|notifications|auth)/.test(resource)));
     await context.setOffline(true); await page.reload();

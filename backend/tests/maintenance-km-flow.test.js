@@ -135,10 +135,11 @@ test('F01-C: duplicate submit is blocked through image preparation, request and 
 });
 test('F01-C: a backdated record is visible despite the three-record limit', async () => {
   const items = [1, 2, 3, 9].map(id => ({ id })); let rendered;
-  const c = context(['loadMaintenance'], {
-    selectedVehicleId: 1, URLSearchParams, FormData: class { entries() { return []; } }, filtersForm: {},
+  const c = context(['loadMaintenance', 'validateHistoryFilters'], {
+    selectedVehicleId: 1, URLSearchParams, FormData: class { entries() { return []; } }, filtersForm: { reportValidity: () => true },
+    historyRequest: 0, updateHistoryControls() {}, updateHistoryPlanOptions() {},
     setHistoryState() {}, getSession: () => ({}), historyTitle: {}, historyCopy: {}, setStatus() {},
-    fetchJson: async () => items, sortMaintenanceByMostRecent: x => x, renderMaintenance: rows => { rendered = rows; },
+    fetchJson: async () => items, renderMaintenance: rows => { rendered = rows; },
   });
   await c.loadMaintenance({ highlightId: 9 });
   assert.equal(rendered.length, 3); assert.equal(rendered[0].id, 9);
@@ -207,8 +208,9 @@ function deferred() {
 }
 function historyUi() {
   const records = new Map();
-  const c = context(['loadMaintenance', 'sortMaintenanceByMostRecent'], {
-    URLSearchParams, filtersForm: {}, FormData: class { entries() { return [['search', 'aceite']]; } },
+  const c = context(['loadMaintenance', 'validateHistoryFilters'], {
+    historyRequest: 0, updateHistoryControls() {}, updateHistoryPlanOptions() {},
+    URLSearchParams, filtersForm: { reportValidity: () => true }, FormData: class { entries() { return [['search', 'aceite']]; } },
     historyTitle: {}, historyCopy: {}, maintenanceList: {},
     setHistoryState(value) { c.maintenanceList.innerHTML = value; },
     setStatus(value) { c.status = value; },

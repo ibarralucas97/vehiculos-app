@@ -1,4 +1,4 @@
-const CACHE_NAME = "rodado-control-v27";
+const CACHE_NAME = "rodado-control-v28";
 const APP_SHELL = [
   "/",
   "/index.html",
@@ -7,6 +7,7 @@ const APP_SHELL = [
   "/appearance.js",
   "/frontend-ui.js",
   "/app.js",
+  "/vendor/write-excel-file-4.1.1/write-excel-file.min.js",
   "/dashboard-enhancements.js",
   "/manifest.json",
   "/logo.png",
