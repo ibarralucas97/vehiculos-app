@@ -3306,7 +3306,6 @@ function renderMaintenanceCards(items, container) {
             ${placeMarkup}
           </div>
           <div class="maintenance-card-actions">
-            ${maintenanceImageButton(item)}
             <button class="ghost maintenance-card-button" type="button" onclick="openMaintenanceDetail(${safeRecordId(item.id)})">Ver detalle</button>
           </div>
         </article>
