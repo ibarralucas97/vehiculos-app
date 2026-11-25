@@ -474,6 +474,7 @@ function validateAdminResetPasswordPayload(payload) {
 
 module.exports = {
   MAX_NUMERIC_FIELD_VALUE,
+  parseOptionalInteger,
   isValidEmail,
   isValidPhone,
   validateMaintenancePayload,

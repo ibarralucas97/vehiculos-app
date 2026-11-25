@@ -25,11 +25,11 @@ function loadRoute(filename, pool, pushes) {
   }, { filename: file });
   return module.exports;
 }
-async function invoke(router, method, routePath, body, id, userId = 1) {
+async function invoke(router, method, routePath, body, id, userId = 1, query = {}) {
   const layer = router.stack.find(layer => layer.route?.path === routePath && layer.route.methods[method]);
   assert.ok(layer, `${method} ${routePath}`);
   const response = { statusCode: 200, status(code) { this.statusCode = code; return this; }, json(data) { this.body = data; return this; } };
-  await layer.route.stack[0].handle({ body, params: { id }, user: { id: userId } }, response);
+  await layer.route.stack[0].handle({ body, query, params: { id }, user: { id: userId } }, response);
   return response;
 }
 
@@ -101,6 +101,35 @@ test('F01: real PostgreSQL route regressions (explicit disposable database only)
         assert.equal((await invoke(maintenance, 'put', '/:id', payload(20000), existing, 2)).statusCode, 404);
         assert.equal((await client.query('SELECT COUNT(*) FROM mantenimiento')).rows[0].count, before);
         assert.deepEqual((await client.query('SELECT km_actual,km_updated_at FROM vehiculos WHERE id=1')).rows[0], originalVehicle);
+      });
+      await t.test('F05 filters compose, retain unplanned records and isolate vehicles and accounts', async () => {
+        await client.query("INSERT INTO vehiculos (id,user_id,nombre,modelo) VALUES (2,1,'Segundo','2026'),(3,2,'Privado','2026')");
+        await client.query("INSERT INTO lugares (id,user_id,nombre) VALUES (2,2,'Privado')");
+        await client.query(`INSERT INTO mantenimiento (fecha,vehiculo_id,lugar_id,accion,km,user_id,maintenance_plan_id)
+          VALUES ('2020-02-29',1,1,'F05-A',0,1,1), ('2020-02-29',1,1,'F05-B',0,1,1),
+                 ('2020-02-28',1,1,'F05-C',10,1,NULL), ('2020-02-28',2,1,'F05-D',0,1,NULL),
+                 ('2020-02-29',3,2,'F05-E',0,2,NULL)`);
+        const read = (filters, userId = 1) => invoke(maintenance, 'get', '/', {}, null, userId, filters);
+        const query = { vehiculo_id: '1', search: 'f05', from: '2020-02-28', to: '2020-02-29' };
+        const actions = async (filters, userId) => {
+          const response = await read(filters, userId);
+          assert.equal(response.statusCode, 200);
+          return response.body.map(row => row.accion);
+        };
+        assert.deepEqual(await actions({ ...query, maintenance_plan_id: '1', km_min: '0', km_max: '0' }), ['F05-B', 'F05-A']);
+        assert.deepEqual(await actions({ ...query, maintenance_plan_id: 'none' }), ['F05-C']);
+        assert.deepEqual(await actions({ ...query, maintenance_plan_id: 'none', km_max: '0' }), []);
+        assert.deepEqual(await actions({ ...query, vehiculo_id: '2' }), ['F05-D']);
+        assert.deepEqual(await actions({ ...query, vehiculo_id: '3' }), []);
+        assert.deepEqual(await actions(query, 2), []);
+        assert.deepEqual(await actions({ ...query, vehiculo_id: '3' }, 2), ['F05-E']);
+        const unfiltered = await actions({ vehiculo_id: '1' });
+        assert.ok(unfiltered.length > 3 && unfiltered.includes('F05-C'));
+        for (const invalid of [
+          { km_min: '-1' }, { km_max: '0.5' }, { km_min: '1000000000' }, { km_min: '2', km_max: '1' },
+          { maintenance_plan_id: '0' }, { maintenance_plan_id: 'invalid' }, { maintenance_plan_id: ['1','2'] },
+          { to: '2021-02-29' }, { from: '2020-03-01' }, { vehiculo_id: '', km_min: '0' },
+        ]) assert.equal((await read({ ...query, ...invalid })).statusCode, 400, JSON.stringify(invalid));
       });
       await t.test('explicit PATCH updates mileage; a decrease is rejected', async () => {
         const updated = await invoke(vehicles, 'patch', '/:id/km', { km_actual: 16000 }, 1);

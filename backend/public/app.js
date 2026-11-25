@@ -135,6 +135,12 @@ const showLoginButton = document.getElementById("show-login-button");
 
 const maintenanceList = document.getElementById("maintenance-list");
 const statusPill = document.getElementById("status-pill");
+const historyView = document.getElementById("history-view");
+const historyShowAll = document.getElementById("history-show-all");
+const exportExcelButton = document.getElementById("export-excel-button");
+let historyResult = null;
+let historyRequest = 0;
+const historyExportButtonsBusy = new Set();
 const historyTitle = document.getElementById("history-title");
 const historyCopy = document.getElementById("history-copy");
 const maintenanceForm = document.getElementById("maintenance-form");
@@ -373,6 +379,7 @@ const tablerIcon = (paths) => `
 
 // Tabler Icons v3.44.0 Outline. Original local SVG assets live in assets/icons/tabler/.
 const ICONS = {
+  photo: tablerIcon('<rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="9" cy="9" r="1.5" /><path d="m4 17 5-5 4 4 3-3 5 5" />'),
   themeDark: tablerIcon('<path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454l0 .008" />'),
   themeLight: tablerIcon('<path d="M8 12a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" /><path d="M3 12h1m8 -9v1m8 8h1m-9 8v1m-6.4 -15.4l.7 .7m12.1 -.7l-.7 .7m0 11.4l.7 .7m-12.1 -.7l-.7 .7" />'),
   view: tablerIcon('<path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" /><path d="M21 12c-2.4 4 -5.4 6 -9 6c-3.6 0 -6.6 -2 -9 -6c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6" />'),
@@ -486,7 +493,7 @@ function removeLegacyMaintenanceImages() {
 function clearPrivateMaintenanceState() {
   sessionGeneration += 1;
   removeLegacyMaintenanceImages();
-  currentMaintenanceRecords.clear();
+  resetHistoryContext();
   document.getElementById("detail-photo")?.replaceChildren();
   if (typeof clearFrontendSettingsContext === "function") clearFrontendSettingsContext();
   clearPrivatePhotoState();
@@ -2937,7 +2944,42 @@ function showSavedSyncWarning(confirmation) {
   showToast(message, { tone: "warning", duration: 10000 });
 }
 
+function updateHistoryControls() {
+  exportPdfButton.disabled = !historyResult || historyExportButtonsBusy.has(exportPdfButton);
+  exportExcelButton.disabled = !historyResult || historyExportButtonsBusy.has(exportExcelButton);
+  historyShowAll.classList.toggle("hidden", !historyResult || historyResult.visibleCount >= historyResult.items.length);
+}
+
+function resetHistoryContext() {
+  historyRequest++;
+  historyResult = null;
+  currentMaintenanceRecords.clear();
+  filtersForm.reset();
+  updateHistoryPlanOptions([]);
+  historyView.value = "cards";
+  updateHistoryControls();
+}
+
+function updateHistoryPlanOptions(items) {
+  const select = filtersForm.elements.maintenance_plan_id;
+  const selected = select.value;
+  const plans = new Map();
+  for (const item of items) {
+    if (item.maintenance_plan_id != null) plans.set(item.maintenance_plan_id, item.maintenance_plan_name);
+  }
+  select.replaceChildren(new Option("Todos los planes", ""));
+  if (items.some(item => item.maintenance_plan_id == null)) select.add(new Option("Sin plan", "none"));
+  for (const [id, name] of [...plans].sort((a, b) => String(a[1]).localeCompare(String(b[1]), "es"))) {
+    select.add(new Option(name, String(id)));
+  }
+  if (selected && [...select.options].some(option => option.value === selected)) select.value = selected;
+}
+
 function setHistoryState(state, detail = "") {
+  if (state !== "empty") {
+    historyResult = null;
+    updateHistoryControls();
+  }
   historyTitle.textContent = "Historial";
 
   const states = {
@@ -2965,7 +3007,7 @@ function setHistoryState(state, detail = "") {
       body: buildEmptyStateMarkup({
         icon: "history",
         title: "Sin resultados",
-        body: "No encontramos mantenimientos con esos filtros. Prueba otro texto o rango de fechas.",
+        body: "No hay mantenimientos que coincidan con la consulta.",
       }),
     },
     error: {
@@ -3260,9 +3302,11 @@ function renderMaintenanceCards(items, container) {
           <div class="card-meta">
             <span>Fecha: ${formatMaintenanceDate(item.fecha)}</span>
             <span>Km: ${formatMaintenanceListKm(item.km)}</span>
+            <span>Plan: ${escapeHtml(item.maintenance_plan_name || "Sin plan")}</span>
             ${placeMarkup}
           </div>
           <div class="maintenance-card-actions">
+            ${maintenanceImageButton(item)}
             <button class="ghost maintenance-card-button" type="button" onclick="openMaintenanceDetail(${safeRecordId(item.id)})">Ver detalle</button>
           </div>
         </article>
@@ -3278,7 +3322,32 @@ function renderMaintenance(items) {
     return;
   }
 
-  renderMaintenanceCards(items, maintenanceList);
+  if (historyView.value === "cards") {
+    renderMaintenanceCards(items, maintenanceList);
+    return;
+  }
+  cacheMaintenanceItems(items);
+  const rows = items.map(item => `
+    <tr>
+      <td>${formatMaintenanceDate(item.fecha)}</td><td>${escapeHtml(item.accion)}</td>
+      <td>${escapeHtml(item.maintenance_plan_name || "Sin plan")}</td><td>${escapeHtml(item.lugar || "Sin dato")}</td>
+      <td>${formatMaintenanceListKm(item.km)}</td><td>${escapeHtml(formatCurrency(item.cost))}</td>
+      <td>${maintenanceImageButton(item) || "Sin imagen"}</td>
+      <td>${buildItemActionButton({ action: `openMaintenanceDetail(${safeRecordId(item.id)})`, icon: "view", label: "Ver detalle" })}</td>
+    </tr>`).join("");
+  maintenanceList.innerHTML = `<div class="history-table-scroll" role="region" aria-label="Historial de mantenimientos" tabindex="0">
+    <table><caption class="sr-only">Historial de mantenimientos</caption>
+      <thead><tr>${["Fecha", "Mantenimiento", "Plan", "Lugar", "Km", "Costo", "Imagen", "Acciones"].map(title => `<th scope="col">${title}</th>`).join("")}</tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
+}
+
+function maintenanceImageButton(item) {
+  if (!getMaintenanceImageSource(item)) return "";
+  return buildItemActionButton({
+    action: `openMaintenanceImageLightboxById(${safeRecordId(item.id)})`,
+    icon: "photo", label: "Ver fotografía",
+  });
 }
 
 async function loadSelects() {
@@ -3303,15 +3372,6 @@ function hasActiveFilters() {
   const formData = new FormData(filtersForm);
   return Array.from(formData.values()).some((value) => String(value).trim() !== "");
 }
-
-function sortMaintenanceByMostRecent(items) {
-  return [...items].sort((first, second) => {
-    const firstDate = Date.parse(first?.fecha || "") || 0;
-    const secondDate = Date.parse(second?.fecha || "") || 0;
-    return secondDate - firstDate;
-  });
-}
-
 
 async function loadPlacesList() {
   const generation = sessionGeneration;
@@ -3453,6 +3513,7 @@ loadVehiclesScreen = async function patchedLoadVehiclesScreen() {
 
 function selectVehicle(id, origin = "selectVehicle") {
   logNavigation(origin, "dashboard", { vehicleId: id });
+  if (selectedVehicleId !== id) resetHistoryContext();
   selectedVehicleId = id;
   persistViewState();
   const vehicle = currentVehicles.find((v) => v.id === id);
@@ -3588,6 +3649,7 @@ function viewVehicle(id) {
 
 
 async function loadMaintenance({ highlightId = null } = {}) {
+  const request = ++historyRequest;
   const generation = sessionGeneration;
   const vehicleId = selectedVehicleId;
   if (!vehicleId) {
@@ -3606,48 +3668,60 @@ async function loadMaintenance({ highlightId = null } = {}) {
     }
   }
 
-  const usingFilters = params.toString().length > 0;
-
+  const usingFilters = params.size > 0;
   setHistoryState("loading");
-  params.set("vehiculo_id", String(vehicleId));
-
-  if (usingFilters) {
-    historyTitle.textContent = "Historial filtrado";
-    historyCopy.textContent = "Resultados segun los filtros aplicados al vehiculo seleccionado.";
-  } else {
-    historyTitle.textContent = "Historial";
-    historyCopy.textContent = "Cargando los ultimos mantenimientos del vehiculo seleccionado.";
-  }
-
-  const query = params.toString();
-  const url = query ? `/maintenance?${query}` : "/maintenance";
-  let items;
-  try {
-    items = await fetchJson(url);
-  } catch (error) {
-    if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return;
-    throw error;
-  }
-  if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return;
-
-  if (items.length === 0) {
-    setHistoryState("empty");
+  const errorMessage = validateHistoryFilters(params);
+  if (errorMessage || !filtersForm.reportValidity()) {
+    setHistoryState("error", errorMessage || "Revisá los filtros ingresados.");
     return;
   }
+  params.set("vehiculo_id", String(vehicleId));
+  const isCurrent = () => request === historyRequest && generation === sessionGeneration && vehicleId === selectedVehicleId;
+  let items;
+  try {
+    items = await fetchJson(`/maintenance?${params}`);
+  } catch (error) {
+    if (!isCurrent()) return;
+    setHistoryState("error", error.message);
+    throw error;
+  }
+  if (!isCurrent()) return;
+  if (!usingFilters) updateHistoryPlanOptions(items);
 
-  const sortedItems = sortMaintenanceByMostRecent(items);
+  // The API orders by date and id descending. F01 pins the just-saved record.
   const highlighted = items.find(item => Number(item.id) === Number(highlightId));
-  const displayedItems = highlighted
-    ? [highlighted, ...sortedItems.filter(item => item !== highlighted).slice(0, 2)]
-    : usingFilters ? items : sortedItems.slice(0, 3);
+  if (highlighted) items = [highlighted, ...items.filter(item => item !== highlighted)];
+  const visibleCount = usingFilters && !highlighted ? items.length : Math.min(3, items.length);
+  historyResult = { items, visibleCount, vehicleId, generation };
+  renderMaintenance(items.slice(0, visibleCount));
+  updateHistoryControls();
+  if (!items.length) return;
 
-  renderMaintenance(displayedItems);
+  historyTitle.textContent = usingFilters ? "Historial filtrado" : "Historial";
   historyCopy.textContent = highlighted
     ? "Mantenimiento guardado mostrado primero. Se limpiaron los filtros para mostrarlo."
-    : usingFilters
-      ? "Resultados segun los filtros aplicados al vehiculo seleccionado."
-      : `Mostrando los ultimos ${displayedItems.length} mantenimientos.`;
-  setStatus(`${displayedItems.length} registros`);
+    : usingFilters ? "Resultados según los filtros aplicados al vehículo seleccionado."
+    : `Mostrando ${visibleCount} de ${items.length} mantenimientos.`;
+  setStatus(`${items.length} registros`);
+}
+
+function validateHistoryFilters(params) {
+  const plan = params.get("maintenance_plan_id");
+  if (plan && plan !== "none" && (!/^[1-9]\d*$/.test(plan) || Number(plan) > 2147483647)) {
+    return "Seleccioná un plan válido.";
+  }
+  const min = params.get("km_min");
+  const max = params.get("km_max");
+  if ([min, max].some(value => value !== null && (!/^\d+$/.test(value) || Number(value) > MAX_NUMERIC_FIELD_VALUE))) {
+    return "El kilometraje debe ser un entero entre 0 y 999999999.";
+  }
+  if (min !== null && max !== null && Number(min) > Number(max)) {
+    return "Km desde debe ser menor o igual a Km hasta.";
+  }
+  if (params.has("from") && params.has("to") && params.get("from") > params.get("to")) {
+    return "La fecha desde debe ser anterior o igual a la fecha hasta.";
+  }
+  return "";
 }
 
 function sanitizeNumericValue(rawValue, { allowDecimal = false } = {}) {
@@ -4226,8 +4300,22 @@ filtersForm?.addEventListener("submit", async (event) => {
 
 updateKmButton?.addEventListener("click", openKmUpdateModal);
 
-filtersResetButton?.addEventListener("click", () => {
-  setHistoryState("initial");
+filtersResetButton?.addEventListener("click", (event) => {
+  event.preventDefault();
+  filtersForm.reset();
+  filtersForm.requestSubmit();
+});
+
+historyView.addEventListener("change", () => {
+  if (historyResult) renderMaintenance(historyResult.items.slice(0, historyResult.visibleCount));
+});
+
+historyShowAll.addEventListener("click", () => {
+  if (!historyResult) return;
+  historyResult.visibleCount = historyResult.items.length;
+  renderMaintenance(historyResult.items);
+  historyCopy.textContent = `Mostrando los ${historyResult.items.length} mantenimientos.`;
+  updateHistoryControls();
 });
 
 
@@ -5167,6 +5255,7 @@ function sanitizeFileName(value) {
 
 async function exportMaintenanceToPdf({
   vehicleId = selectedVehicleId,
+  historyItems = null,
   triggerButton = exportPdfButton,
   showModalErrors = true,
 } = {}) {
@@ -5192,8 +5281,7 @@ async function exportMaintenanceToPdf({
   setButtonLoading(triggerButton, true, "Exportando...");
 
   try {
-    const items = await fetchJson(`/maintenance?vehiculo_id=${effectiveVehicleId}`);
-    const sortedItems = [...items].sort((a, b) => {
+    const sortedItems = historyItems ?? (await fetchJson(`/maintenance?vehiculo_id=${effectiveVehicleId}`)).sort((a, b) => {
       const dateDiff = new Date(a.fecha).getTime() - new Date(b.fecha).getTime();
       if (dateDiff !== 0) return dateDiff;
       return Number(a.id) - Number(b.id);
@@ -5234,16 +5322,36 @@ async function exportMaintenanceToPdf({
     y += 20;
 
     if (sortedItems.length === 0) {
-      doc.text("No hay mantenimientos cargados para este vehiculo.", 48, y);
+      doc.text(historyItems ? "Sin resultados para esta consulta." : "No hay mantenimientos cargados para este vehiculo.", 48, y);
     }
+
+    const writeWrapped = (text, height) => {
+      const lines = doc.splitTextToSize(text, pageWidth - 96);
+      if (historyItems) {
+        for (const line of lines) {
+          ensureSpace(height);
+          doc.text(line, 48, y);
+          y += height;
+        }
+      } else {
+        doc.text(lines, 48, y);
+        y += lines.length * height;
+      }
+    };
 
     sortedItems.forEach((item, index) => {
       ensureSpace(96);
 
       doc.setFont("helvetica", "bold");
       doc.setFontSize(12);
-      doc.text(`${index + 1}. ${item.accion}`, 48, y);
-      y += 16;
+      const title = `${index + 1}. ${item.accion}`;
+      if (historyItems) {
+        writeWrapped(title, 16);
+        ensureSpace(56);
+      } else {
+        doc.text(title, 48, y);
+        y += 16;
+      }
 
       doc.setFont("helvetica", "normal");
       doc.setFontSize(10.5);
@@ -5251,15 +5359,14 @@ async function exportMaintenanceToPdf({
       y += 14;
       doc.text(`Costo: ${formatCurrency(item.cost)}`, 48, y);
       y += 14;
-      doc.text(`Kilometraje: ${formatDistance(item.km)}`, 48, y);
+      doc.text(historyItems ? `Km: ${formatMaintenanceListKm(item.km)}` : `Kilometraje: ${formatDistance(item.km)}`, 48, y);
       y += 14;
 
-      const details = doc.splitTextToSize(
-        `Taller: ${item.lugar || "Sin dato"} | Descripcion: ${item.accion}`,
-        pageWidth - 96
-      );
-      doc.text(details, 48, y);
-      y += details.length * 14 + 10;
+      if (historyItems) {
+        writeWrapped(`Plan: ${item.maintenance_plan_name || "Sin plan"} | Imagen: ${getMaintenanceImageSource(item) ? "Sí" : "No"}`, 14);
+      }
+      writeWrapped(`Taller: ${item.lugar || "Sin dato"} | Descripcion: ${item.accion}`, 14);
+      y += 10;
       doc.setDrawColor(230, 233, 239);
       doc.line(48, y, pageWidth - 48, y);
       y += 18;
@@ -5281,7 +5388,52 @@ async function exportMaintenanceToPdf({
   }
 }
 
-exportPdfButton?.addEventListener("click", exportMaintenanceToPdf);
+function isCurrentHistoryResult(result) {
+  return result && result === historyResult && result.generation === sessionGeneration && result.vehicleId === selectedVehicleId;
+}
+
+async function exportHistory(button) {
+  const result = historyResult;
+  if (!isCurrentHistoryResult(result) || historyExportButtonsBusy.has(button)) return;
+  historyExportButtonsBusy.add(button);
+  updateHistoryControls();
+  try {
+    if (button === exportPdfButton) {
+      await exportMaintenanceToPdf({ vehicleId: result.vehicleId, historyItems: result.items });
+      return;
+    }
+    const filename = `${sanitizeFileName(getSelectedVehicle()?.nombre)}-historial.xlsx`;
+    await import("/vendor/write-excel-file-4.1.1/write-excel-file.min.js");
+    if (!isCurrentHistoryResult(result)) return;
+    const rows = result.items.map(item => [
+      item.fecha ? String(item.fecha).slice(0, 10) : null,
+      String(item.accion ?? ""), String(item.maintenance_plan_name || "Sin plan"), String(item.lugar || "Sin dato"),
+      item.km == null ? null : Number(item.km), item.cost == null ? null : Number(item.cost),
+      getMaintenanceImageSource(item) ? "Sí" : "No",
+    ]);
+    const headers = ["Fecha", "Mantenimiento", "Plan", "Lugar", "Km", "Costo", "Imagen"];
+    const blob = await window.writeXlsxFile([headers, ...rows], {
+      sheet: "Historial", columns: [14, 42, 25, 30, 14, 16, 12].map(width => ({ width })),
+    }).toBlob();
+    if (!isCurrentHistoryResult(result)) return;
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    setStatus("Excel exportado");
+  } catch (error) {
+    if (isCurrentHistoryResult(result)) showToast(error.message || "No se pudo exportar el historial.", { tone: "error" });
+  } finally {
+    historyExportButtonsBusy.delete(button);
+    updateHistoryControls();
+  }
+}
+
+exportPdfButton.addEventListener("click", () => exportHistory(exportPdfButton));
+exportExcelButton.addEventListener("click", () => exportHistory(exportExcelButton));
 topbarTitleAction?.addEventListener("click", () => {
   refreshCurrentContext().catch(console.error);
 });

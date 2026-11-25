@@ -340,25 +340,46 @@
                 <div class="split-fields">
                   <label>
                     Desde
-                    <input type="date" name="from" />
+                    <input type="date" name="from" max="9999-12-31" />
                   </label>
                   <label>
                     Hasta
-                    <input type="date" name="to" />
+                    <input type="date" name="to" max="9999-12-31" />
+                  </label>
+                </div>
+                <label>Plan de mantenimiento
+                  <select name="maintenance_plan_id"><option value="">Todos los planes</option></select>
+                </label>
+                <div class="split-fields">
+                  <label>Km desde
+                    <input type="text" name="km_min" inputmode="numeric" pattern="[0-9]+" title="Ingresá un entero entre 0 y 999999999" />
+                  </label>
+                  <label>Km hasta
+                    <input type="text" name="km_max" inputmode="numeric" pattern="[0-9]+" title="Ingresá un entero entre 0 y 999999999" />
                   </label>
                 </div>
                 <div class="split-fields">
                   <button id="filters-submit" type="submit" class="secondary">Aplicar filtros</button>
                   <button id="filters-reset-button" class="ghost" type="reset">Limpiar</button>
                 </div>
-                <div class="history-secondary-actions">
-                  <button id="export-pdf-button" class="ghost" type="button">Exportar PDF</button>
-                </div>
               </form>
 
+              <div class="history-toolbar">
+                <label>Vista
+                  <select id="history-view">
+                    <option value="cards">Tarjetas</option>
+                    <option value="table">Tabla</option>
+                  </select>
+                </label>
+                <div class="history-exports">
+                  <button id="export-pdf-button" class="ghost" type="button" disabled>Exportar PDF</button>
+                  <button id="export-excel-button" class="ghost" type="button" disabled>Exportar Excel</button>
+                </div>
+              </div>
               <div id="maintenance-list" class="cards">
                 <div class="empty">Aplica filtros para ver el historial.</div>
               </div>
+              <button id="history-show-all" class="ghost hidden" type="button">Ver todos los registros</button>
             </div>
           </section>
         </section>
