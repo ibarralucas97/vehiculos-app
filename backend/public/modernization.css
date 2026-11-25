@@ -576,3 +576,10 @@ body[data-theme] #dashboard.vehicle-detail-page .vehicle-detail-status:is(.is-ov
   max-width: 100%;
   max-height: 100%;
 }
+
+/* El estado vencido prevalece sobre el estilo azul del badge. */
+body[data-theme] #dashboard.vehicle-detail-page #overview-status-label:is(.is-overdue, .is-atrasado) {
+  background: #b42336;
+  color: #ffffff;
+  border-color: #f87171;
+}
