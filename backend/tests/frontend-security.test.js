@@ -19,7 +19,7 @@ function appContext(names, overrides = {}) {
 const payload = `<img src=x onerror="globalThis.pwned=1"> ' & <script>alert(1)</script>`;
 const renderNames = ['escapeHtml', 'safeRecordId', 'optionMarkup', 'getMaintenanceImageSource',
   'formatMaintenanceDate', 'formatMaintenanceListKm', 'cacheMaintenanceItems', 'getMaintenanceRecord',
-  'removeCachedMaintenance', 'buildMaintenanceDetailMarkup', 'maintenanceImageButton', 'renderMaintenanceCards', 'buildItemActionButton', 'loadPlacesList', 'viewPlace'];
+  'removeCachedMaintenance', 'buildMaintenanceDetailMarkup', 'maintenanceImageButton', 'renderMaintenanceCards', 'buildItemActionButton', 'loadPlacesList', 'placePhoneLinks', 'placeContactActions', 'viewPlace'];
 function rendering() {
   return appContext(renderNames, {
     currentMaintenanceRecords: new Map(), getSession: () => ({}), normalizeSessionUser: x => x,
@@ -151,7 +151,7 @@ function worker() {
   }
   const notifications = [], navigations = [];
   const clients = { claim: async () => {}, matchAll: async () => [], openWindow: async url => navigations.push(url) };
-  const c = vm.createContext({ URL, Headers, caches, clients, self: { location: { origin: 'https://test.local' }, clients,
+  const c = vm.createContext({ URL, AbortSignal, Headers, caches, clients, self: { location: { origin: 'https://test.local' }, clients,
     addEventListener: (type, fn) => { listeners[type] = fn; }, skipWaiting: async () => {},
     registration: { showNotification: async (...args) => notifications.push(args) } },
     fetch: async (request, options) => { requests.push({ request, options }); return response(typeof request === 'string' ? request : request.url); },
@@ -167,7 +167,7 @@ function worker() {
 
 test('H02: installation only caches existing allowlisted local static resources', async () => {
   const w = worker(); await w.dispatch('install');
-  const data = w.stores.get('rodado-control-v31');
+  const data = w.stores.get('rodado-control-v32');
   assert.ok(data.size > 30);
   for (const url of data.keys()) {
     const pathname = new URL(url).pathname;
@@ -178,7 +178,7 @@ test('H02: installation only caches existing allowlisted local static resources'
 
 test('H02: activity, unknown private routes, queries and non-GET never enter cache', async () => {
   const w = worker(); await w.dispatch('install');
-  const before = [...w.stores.get('rodado-control-v31').keys()];
+  const before = [...w.stores.get('rodado-control-v32').keys()];
   for (const request of [w.request('/activity'), w.request('/private-future-route'), w.request('/maintenance'),
     w.request('/images/private.png'), w.request('/app.js?user=1'),
     w.request('/app.js', { method: 'POST' }), w.request('/app.js', { headers: new Headers({ Authorization: 'Bearer test' }) }),
@@ -186,14 +186,14 @@ test('H02: activity, unknown private routes, queries and non-GET never enter cac
     await w.dispatch('fetch', { request });
     assert.equal(w.requests.at(-1).options.cache, 'no-store');
   }
-  assert.deepEqual([...w.stores.get('rodado-control-v31').keys()], before);
+  assert.deepEqual([...w.stores.get('rodado-control-v32').keys()], before);
 });
 
 test('H02: activation deletes v21 private data and all earlier cache versions', async () => {
   const w = worker(); w.stores.set('rodado-control-v21', new Map([['/activity', 'private']]));
   w.stores.set('rodado-control-v20', new Map());
   await w.dispatch('install'); await w.dispatch('activate');
-  assert.deepEqual([...w.stores.keys()], ['rodado-control-v31']);
+  assert.deepEqual([...w.stores.keys()], ['rodado-control-v32']);
 });
 
 test('H02: offline shell/static resources work; private endpoints never receive index.html', async () => {
@@ -204,7 +204,7 @@ test('H02: offline shell/static resources work; private endpoints never receive 
     assert.equal((await w.dispatch('fetch', { request })).status, 200);
   }
   for (const url of ['/activity', '/unknown-api', '/auth/me']) await assert.rejects(w.dispatch('fetch', { request: w.request(url) }), /offline/);
-  w.stores.get('rodado-control-v31').delete('https://test.local/');
+  w.stores.get('rodado-control-v32').delete('https://test.local/');
   assert.equal((await w.dispatch('fetch', { request: w.request('/', { mode: 'navigate' }) })).status, 200);
 });
 
@@ -212,28 +212,46 @@ test('H02: redirected, opaque, error and wrong MIME responses are not cached', a
   for (const options of [{ redirected: true }, { type: 'opaque' }, { status: 500 }, { headers: new Headers({ 'Content-Type': 'application/json' }) }]) {
     const w = worker(); w.c.fetch = async () => w.response('/app.js', options);
     await w.dispatch('fetch', { request: w.request('/app.js') });
-    assert.equal(w.stores.get('rodado-control-v31').size, 0);
+    assert.equal(w.stores.get('rodado-control-v32').size, 0);
     await assert.rejects(w.dispatch('install'), /Invalid shell response/);
   }
 });
 
-test('H02: push and notificationclick remain operational, including text payload fallback', async () => {
+test('N01: worker shows details only to their owner and opens local app links', async () => {
   const w = worker();
-  await w.dispatch('push', { data: { json: () => ({ title: 'Recordatorio', body: 'Revisar', data: { url: '/?vehicle=2' } }) } });
+  const push = { data: { json: () => ({ title: 'Recordatorio', body: 'Revisar', data: { userId: 3, url: '/?vehicleId=2' } }) } };
+  let user = { id: 3 };
+  w.c.fetch = async (url, options) => {
+    assert.equal(url, '/auth/me');
+    assert.equal(options.cache, 'no-store');
+    return { ok: true, json: async () => ({ user }) };
+  };
+  await w.dispatch('push', push);
   assert.equal(w.notifications[0][0], 'Recordatorio');
   assert.equal(w.notifications[0][1].body, 'Revisar');
-  await w.dispatch('push', { data: { json: () => { throw new Error(); }, text: () => 'Texto' } });
-  assert.equal(w.notifications[1][1].body, 'Texto');
-  let closed = false;
-  await w.dispatch('notificationclick', { notification: { close: () => { closed = true; }, data: { url: '/?vehicle=2' } } });
-  assert.equal(closed, true); assert.equal(w.navigations[0], 'https://test.local/?vehicle=2');
+  user = { id: 4 };
+  await w.dispatch('push', push);
+  w.c.fetch = async () => { throw new Error('offline'); };
+  await w.dispatch('push', push);
+  await w.dispatch('push', { data: { json: () => { throw new Error('legacy'); } } });
+  for (const [title, options] of w.notifications.slice(1)) {
+    assert.equal(title, 'Rodado Control');
+    assert.equal(options.data.url, '/');
+    assert.equal(options.data.vehicleId, null);
+  }
+  for (const [url, expected] of [['/?vehicleId=2', '/?vehicleId=2'], ['https://elsewhere.invalid/', '/']]) {
+    let closed = false;
+    await w.dispatch('notificationclick', { notification: { close: () => { closed = true; }, data: { url } } });
+    assert.equal(closed, true);
+    assert.equal(w.navigations.at(-1), 'https://test.local' + expected);
+  }
 });
 
 test('H02: offline notification deep links use the public shell without caching query data', async () => {
   const w = worker(); await w.dispatch('install');
   w.c.fetch = async () => { throw new Error('offline'); };
   assert.equal((await w.dispatch('fetch', { request: w.request('/?vehicleId=2', { mode: 'navigate', destination: 'document' }) })).status, 200);
-  assert.ok([...w.stores.get('rodado-control-v31').keys()].every(url => !new URL(url).search));
+  assert.ok([...w.stores.get('rodado-control-v32').keys()].every(url => !new URL(url).search));
 });
 
 test('H01/H02: image lightbox uses the current record and cleanup removes its source', () => {
@@ -285,7 +303,7 @@ function effectiveDashboard() {
     return elements.get(id);
   }
   c.document = { getElementById: element };
-  for (const name of ['escapeHtml', 'safeRecordId', 'viewPlace', 'viewVehicle', 'formatNotificationTime', 'renderNotificationsInbox', 'loadNotificationsInbox', 'refreshNotificationControls']) {
+  for (const name of ['escapeHtml', 'safeRecordId', 'placePhoneLinks', 'placeContactActions', 'viewPlace', 'viewVehicle', 'formatNotificationTime', 'renderNotificationsInbox', 'loadNotificationsInbox', 'refreshNotificationControls']) {
     const source = app.match(new RegExp(`(?:async )?function ${name}\\([^]*?^}`, 'm'));
     assert.ok(source, name); vm.runInContext(source[0], c);
   }
@@ -296,13 +314,13 @@ function effectiveDashboard() {
   });
   const originalPlace = c.viewPlace, originalVehicle = c.viewVehicle;
   vm.runInContext(enhancements, c);
-  assert.notEqual(c.viewPlace, originalPlace); assert.notEqual(c.viewVehicle, originalVehicle);
+  assert.equal(c.viewPlace, originalPlace); assert.notEqual(c.viewVehicle, originalVehicle);
   return { c, storage, element };
 }
 
-test('H01: effective detail overrides escape every vehicle and place field', () => {
+test('H01: effective details escape every vehicle and place field', () => {
   const { c, element } = effectiveDashboard();
-  assert.equal(c.viewPlace.name, 'patchedViewPlace');
+  assert.equal(c.viewPlace.name, 'viewPlace');
   assert.equal(c.viewVehicle.name, 'patchedViewVehicle');
   c.currentPlaces = [{ id: 1, nombre: payload, ubicacion: payload, contacto_nombre: payload, contacto_numero: payload }];
   c.viewPlace(1);
@@ -409,19 +427,19 @@ test('H02: late dashboard failure does not overwrite the next account overview',
 test('H02: external requests are not intercepted, fetched or cached by the worker', async () => {
   const w = worker(); await w.dispatch('install');
   const before = w.requests.length;
-  const keys = [...w.stores.get('rodado-control-v31').keys()];
+  const keys = [...w.stores.get('rodado-control-v32').keys()];
   for (const url of ['https://external.test/app.js', 'https://fonts.googleapis.com/css2?family=Manrope', 'https://cdn.jsdelivr.net/npm/bootstrap/file.js']) {
     assert.equal(await w.dispatch('fetch', { request: w.request(url) }), undefined);
   }
   assert.equal(w.requests.length, before);
-  assert.deepEqual([...w.stores.get('rodado-control-v31').keys()], keys);
+  assert.deepEqual([...w.stores.get('rodado-control-v32').keys()], keys);
 });
 
 test('H02: pending push subscription lookup cannot restore previous user controls', async () => {
   const { c, element } = effectiveDashboard(); let finish, started;
   const lookupStarted = new Promise(resolve => { started = resolve; });
   c.isPushSupportedInBrowser = () => true;
-  c.fetchNotificationServerStatus = async () => ({ pushConfigured: true, subscriptionCount: 1 });
+  c.navigator = { userAgent: "Browser" };
   c.getCurrentPushSubscription = () => new Promise(resolve => { finish = resolve; started(); });
   c.notificationStateLoading = false;
   c.setNotificationStatus = message => { element('notifications-status').textContent = message; };
@@ -568,3 +586,99 @@ for (const type of ['profile', 'vehicle']) {
     });
   }
 }
+
+test('F06-A: safe address searches and explicit international mobile numbers', () => {
+  const c = rendering();
+  const html = c.placeContactActions({ ubicacion: "Av. Colón & O'Higgins #3", contacto_numero: '+54 (9) 11 1234-5678' });
+  assert.ok(html.includes('api=1&amp;query=' + c.escapeHtml(encodeURIComponent("Av. Colón & O'Higgins #3"))));
+  assert.match(html, /href="https:\/\/wa.me\/5491112345678"/);
+  assert.match(html, /href="tel:\+5491112345678"/);
+  assert.equal((html.match(/target="_blank" rel="noopener noreferrer"/g) || []).length, 2);
+  assert.equal(c.placeContactActions({ ubicacion: '  ' }), '');
+  for (const [number, tel, whatsapp] of [
+    ['0044 7700 900123', '+447700900123', '447700900123'],
+    ['011 15 1234-5678', '0111512345678', undefined],
+    ['+54 11 1234-5678', '+541112345678', undefined],
+    ['+54 11 15 1234-5678', undefined, undefined],
+    ['+44 (0)7700 900123', undefined, undefined],
+    ['sin teléfono', undefined, undefined],
+  ]) {
+    const links = c.placePhoneLinks(number);
+    assert.equal(links.tel, tel);
+    assert.equal(links.whatsapp, whatsapp);
+    if (!whatsapp) assert.match(c.placeContactActions({ contacto_numero: number }), /formato internacional/);
+  }
+});
+
+test('N01: test button reports provider acceptance even when HTTP succeeds with zero sent', async () => {
+  const results = [];
+  const c = appContext(['sendPushTestNotification'], {
+    getSession: () => ({ id: 1 }), Notification: { permission: 'granted' }, notificationsTestButton: {},
+    getCurrentPushSubscription: async () => ({ endpoint: 'local-fixture' }),
+    refreshNotificationControls: async () => { c.notificationsTestButton.disabled = false; },
+    setNotificationStatus: (message, tone) => results.push([message, tone]),
+  });
+  for (const sent of [1, 0]) {
+    c.fetchJson = async (url, options) => {
+      assert.equal(url, '/notifications/test');
+      assert.equal(JSON.parse(options.body).endpoint, 'local-fixture');
+      return { delivery: { attempted: 1, failed: 1 - sent, sent } };
+    };
+    await c.sendPushTestNotification();
+    assert.equal(results.at(-1)[1], sent ? 'success' : 'error');
+    assert.ok(results.at(-1)[0].includes('Aceptados por el servicio push: ' + sent));
+  }
+  c.Notification.permission = 'denied';
+  c.fetchJson = () => assert.fail('request without permission');
+  await c.sendPushTestNotification();
+  assert.equal(results.at(-1)[1], 'error');
+});
+
+test('N01: local controls require a matching device, permission and compatible installation', async () => {
+  const { c, element } = effectiveDashboard();
+  Object.assign(c, {
+    isPushSupportedInBrowser: () => true, navigator: { userAgent: 'Browser' },
+    Notification: { permission: 'granted' }, getCurrentPushSubscription: async () => null,
+    isStandaloneApp: () => false, isMobileDevice: () => false, renderReminderSettingsSummary() {},
+    setNotificationStatus: message => { element('notifications-status').textContent = message; },
+    fetchJson: async () => ({ pushConfigured: true, subscriptionCount: 2, deviceSubscribed: false }),
+    notificationStateLoading: false,
+  });
+  await c.refreshNotificationControls();
+  assert.equal(c.notificationsTestButton.disabled, true);
+  assert.match(c.notificationsToggleButton.textContent, /Activar/);
+  c.Notification.permission = 'denied';
+  await c.refreshNotificationControls();
+  assert.equal(c.notificationsToggleButton.disabled, true);
+  c.navigator.userAgent = 'iPhone';
+  c.isPushSupportedInBrowser = () => false;
+  await c.refreshNotificationControls();
+  assert.match(element('notifications-status').textContent, /16.4.*Agregar a inicio/);
+});
+
+test('N01: logout removes its push endpoint on server before local unsubscribe', async () => {
+  const steps = [];
+  const endpoint = 'https://push.example/fixture';
+  const c = appContext(['detachPushBeforeLogout'], {
+    sessionGeneration: 9,
+    AbortController,
+    navigator: { serviceWorker: { getRegistration: async () => ({
+      pushManager: { getSubscription: async () => ({
+        endpoint,
+        unsubscribe: async () => { steps.push('local-unsubscribe'); },
+      }) },
+      getNotifications: async () => [],
+    }) } },
+    window: { setTimeout: () => 1, clearTimeout() {} },
+    fetch: async (url, options) => {
+      assert.equal(url, '/notifications/subscribe');
+      assert.equal(options.method, 'DELETE');
+      assert.equal(options.credentials, 'same-origin');
+      assert.equal(JSON.parse(options.body).endpoint, endpoint);
+      steps.push('server-delete');
+      return { ok: true };
+    },
+  });
+  await c.detachPushBeforeLogout(9);
+  assert.deepEqual(steps, ['server-delete', 'local-unsubscribe']);
+});

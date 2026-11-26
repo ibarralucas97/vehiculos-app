@@ -1,4 +1,4 @@
-const CACHE_NAME = "rodado-control-v31";
+const CACHE_NAME = "rodado-control-v32";
 const APP_SHELL = [
   "/",
   "/index.html",
@@ -11,6 +11,8 @@ const APP_SHELL = [
   "/dashboard-enhancements.js",
   "/manifest.json",
   "/logo.png",
+  "/assets/icons/map.png",
+  "/assets/icons/whatsapp.png",
   "/app-icon.png",
   "/icon-192.png",
   "/icon-512.png",
@@ -120,21 +122,24 @@ self.addEventListener("fetch", (event) => {
 });
 
 
-self.addEventListener("push", (event) => {
+async function showPushNotification(event) {
   let payload = {};
-
   try {
-    payload = event.data ? event.data.json() : {};
-  } catch (_error) {
-    payload = {
-      title: "Rodado Control",
-      body: event.data ? event.data.text() : "Tienes una nueva notificacion.",
-    };
+    const incoming = event.data?.json();
+    if (incoming?.data?.userId) {
+      // A queued message can arrive after logout or reassignment of this browser.
+      const response = await fetch("/auth/me", {
+        credentials: "same-origin", cache: "no-store", signal: AbortSignal.timeout(8000),
+      });
+      if (response.ok && (await response.json()).user?.id === incoming.data.userId) payload = incoming;
+    }
+  } catch {
+    // Legacy messages and unverified sessions only display the public notice.
   }
 
   const title = payload.title || "Rodado Control";
   const options = {
-    body: payload.body || "Tienes una nueva notificacion.",
+    body: payload.body || "Abrí la aplicación para consultar tus avisos.",
     icon: payload.icon || "/icon-192.png",
     badge: payload.badge || "/icon-192.png",
     tag: payload.tag || "rodado-control",
@@ -147,13 +152,21 @@ self.addEventListener("push", (event) => {
     },
   };
 
-  event.waitUntil(self.registration.showNotification(title, options));
+  await self.registration.showNotification(title, options);
+}
+
+self.addEventListener("push", (event) => {
+  event.waitUntil(showPushNotification(event));
 });
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
-  const targetUrl = new URL(event.notification.data?.url || "/", self.location.origin).href;
+  let targetUrl = self.location.origin + "/";
+  try {
+    const url = new URL(event.notification.data?.url || "/", self.location.origin);
+    if (url.origin === self.location.origin && url.pathname === "/") targetUrl = url.href;
+  } catch { /* Open the home screen for malformed links. */ }
 
   event.waitUntil(
     clients.matchAll({ type: "window", includeUncontrolled: true }).then((windowClients) => {

@@ -2,7 +2,7 @@ const {
   DEFAULT_REPEAT_DAYS,
   normalizeReminder,
 } = require("./reminders");
-const { buildNotificationPayload, sendPushToUser } = require("./pushNotifications");
+const { buildNotificationPayload, hasPushConfiguration, sendPushToUser } = require("./pushNotifications");
 const { calculatePlan } = require("./maintenancePlans");
 
 async function fetchUserPlanRows(pool, userId) {
@@ -254,11 +254,53 @@ async function markNotificationEventFailure(pool, { eventId, payload, result }) 
   );
 }
 
+async function processCandidate(pool, summary, userId, vehicleId, planId, candidate) {
+  summary.candidates += 1;
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    // The unique-key upsert locks this event until its delivery result is recorded.
+    const event = await upsertNotificationEvent(client, {
+      userId, vehicleId, planId, notificationType: candidate.type,
+      dedupeKey: candidate.dedupeKey, payload: candidate.notification,
+      stage: candidate.stage, dueSnapshot: candidate.dueSnapshot,
+    });
+    if (isEventInCooldown(event)) {
+      summary.cooldownSkipped += 1;
+    } else {
+      const result = await sendPushToUser(client, { userId, notification: candidate.notification });
+      summary.attempted += result.attempted;
+      summary.sent += result.sent;
+      summary.failed += result.failed;
+      summary.pruned += result.pruned;
+      if (result.sent > 0) {
+        await markNotificationEventSent(client, {
+          eventId: event.id, payload: candidate.notification,
+          cooldownDays: candidate.cooldownDays, result: "sent",
+        });
+      } else {
+        if (!result.attempted) summary.skipped += 1;
+        await markNotificationEventFailure(client, {
+          eventId: event.id, payload: candidate.notification,
+          result: result.error || (result.pruned ? "pruned" : "failed"),
+        });
+      }
+    }
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 async function runReminderSweep(pool) {
+  if (!hasPushConfiguration()) throw new Error("Push no configurado en el servidor");
   const usersResult = await pool.query(
     `SELECT u.id
      FROM users u
-     WHERE u.reminders_enabled = TRUE
+     WHERE u.reminders_enabled = TRUE AND u.is_active AND u.deleted_at IS NULL AND u.role = 'user'
        AND EXISTS (
          SELECT 1
          FROM push_subscriptions ps
@@ -270,6 +312,7 @@ async function runReminderSweep(pool) {
   const summary = {
     users: usersResult.rowCount,
     candidates: 0,
+    attempted: 0,
     sent: 0,
     failed: 0,
     skipped: 0,
@@ -283,66 +326,13 @@ async function runReminderSweep(pool) {
     const plans = await fetchUserPlanRows(pool,row.id);
 
     for (const reminder of reminders) {
-      const candidates = buildReminderCandidates(reminder);
-
-      for (const candidate of candidates) {
-        summary.candidates += 1;
-
-        const eventRow = await upsertNotificationEvent(pool, {
-          userId: row.id,
-          vehicleId: reminder.vehicleId,
-          notificationType: candidate.type,
-          dedupeKey: candidate.dedupeKey,
-          payload: candidate.notification,
-          stage: candidate.stage,
-          dueSnapshot: candidate.dueSnapshot,
-        });
-
-        if (!eventRow) {
-          summary.skipped += 1;
-          continue;
-        }
-
-        if (isEventInCooldown(eventRow)) {
-          summary.cooldownSkipped += 1;
-          continue;
-        }
-
-        const result = await sendPushToUser(pool, {
-          userId: row.id,
-          notification: candidate.notification,
-        });
-
-        summary.sent += result.sent;
-        summary.failed += result.failed;
-        summary.pruned += result.pruned;
-
-        if (result.sent > 0 || result.pruned > 0) {
-          await markNotificationEventSent(pool, {
-            eventId: eventRow.id,
-            payload: candidate.notification,
-            cooldownDays: candidate.cooldownDays,
-            result: result.sent > 0 ? "sent" : "pruned",
-          });
-          continue;
-        }
-
-        await markNotificationEventFailure(pool, {
-          eventId: eventRow.id,
-          payload: candidate.notification,
-          result: result.error || "failed",
-        });
+      for (const candidate of buildReminderCandidates(reminder)) {
+        await processCandidate(pool, summary, row.id, reminder.vehicleId, null, candidate);
       }
     }
-    for(const plan of plans){
-      for(const candidate of buildPlanReminderCandidates(plan)){
-        summary.candidates+=1;
-        const eventRow=await upsertNotificationEvent(pool,{userId:row.id,vehicleId:plan.vehicle_id,planId:plan.id,notificationType:candidate.type,dedupeKey:candidate.dedupeKey,payload:candidate.notification,stage:candidate.stage,dueSnapshot:candidate.dueSnapshot});
-        if(!eventRow||isEventInCooldown(eventRow)){summary.cooldownSkipped+=1;continue;}
-        const result=await sendPushToUser(pool,{userId:row.id,notification:candidate.notification});
-        summary.sent+=result.sent;summary.failed+=result.failed;summary.pruned+=result.pruned;
-        if(result.sent>0||result.pruned>0)await markNotificationEventSent(pool,{eventId:eventRow.id,payload:candidate.notification,cooldownDays:candidate.cooldownDays,result:result.sent>0?"sent":"pruned"});
-        else await markNotificationEventFailure(pool,{eventId:eventRow.id,payload:candidate.notification,result:result.error||"failed"});
+    for (const plan of plans) {
+      for (const candidate of buildPlanReminderCandidates(plan)) {
+        await processCandidate(pool, summary, row.id, plan.vehicle_id, plan.id, candidate);
       }
     }
   }

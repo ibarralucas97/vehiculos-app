@@ -547,7 +547,7 @@
           <input name="nombre" placeholder="Nombre" required />
           <input name="ubicacion" placeholder="Ubicacion" />
           <input name="contacto_nombre" placeholder="Contacto" />
-          <input name="contacto_numero" placeholder="Telefono" />
+          <input type="tel" name="contacto_numero" placeholder="Teléfono" aria-label="Teléfono de contacto" />
           <div class="places-form-actions">
             <button id="place-cancel-button" class="ghost" type="button" onclick="showPlacesListView()">Cancelar</button>
             <button id="place-save-button" type="submit">Crear</button>
@@ -665,11 +665,11 @@
                     <p class="section-copy">Las notificaciones permiten recibir avisos importantes de Rodado Control en este dispositivo.</p>
                   </div>
                 </div>
-                <p id="notifications-status" class="message notification-status">Cargando estado de notificaciones...</p>
+                <p id="notifications-status" role="status" class="message notification-status">Cargando estado de notificaciones...</p>
                 <p id="notifications-install-hint" class="inline-help hidden">Para recibir notificaciones y una mejor experiencia, instalá Rodado Control en tu dispositivo.</p>
                 <div class="notification-actions">
-                  <button id="notifications-toggle-button" type="button">Activar notificaciones</button>
-                  <button id="notifications-test-button" class="ghost" type="button">Enviar prueba</button>
+                  <button id="notifications-toggle-button" disabled type="button">Activar notificaciones</button>
+                  <button id="notifications-test-button" disabled class="ghost" type="button">Enviar prueba</button>
                 </div>
                 <div class="settings-overview-grid">
                   <article class="settings-overview-card">

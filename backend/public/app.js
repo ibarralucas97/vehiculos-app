@@ -1253,17 +1253,16 @@ function renderReminderSettingsSummary(session = getSession(), status = notifica
         : "No compatible";
   const pushLabel = !isPushSupportedInBrowser()
     ? "No compatible"
-    : !status?.pushConfigured
-      ? "Servidor incompleto"
-      : Number(status?.subscriptionCount || 0) > 0
-        ? "Activo"
-        : "Disponible";
+    : !status ? "Sin consultar"
+    : !status.pushConfigured ? "Servidor sin configurar"
+    : permission === "denied" ? "Bloqueado"
+    : status.deviceSubscribed && permission === "granted" ? "Activo" : "Disponible";
   const installLabel = isStandaloneApp() ? "Instalada" : isMobileDevice() ? "Recomendada" : "Opcional";
 
   if (settingsPushState) settingsPushState.textContent = pushLabel;
   if (settingsPushCopy) {
     settingsPushCopy.textContent = Number(status?.subscriptionCount || 0) > 0
-      ? `${status.subscriptionCount} dispositivo(s) suscripto(s).`
+      ? `${status.subscriptionCount} dispositivo(s) registrado(s) en tu cuenta.`
       : "Activa push y usa Enviar prueba para validarlo.";
   }
 
@@ -1383,7 +1382,6 @@ async function refreshCurrentContext({ silent = false, maintenanceId = null } = 
       const profile = await fetchCurrentProfile();
       fillPreferencesForm(profile);
       await refreshNotificationControls();
-      renderReminderSettingsSummary(profile, notificationsServerStatus);
     }
 
     if (isModalOpen("profile-modal")) {
@@ -1492,201 +1490,161 @@ function buildDeviceInfo() {
   };
 }
 
-async function fetchNotificationServerStatus() {
-  const session = getSession();
-
-  if (!session?.id) {
-    return null;
+async function getPushRegistration() {
+  const registration = await navigator.serviceWorker.getRegistration();
+  if (!registration?.active || !registration.pushManager) {
+    throw new Error("La aplicación todavía no está preparada para recibir avisos. Volvé a abrirla con conexión.");
   }
-
-  const status = await fetchJson(`/notifications/status`);
-  notificationsServerStatus = status;
-  notificationsLastSyncAt = new Date().toISOString();
-  return status;
+  return registration;
 }
 
 async function getCurrentPushSubscription() {
-  const registration = await navigator.serviceWorker.ready;
+  const registration = await getPushRegistration();
   return registration.pushManager.getSubscription();
 }
 
 async function refreshNotificationControls() {
   const generation = sessionGeneration;
-  if (!notificationsStatus || !notificationsToggleButton || !notificationsTestButton) {
-    return;
-  }
-
   const session = getSession();
-  if (!session?.id) {
-    return;
-  }
-
-  if (notificationStateLoading) {
-    return;
-  }
-
+  if (!notificationsStatus || !session?.id || notificationStateLoading) return;
   notificationStateLoading = true;
-
+  notificationsServerStatus = null;
+  notificationsToggleButton.disabled = true;
+  notificationsTestButton.disabled = true;
+  notificationsToggleButton.textContent = "Activar notificaciones";
+  notificationsTestButton.textContent = "Enviar prueba";
+  notificationsInstallHint?.classList.add("hidden");
   try {
-    notificationsToggleButton.disabled = true;
-    notificationsTestButton.disabled = true;
-    notificationsInstallHint?.classList.add("hidden");
-
-    if (!isPushSupportedInBrowser()) {
-      setNotificationStatus("Este navegador no soporta notificaciones push reales.", "error");
+    const appleMobile = /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    if (appleMobile && (!isStandaloneApp() || !isPushSupportedInBrowser())) {
+      setNotificationStatus("En iPhone o iPad necesitás iOS/iPadOS 16.4 o posterior. Desde Compartir, elegí Agregar a inicio, abrí la app desde su ícono y tocá Activar notificaciones.", "warning");
       return;
     }
-
-    const status = await fetchNotificationServerStatus();
+    if (!isPushSupportedInBrowser()) {
+      setNotificationStatus("Este navegador no admite Web Push en este contexto.", "warning");
+      return;
+    }
     const subscription = await getCurrentPushSubscription();
     if (generation !== sessionGeneration) return;
-    const hasSubscription = Boolean(subscription) && Number(status?.subscriptionCount || 0) > 0;
-    const permission = Notification.permission;
-    const remindersPaused = session.remindersEnabled === false;
-
-    if (!status?.pushConfigured) {
-      setNotificationStatus("El servidor todavia no tiene push configurado.", "error");
+    const status = await fetchJson("/notifications/status", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ endpoint: subscription?.endpoint }),
+    });
+    if (generation !== sessionGeneration) return;
+    notificationsServerStatus = status;
+    notificationsLastSyncAt = new Date().toISOString();
+    if (!status.pushConfigured) {
+      setNotificationStatus("El servidor todavía no tiene push configurado.", "error");
       return;
     }
-
-    if (permission === "denied") {
-      setNotificationStatus("Permiso denegado. Habilitalo desde la configuracion del navegador.", "error");
-    } else if (hasSubscription) {
-      setNotificationStatus(
-        remindersPaused
-          ? "Notificaciones activadas. Los recordatorios automaticos estan pausados en tu configuracion."
-          : "Notificaciones activadas.",
-        remindersPaused ? "warning" : "success"
-      );
-    } else if (permission === "granted") {
-      setNotificationStatus("Permiso concedido. Falta activar la suscripcion push.", "warning");
+    const active = status.deviceSubscribed && Notification.permission === "granted";
+    if (Notification.permission === "denied") {
+      setNotificationStatus("Permiso denegado. Habilitalo desde la configuración del navegador.", "warning");
+    } else if (active) {
+      setNotificationStatus(session.remindersEnabled === false
+        ? "Este dispositivo está suscripto. Los recordatorios automáticos están pausados."
+        : "Este dispositivo está suscripto. Podés enviar una prueba.", "success");
     } else {
-      setNotificationStatus("Activa las notificaciones para recibir recordatorios reales.", "warning");
+      setNotificationStatus("Activá las notificaciones en este dispositivo para recibir avisos.", "warning");
     }
-
-    if (isMobileDevice() && !isStandaloneApp()) {
-      notificationsInstallHint?.classList.remove("hidden");
-    }
-
-    notificationsToggleButton.textContent = hasSubscription ? "Desactivar notificaciones" : "Activar notificaciones";
-    notificationsToggleButton.disabled = false;
-    notificationsTestButton.disabled = !hasSubscription;
-    renderReminderSettingsSummary(session, status);
+    notificationsToggleButton.textContent = status.deviceSubscribed && Notification.permission !== "default" ? "Desactivar notificaciones" : "Activar notificaciones";
+    notificationsToggleButton.disabled = !status.deviceSubscribed && Notification.permission === "denied";
+    notificationsTestButton.disabled = !active;
+    if (isMobileDevice() && !isStandaloneApp()) notificationsInstallHint?.classList.remove("hidden");
   } catch (error) {
     if (generation === sessionGeneration) setNotificationStatus(error.message, "error");
   } finally {
-    if (generation === sessionGeneration) notificationStateLoading = false;
+    if (generation === sessionGeneration) {
+      notificationStateLoading = false;
+      renderReminderSettingsSummary(session);
+    }
   }
 }
 
-async function enablePushNotifications() {
-  const session = getSession();
-
-  if (!session?.id) {
-    throw new Error("No hay una sesion activa.");
-  }
-
-  const status = notificationsServerStatus || (await fetchNotificationServerStatus());
-
-  if (!status?.pushConfigured || !status?.vapidPublicKey) {
-    throw new Error("El servidor no tiene push configurado.");
-  }
-
+async function enablePushNotifications(generation, status) {
+  // Ask from the click handler, before any lookup can consume the user gesture.
   const permission = await Notification.requestPermission();
-
-  if (permission !== "granted") {
-    throw new Error("No se concedio el permiso para mostrar notificaciones.");
-  }
-
-  const registration = await navigator.serviceWorker.ready;
+  if (generation !== sessionGeneration) return;
+  if (permission !== "granted") throw new Error("No se concedió el permiso para mostrar notificaciones.");
+  const registration = await getPushRegistration();
   let subscription = await registration.pushManager.getSubscription();
-
+  if (generation !== sessionGeneration) return;
   if (!subscription) {
     subscription = await registration.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey: base64UrlToUint8Array(status.vapidPublicKey),
     });
   }
-
+  if (generation !== sessionGeneration) return;
   await fetchJson("/notifications/subscribe", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({      subscription: subscription.toJSON(),
-      device_info: buildDeviceInfo(),
-    }),
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ subscription: subscription.toJSON(), device_info: buildDeviceInfo() }),
   });
 }
 
-async function disablePushNotifications() {
-  const session = getSession();
-
-  if (!session?.id) {
-    throw new Error("No hay una sesion activa.");
-  }
-
-  const registration = await navigator.serviceWorker.ready;
-  const subscription = await registration.pushManager.getSubscription();
-
-  if (subscription?.endpoint) {
-    await fetchJson("/notifications/subscribe", {
-      method: "DELETE",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({        endpoint: subscription.endpoint,
-      }),
-    });
-
-    await subscription.unsubscribe().catch(() => {});
-  }
+async function disablePushNotifications(generation) {
+  const subscription = await getCurrentPushSubscription();
+  if (generation !== sessionGeneration || !subscription) return;
+  await fetchJson("/notifications/subscribe", {
+    method: "DELETE", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ endpoint: subscription.endpoint }),
+  });
+  if (generation === sessionGeneration) await subscription.unsubscribe();
 }
 
 async function handleNotificationToggle() {
-  setButtonLoading(notificationsToggleButton, true, "Procesando...");
-
+  const generation = sessionGeneration;
+  const status = notificationsServerStatus;
+  if (!status?.pushConfigured || notificationsToggleButton.disabled) return;
+  notificationsToggleButton.disabled = true;
+  notificationsTestButton.disabled = true;
+  let failure;
   try {
-    const subscription = isPushSupportedInBrowser() ? await getCurrentPushSubscription() : null;
-
-    if (subscription && Number(notificationsServerStatus?.subscriptionCount || 0) > 0) {
-      await disablePushNotifications();
-    } else {
-      await enablePushNotifications();
-    }
-
-    await refreshNotificationControls();
+    if (status.deviceSubscribed && Notification.permission !== "default") await disablePushNotifications(generation);
+    else await enablePushNotifications(generation, status);
   } catch (error) {
-    setNotificationStatus(error.message, "error");
-  } finally {
-    setButtonLoading(notificationsToggleButton, false, "Procesando...");
+    failure = error;
   }
+  if (generation !== sessionGeneration) return;
+  await refreshNotificationControls();
+  if (failure && generation === sessionGeneration) setNotificationStatus(failure.message, "error");
 }
 
 async function sendPushTestNotification() {
-  const session = getSession();
-
-  if (!session?.id) {
-    throw new Error("No hay una sesion activa.");
-  }
-
-  setButtonLoading(notificationsTestButton, true, "Enviando...");
-
+  const generation = sessionGeneration;
+  if (notificationsTestButton.disabled || !getSession()?.id) return;
+  notificationsTestButton.disabled = true;
+  let message, tone = "error";
   try {
-    await fetchJson("/notifications/test", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({      }),
-    });
-
-    setNotificationStatus("Notificacion de prueba enviada.", "success");
+    const subscription = await getCurrentPushSubscription();
+    if (generation !== sessionGeneration) return;
+    if (!subscription || Notification.permission !== "granted") {
+      throw new Error("Activá las notificaciones en este dispositivo antes de enviar una prueba.");
+    }
+    let delivery;
+    try {
+      const response = await fetchJson("/notifications/test", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ endpoint: subscription.endpoint }),
+      });
+      delivery = response.delivery;
+    } catch (error) {
+      if (!error.data?.delivery) throw error;
+      delivery = error.data.delivery;
+    }
+    if (!delivery) throw new Error("La respuesta del servidor no incluye un resultado de envío.");
+    message = `Intentos: ${delivery.attempted}. Aceptados por el servicio push: ${delivery.sent}. Fallidos: ${delivery.failed}.`;
+    if (delivery.sent > 0) {
+      message += " Comprobá si el aviso aparece en este dispositivo.";
+      tone = delivery.failed ? "warning" : "success";
+    } else if (delivery.error) message += " " + delivery.error;
   } catch (error) {
-    setNotificationStatus(error.message, "error");
-  } finally {
-    setButtonLoading(notificationsTestButton, false, "Enviando...");
+    message = error.message;
   }
+  if (generation !== sessionGeneration) return;
+  await refreshNotificationControls();
+  if (generation === sessionGeneration) setNotificationStatus(message, tone);
 }
 
 function applyNotificationIntentFromUrl() {
@@ -2414,6 +2372,7 @@ async function openProfileModal() {
 }
 
 async function openSettingsModal() {
+  const generation = sessionGeneration;
   closeMenu();
   openModal("settings-modal");
   const isAdmin=getSession()?.role==="superadmin";document.getElementById("settings-user-preferences")?.classList.toggle("hidden",isAdmin);
@@ -2423,7 +2382,9 @@ async function openSettingsModal() {
 
   try {
     const profile = await fetchCurrentProfile();
-    if(!isAdmin){fillPreferencesForm(profile);await refreshNotificationControls();renderReminderSettingsSummary(profile, notificationsServerStatus);}
+    if (generation !== sessionGeneration) return;
+    if (!isAdmin) { fillPreferencesForm(profile); await refreshNotificationControls(); }
+    if (generation !== sessionGeneration) return;
     if (preferencesMessage) preferencesMessage.textContent = "";
   } catch (error) {
     if (preferencesMessage) preferencesMessage.textContent = error.message;
@@ -3921,7 +3882,45 @@ registerForm?.addEventListener("submit", async (event) => {
   showToast(registerMessage.textContent, { tone: "warning", duration: 4200 });
 });
 
-function logout() {
+async function detachPushBeforeLogout(generation) {
+  const registration = await navigator.serviceWorker?.getRegistration();
+  if (!registration || generation !== sessionGeneration) return;
+  const [subscription, visible] = await Promise.all([
+    registration.pushManager?.getSubscription(),
+    registration.getNotifications?.(),
+  ]);
+  if (generation !== sessionGeneration) return;
+  for (const notification of visible || []) notification.close();
+  if (!subscription?.endpoint) return;
+
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 2500);
+  try {
+    const response = await fetch("/notifications/subscribe", {
+      method: "DELETE",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ endpoint: subscription.endpoint }),
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error("No se pudo desregistrar el dispositivo");
+  } finally {
+    window.clearTimeout(timeout);
+    if (generation === sessionGeneration) {
+      await subscription.unsubscribe().catch(() => {});
+    }
+  }
+}
+
+async function logout() {
+  const generation = sessionGeneration;
+  try {
+    await detachPushBeforeLogout(generation);
+  } catch (_error) {
+    // Cerrar sesión aun si el endpoint no pudo eliminarse (p. ej., sin red).
+    // El siguiente barrido depurará las suscripciones expiradas.
+  }
+  if (generation !== sessionGeneration) return;
   fetchJson("/auth/logout", { method: "POST" }).catch(() => {});
   clearSession();
   selectedVehicleId = null;
@@ -4561,22 +4560,8 @@ function closeModal(id) {
 
 maintenanceDetailClose?.addEventListener("click", closeMaintenanceDetail);
 maintenanceImageLightboxClose?.addEventListener("click", closeMaintenanceImageLightbox);
-notificationsToggleButton?.addEventListener("click", () => {
-  handleNotificationToggle().then(() => {
-    showToast("Estado de notificaciones actualizado", { tone: "info" });
-  }).catch((error) => {
-    setNotificationStatus(error.message, "error");
-    showToast(error.message, { tone: "error", duration: 3400 });
-  });
-});
-notificationsTestButton?.addEventListener("click", () => {
-  sendPushTestNotification().then(() => {
-    showToast("Notificacion de prueba enviada", { tone: "success" });
-  }).catch((error) => {
-    setNotificationStatus(error.message, "error");
-    showToast(error.message, { tone: "error", duration: 3400 });
-  });
-});
+notificationsToggleButton?.addEventListener("click", handleNotificationToggle);
+notificationsTestButton?.addEventListener("click", sendPushTestNotification);
 
 notificationsInboxClose?.addEventListener("click", () => closeModal("notifications-inbox-modal"));
 notificationsMarkAllReadButton?.addEventListener("click", () => {
@@ -4671,6 +4656,43 @@ adminUsersList?.addEventListener("click", (event) => {
 });
 pwaInstallDismiss?.addEventListener("click", dismissPwaInstallBanner);
 
+function placePhoneLinks(value) {
+  const raw = String(value || "").trim();
+  const number = raw.replace(/[\s().-]/g, "").replace(/^00/, "+");
+  const international = number.startsWith("+");
+  const digits = number.replace(/^\+/, "");
+  const valid = international ? /^[1-9]\d{6,14}$/.test(digits) : /^\d{6,15}$/.test(digits);
+  if (!valid || /^0+$/.test(digits) || (international && raw.includes("(0)"))) return {};
+  if (!international) return { tel: number };
+
+  // An Argentine landline and a mobile without the 9 cannot be distinguished.
+  if (digits.startsWith("54")) {
+    const national = digits.slice(2);
+    if (!/^9?(?:11\d{8}|[23]\d{9})$/.test(national)) return {};
+    if (!national.startsWith("9")) return { tel: number };
+  }
+  if (digits.startsWith("1") && digits.length !== 11) return {};
+  return { tel: number, whatsapp: digits };
+}
+
+function placeContactActions(place) {
+  const address = String(place.ubicacion || "").trim();
+  const { tel, whatsapp } = placePhoneLinks(place.contacto_numero);
+  const actions = [];
+  if (address && /[\p{L}\p{N}]/u.test(address)) {
+    const query = escapeHtml(encodeURIComponent(address));
+    actions.push(`<a href="https://www.google.com/maps/search/?api=1&amp;query=${query}" target="_blank" rel="noopener noreferrer"><img class="place-map-icon" src="/assets/icons/map.png" alt="">Abrir en Maps</a>`);
+  }
+  if (whatsapp) {
+    actions.push(`<a href="https://wa.me/${whatsapp}" target="_blank" rel="noopener noreferrer"><img src="/assets/icons/whatsapp.png" alt="">WhatsApp</a>`);
+  }
+  if (tel) actions.push(`<a href="tel:${tel}">Llamar</a>`);
+  const hint = String(place.contacto_numero || "").trim() && !whatsapp
+    ? '<p class="inline-help">Para usar WhatsApp, guardá el número en formato internacional. Para un móvil argentino, usá +54 9, código de área y número, sin 0 ni 15.</p>'
+    : "";
+  return (actions.length ? `<div class="place-contact-actions">${actions.join("")}</div>` : "") + hint;
+}
+
 function viewPlace(id) {
   const place = currentPlaces.find((p) => p.id === id);
 
@@ -4684,8 +4706,9 @@ function viewPlace(id) {
           <div><strong>Nombre:</strong> ${escapeHtml(place.nombre)}</div>
           <div><strong>Ubicacion:</strong> ${escapeHtml(place.ubicacion || "Sin dato")}</div>
           <div><strong>Contacto:</strong> ${escapeHtml(place.contacto_nombre || "Sin dato")}</div>
-          <div><strong>Telefono:</strong> ${escapeHtml(place.contacto_numero || "Sin dato")}</div>
+          <div><strong>Teléfono:</strong> ${escapeHtml(place.contacto_numero || "Sin dato")}</div>
         </div>
+        ${placeContactActions(place)}
       `,
     });
     return;

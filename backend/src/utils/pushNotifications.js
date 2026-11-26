@@ -7,32 +7,20 @@ const DEFAULT_BADGE = "/icon-192.png";
 let vapidReady = false;
 
 function hasPushConfiguration() {
-  return Boolean(
-    process.env.PUSH_VAPID_SUBJECT &&
-      process.env.PUSH_VAPID_PUBLIC_KEY &&
-      process.env.PUSH_VAPID_PRIVATE_KEY
-  );
-}
-
-function configureWebPush() {
-  if (!hasPushConfiguration()) {
+  if (vapidReady) return true;
+  const { PUSH_VAPID_SUBJECT, PUSH_VAPID_PUBLIC_KEY, PUSH_VAPID_PRIVATE_KEY } = process.env;
+  if (!PUSH_VAPID_SUBJECT || !PUSH_VAPID_PUBLIC_KEY || !PUSH_VAPID_PRIVATE_KEY) return false;
+  try {
+    webpush.setVapidDetails(PUSH_VAPID_SUBJECT, PUSH_VAPID_PUBLIC_KEY, PUSH_VAPID_PRIVATE_KEY);
+    vapidReady = true;
+    return true;
+  } catch {
     return false;
   }
-
-  if (!vapidReady) {
-    webpush.setVapidDetails(
-      process.env.PUSH_VAPID_SUBJECT,
-      process.env.PUSH_VAPID_PUBLIC_KEY,
-      process.env.PUSH_VAPID_PRIVATE_KEY
-    );
-    vapidReady = true;
-  }
-
-  return true;
 }
 
 function getPublicVapidKey() {
-  return process.env.PUSH_VAPID_PUBLIC_KEY || "";
+  return hasPushConfiguration() ? process.env.PUSH_VAPID_PUBLIC_KEY : "";
 }
 
 function sanitizeString(value, maxLength = 1024) {
@@ -129,7 +117,7 @@ async function saveSubscription(pool, { userId, subscription, deviceInfo = {} })
       auth_key = EXCLUDED.auth_key,
       device_info = EXCLUDED.device_info,
       updated_at = NOW()
-    RETURNING id, endpoint, created_at, updated_at`,
+    RETURNING id, created_at, updated_at`,
     [
       userId,
       normalized.data.endpoint,
@@ -159,24 +147,21 @@ async function removeSubscription(pool, { userId, endpoint }) {
   return result.rowCount;
 }
 
-async function getSubscriptionsByUser(pool, userId) {
+async function getSubscriptionsByUser(pool, userId, endpoint = null) {
   const result = await pool.query(
-    `SELECT id, endpoint, p256dh_key, auth_key, device_info, created_at, updated_at
+    `SELECT id, user_id, endpoint, p256dh_key, auth_key
      FROM push_subscriptions
      WHERE user_id = $1
+       AND ($2::text IS NULL OR endpoint = $2)
      ORDER BY updated_at DESC, id DESC`,
-    [userId]
+    [userId, endpoint]
   );
 
   return result.rows;
 }
 
-async function removeSubscriptionById(pool, id) {
-  await pool.query("DELETE FROM push_subscriptions WHERE id = $1", [id]);
-}
-
 async function sendPushToSubscriptions(pool, subscriptions, notification) {
-  if (!configureWebPush()) {
+  if (!hasPushConfiguration()) {
     return {
       attempted: 0,
       sent: 0,
@@ -211,23 +196,26 @@ async function sendPushToSubscriptions(pool, subscriptions, notification) {
             auth: subscription.auth_key,
           },
         },
-        payload
+        payload,
+        { timeout: 10000 }
       );
       sent += 1;
     } catch (error) {
       const statusCode = Number(error.statusCode || 0);
 
+      failed += 1;
       if (statusCode === 404 || statusCode === 410) {
-        await removeSubscriptionById(pool, subscription.id);
-        pruned += 1;
+        const removed = await pool.query(
+          "DELETE FROM push_subscriptions WHERE id = $1 AND user_id = $2 AND auth_key = $3",
+          [subscription.id, subscription.user_id, subscription.auth_key]
+        );
+        pruned += removed.rowCount;
         continue;
       }
 
-      failed += 1;
       console.error("Push delivery failed", {
         subscriptionId: subscription.id,
         statusCode,
-        message: error.message,
       });
     }
   }
@@ -241,14 +229,17 @@ async function sendPushToSubscriptions(pool, subscriptions, notification) {
   };
 }
 
-async function sendPushToUser(pool, { userId, notification }) {
-  const subscriptions = await getSubscriptionsByUser(pool, userId);
-  return sendPushToSubscriptions(pool, subscriptions, notification);
+async function sendPushToUser(pool, { userId, notification, endpoint = null }) {
+  const subscriptions = await getSubscriptionsByUser(pool, userId, endpoint);
+  return sendPushToSubscriptions(pool, subscriptions, {
+    ...notification,
+    data: { ...notification.data, userId },
+  });
 }
 
 module.exports = {
   buildNotificationPayload,
-  configureWebPush,
+  configureWebPush: hasPushConfiguration,
   getPublicVapidKey,
   getSubscriptionsByUser,
   hasPushConfiguration,
