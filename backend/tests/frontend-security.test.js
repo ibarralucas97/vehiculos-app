@@ -167,7 +167,7 @@ function worker() {
 
 test('H02: installation only caches existing allowlisted local static resources', async () => {
   const w = worker(); await w.dispatch('install');
-  const data = w.stores.get('rodado-control-v30');
+  const data = w.stores.get('rodado-control-v31');
   assert.ok(data.size > 30);
   for (const url of data.keys()) {
     const pathname = new URL(url).pathname;
@@ -178,7 +178,7 @@ test('H02: installation only caches existing allowlisted local static resources'
 
 test('H02: activity, unknown private routes, queries and non-GET never enter cache', async () => {
   const w = worker(); await w.dispatch('install');
-  const before = [...w.stores.get('rodado-control-v30').keys()];
+  const before = [...w.stores.get('rodado-control-v31').keys()];
   for (const request of [w.request('/activity'), w.request('/private-future-route'), w.request('/maintenance'),
     w.request('/images/private.png'), w.request('/app.js?user=1'),
     w.request('/app.js', { method: 'POST' }), w.request('/app.js', { headers: new Headers({ Authorization: 'Bearer test' }) }),
@@ -186,14 +186,14 @@ test('H02: activity, unknown private routes, queries and non-GET never enter cac
     await w.dispatch('fetch', { request });
     assert.equal(w.requests.at(-1).options.cache, 'no-store');
   }
-  assert.deepEqual([...w.stores.get('rodado-control-v30').keys()], before);
+  assert.deepEqual([...w.stores.get('rodado-control-v31').keys()], before);
 });
 
 test('H02: activation deletes v21 private data and all earlier cache versions', async () => {
   const w = worker(); w.stores.set('rodado-control-v21', new Map([['/activity', 'private']]));
   w.stores.set('rodado-control-v20', new Map());
   await w.dispatch('install'); await w.dispatch('activate');
-  assert.deepEqual([...w.stores.keys()], ['rodado-control-v30']);
+  assert.deepEqual([...w.stores.keys()], ['rodado-control-v31']);
 });
 
 test('H02: offline shell/static resources work; private endpoints never receive index.html', async () => {
@@ -204,7 +204,7 @@ test('H02: offline shell/static resources work; private endpoints never receive 
     assert.equal((await w.dispatch('fetch', { request })).status, 200);
   }
   for (const url of ['/activity', '/unknown-api', '/auth/me']) await assert.rejects(w.dispatch('fetch', { request: w.request(url) }), /offline/);
-  w.stores.get('rodado-control-v30').delete('https://test.local/');
+  w.stores.get('rodado-control-v31').delete('https://test.local/');
   assert.equal((await w.dispatch('fetch', { request: w.request('/', { mode: 'navigate' }) })).status, 200);
 });
 
@@ -212,7 +212,7 @@ test('H02: redirected, opaque, error and wrong MIME responses are not cached', a
   for (const options of [{ redirected: true }, { type: 'opaque' }, { status: 500 }, { headers: new Headers({ 'Content-Type': 'application/json' }) }]) {
     const w = worker(); w.c.fetch = async () => w.response('/app.js', options);
     await w.dispatch('fetch', { request: w.request('/app.js') });
-    assert.equal(w.stores.get('rodado-control-v30').size, 0);
+    assert.equal(w.stores.get('rodado-control-v31').size, 0);
     await assert.rejects(w.dispatch('install'), /Invalid shell response/);
   }
 });
@@ -233,7 +233,7 @@ test('H02: offline notification deep links use the public shell without caching 
   const w = worker(); await w.dispatch('install');
   w.c.fetch = async () => { throw new Error('offline'); };
   assert.equal((await w.dispatch('fetch', { request: w.request('/?vehicleId=2', { mode: 'navigate', destination: 'document' }) })).status, 200);
-  assert.ok([...w.stores.get('rodado-control-v30').keys()].every(url => !new URL(url).search));
+  assert.ok([...w.stores.get('rodado-control-v31').keys()].every(url => !new URL(url).search));
 });
 
 test('H01/H02: image lightbox uses the current record and cleanup removes its source', () => {
@@ -409,12 +409,12 @@ test('H02: late dashboard failure does not overwrite the next account overview',
 test('H02: external requests are not intercepted, fetched or cached by the worker', async () => {
   const w = worker(); await w.dispatch('install');
   const before = w.requests.length;
-  const keys = [...w.stores.get('rodado-control-v30').keys()];
+  const keys = [...w.stores.get('rodado-control-v31').keys()];
   for (const url of ['https://external.test/app.js', 'https://fonts.googleapis.com/css2?family=Manrope', 'https://cdn.jsdelivr.net/npm/bootstrap/file.js']) {
     assert.equal(await w.dispatch('fetch', { request: w.request(url) }), undefined);
   }
   assert.equal(w.requests.length, before);
-  assert.deepEqual([...w.stores.get('rodado-control-v30').keys()], keys);
+  assert.deepEqual([...w.stores.get('rodado-control-v31').keys()], keys);
 });
 
 test('H02: pending push subscription lookup cannot restore previous user controls', async () => {

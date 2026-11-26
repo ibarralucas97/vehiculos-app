@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
-const { chromium } = require('playwright');
+const { chromium, webkit, devices } = require('playwright');
 const root = path.resolve(__dirname, '../public');
 const origin = 'http://127.0.0.1:31234';
 const vehicles = [1, 2].map(id => ({ id, nombre: 'Auto ' + id, modelo: '2026', km_actual: 200 }));
@@ -17,9 +17,13 @@ const items = [6, 5, 4, 3, 2, 1].map(id => ({
 }));
 
 async function run() {
-  const browser = await chromium.launch();
+  const iphone = process.env.HISTORY_IPHONE === '1';
+  const browser = await (iphone ? webkit : chromium).launch();
   try {
-    const page = await browser.newPage({ viewport: { width: 360, height: 800 }, serviceWorkers: 'block' });
+    const page = await browser.newPage({
+      ...(iphone ? devices['iPhone 13'] : {}),
+      viewport: { width: 375, height: 800 }, serviceWorkers: 'block',
+    });
     const errors = [];
     const queries = [];
     page.on('pageerror', error => errors.push(error.message));
@@ -36,9 +40,19 @@ async function run() {
       const params = url.searchParams;
       let data = [];
       if (url.pathname === '/vehicles') data = vehicles;
+      if (url.pathname === '/places') data = [{ id: 1, nombre: 'Taller' }];
       if (url.pathname === '/auth/login') data = { user: { id: 1, username: 'tester', role: 'user' } };
       if (url.pathname === '/notifications') data = { notifications: [], pagination: {} };
-      if (url.pathname === '/maintenance') {
+      const method = route.request().method();
+      if (url.pathname === '/maintenance' && method === 'POST') {
+        data = { ...route.request().postDataJSON(), id: 7, lugar: 'Taller' };
+        items.unshift(data);
+      } else if (url.pathname === '/maintenance/7' && method === 'PUT') {
+        data = Object.assign(items[0], route.request().postDataJSON());
+      } else if (url.pathname === '/maintenance/7' && method === 'DELETE') {
+        items.shift();
+        data = { ok: true };
+      } else if (url.pathname === '/maintenance') {
         const recorded = new URLSearchParams(params);
         recorded.delete('_ts'); // Cache-buster added by fetchJson.
         queries.push(Object.fromEntries(recorded));
@@ -62,6 +76,26 @@ async function run() {
     const form = page.locator('#filters-form');
     const field = name => form.locator('[name="' + name + '"]');
     const view = page.locator('#history-view');
+    const copy = page.locator('#history-copy');
+    const close = page.locator('#history-section [data-secondary-view-close]');
+    async function checkHeader() {
+      const bounds = await page.locator('#history-section').evaluate(section => {
+        const rect = selector => section.querySelector(selector).getBoundingClientRect();
+        const header = rect('.secondary-view-header');
+        const copy = rect('#history-copy');
+        const close = rect('[data-secondary-view-close]');
+        const title = document.createRange();
+        title.selectNodeContents(section.querySelector('h2'));
+        return {
+          singleLine: title.getClientRects().length === 1,
+          usableCopy: copy.width >= header.width - close.width - 16 && copy.right <= close.left,
+          closeFits: close.width >= 44 && close.right <= header.right + 1,
+          statusWidth: rect('#status-pill').width,
+          noOverflow: [section, document.documentElement].every(el => el.scrollWidth <= el.clientWidth + 1),
+        };
+      });
+      assert.deepEqual(bounds, { singleLine: true, usableCopy: true, closeFits: true, statusWidth: 1, noOverflow: true });
+    }
     const apply = async () => {
       await Promise.all([page.waitForResponse(r => r.url().startsWith(origin + '/maintenance?')), page.click('#filters-submit')]);
       await page.waitForFunction(() => !document.querySelector('#export-excel-button').disabled);
@@ -101,13 +135,15 @@ async function run() {
     await pdf(() => page.click('#export-pdf-button'), items);
     await page.click('#history-show-all');
     assert.equal(await list.locator('.card').count(), items.length);
-    await view.selectOption('table');
-    for (const width of [360, 1200]) {
+    for (const width of [320, 375, 390, 1200]) {
       await page.setViewportSize({ width, height: 800 });
       for (const theme of ['light', 'dark']) {
         await page.evaluate(value => RodadoAppearance.apply(value), theme);
-        assert.ok(await list.locator('table').isVisible());
-        assert.equal(await page.locator('#history-section').evaluate(el => el.scrollWidth <= el.clientWidth + 1), true);
+        for (const mode of ['cards', 'table']) {
+          await view.selectOption(mode);
+          assert.ok(await list.locator(mode === 'cards' ? '.card' : 'table').first().isVisible());
+          await checkHeader();
+        }
       }
     }
     assert.equal(await list.locator('tbody tr').count(), 6);
@@ -143,6 +179,7 @@ async function run() {
     await field('maintenance_plan_id').selectOption('none');
     await apply();
     assert.equal(await list.locator('tbody tr').count(), 1);
+    assert.match(await copy.textContent(), /^1 registro con los filtros/);
     assert.match(await list.innerText(), /Sin plan/);
     await field('km_min').fill('999');
     await apply();
@@ -153,6 +190,46 @@ async function run() {
     await page.waitForFunction(() => document.querySelector('#status-pill').textContent === 'Sin resultados');
     assert.equal(await view.inputValue(), 'cards');
     assert.deepEqual(await field('maintenance_plan_id').locator('option').allTextContents(), ['Todos los planes']);
+    assert.equal(await copy.textContent(), '0 registros');
+    await page.setViewportSize({ width: 320, height: 750 });
+    await close.click();
+    await page.click('#hero-maintenance-button');
+    const maintenance = page.locator('#maintenance-form');
+    await maintenance.locator('[name=fecha]').fill('2026-01-08');
+    await maintenance.locator('[name=lugar_id]').selectOption('1');
+    await maintenance.locator('[name=accion]').fill('Cambio de aceite');
+    await maintenance.locator('[name=km]').fill('200');
+    await maintenance.locator('[name=cost]').fill('1000');
+    await page.click('#maintenance-submit');
+    const toast = page.locator('#toast-stack .toast');
+    await toast.filter({ hasText: 'Mantenimiento registrado correctamente' }).waitFor();
+    await list.getByRole('button', { name: 'Ver detalle' }).click();
+    await page.locator('#maintenance-detail-modal').getByRole('button', { name: 'Editar' }).click();
+    await maintenance.locator('[name=accion]').fill('Cambio de aceite y filtro');
+    await page.click('#maintenance-submit');
+    await toast.filter({ hasText: 'Mantenimiento actualizado correctamente' }).waitFor();
+    await list.getByText('Cambio de aceite y filtro', { exact: true }).waitFor();
+    assert.match(await copy.textContent(), /^1 registro\./);
+    await list.getByRole('button', { name: 'Ver detalle' }).click();
+    await page.locator('#maintenance-detail-modal').getByRole('button', { name: 'Eliminar' }).click();
+    await page.click('#ui-modal-confirm');
+    await toast.filter({ hasText: 'Mantenimiento eliminado correctamente' }).waitFor();
+    assert.equal(await toast.count(), 1);
+    assert.equal(await copy.textContent(), '0 registros');
+    await checkHeader();
+    assert.equal(await toast.evaluate(el => getComputedStyle(el).pointerEvents), 'none');
+    await close.click();
+    await page.click('#hero-history-button');
+    await list.getByText('Sin resultados', { exact: true }).waitFor();
+    await toast.waitFor({ state: 'detached', timeout: 3200 });
+    // Fail an export in the UI. An error outlives the normal success timeout and can be dismissed.
+    await page.evaluate(() => { window.writeXlsxFile = () => { throw new Error('No se pudo generar el archivo'); }; });
+    await page.click('#export-excel-button');
+    await toast.getByText('No se pudo generar el archivo').waitFor();
+    await page.waitForTimeout(3100);
+    assert.ok(await toast.isVisible());
+    await toast.getByRole('button').click();
+    await toast.waitFor({ state: 'detached' });
     // Hold workbook generation across an account change and wait for the actual export task.
     await page.evaluate(async () => {
       let release;

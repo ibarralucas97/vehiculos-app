@@ -370,7 +370,6 @@ let touchGestureState = {
 };
 let touchScrollResetTimer = null;
 let isTouchScrolling = false;
-let refreshFeedbackTimer = null;
 const TOUCH_SCROLL_THRESHOLD = 8;
 
 const tablerIcon = (paths) => `
@@ -1185,7 +1184,7 @@ function showToast(message, { tone = "info", duration = 2600 } = {}) {
   toastId += 1;
   const id = String(toastId);
   const toast = document.createElement("div");
-  toast.className = `toast toast-${tone}`;
+  toast.className = `toast show toast-${tone}`;
   toast.dataset.toastId = id;
   toast.innerHTML = `
     <div class="toast-copy">
@@ -1203,33 +1202,21 @@ function showToast(message, { tone = "info", duration = 2600 } = {}) {
     <button class="toast-close" type="button" aria-label="Cerrar notificacion">${buildIconMarkup("delete")}</button>
   `;
   toast.querySelector(".toast-close")?.addEventListener("click", () => dismissToast(id));
-  toastStack.prepend(toast);
-  window.setTimeout(() => dismissToast(id), duration);
+  toastStack.replaceChildren(toast);
+  const important = tone === "warning" || tone === "error";
+  window.setTimeout(() => dismissToast(id), important ? Math.max(6000, duration) : duration);
 }
 
 function showRefreshFeedback(message = "Actualizando datos...") {
   if (!refreshFeedback || !refreshFeedbackText) return;
-  if (refreshFeedbackTimer) {
-    window.clearTimeout(refreshFeedbackTimer);
-    refreshFeedbackTimer = null;
-  }
   refreshFeedbackText.textContent = message;
-  refreshFeedback.classList.remove("hidden", "is-success", "is-error");
+  refreshFeedback.classList.remove("hidden");
   refreshFeedback.classList.add("is-visible");
 }
 
-function hideRefreshFeedback({ tone = "", delay = 900 } = {}) {
-  if (!refreshFeedback) return;
-  refreshFeedback.classList.toggle("is-success", tone === "success");
-  refreshFeedback.classList.toggle("is-error", tone === "error");
-  if (refreshFeedbackTimer) {
-    window.clearTimeout(refreshFeedbackTimer);
-  }
-  refreshFeedbackTimer = window.setTimeout(() => {
-    refreshFeedback.classList.remove("is-visible", "is-success", "is-error");
-    refreshFeedback.classList.add("hidden");
-    refreshFeedbackTimer = null;
-  }, delay);
+function hideRefreshFeedback() {
+  refreshFeedback?.classList.remove("is-visible");
+  refreshFeedback?.classList.add("hidden");
 }
 
 function isModalOpen(id) {
@@ -1365,7 +1352,6 @@ async function refreshCurrentContext({ silent = false, maintenanceId = null } = 
   topbarTitleAction?.classList.add("is-refreshing");
   if (!silent) {
     showRefreshFeedback("Actualizando datos...");
-    showToast("Actualizando datos...", { tone: "info", duration: 1800 });
   }
 
   try {
@@ -1410,15 +1396,13 @@ async function refreshCurrentContext({ silent = false, maintenanceId = null } = 
     }
 
     if (!silent) {
-      showRefreshFeedback("Datos actualizados");
-      hideRefreshFeedback({ tone: "success", delay: 860 });
+      hideRefreshFeedback();
       showToast("Datos actualizados", { tone: "success" });
     }
   } catch (error) {
     if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return;
     console.error(error);
-    showRefreshFeedback("No se pudieron actualizar los datos");
-    hideRefreshFeedback({ tone: "error", delay: 1400 });
+    hideRefreshFeedback();
     showToast("No se pudieron actualizar los datos", { tone: "error", duration: 3400 });
   } finally {
     window.setTimeout(() => {
@@ -2920,7 +2904,6 @@ async function saveKmUpdateFromModal(vehicle) {
     await refreshAllData({ throwOnError: true });
     if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return true;
     syncSelectedVehicleContext();
-    setStatus("KM actualizado");
     showToast("Kilometraje actualizado correctamente", { tone: "success" });
     return true;
   } catch (error) {
@@ -2940,7 +2923,6 @@ async function saveKmUpdateFromModal(vehicle) {
 
 function showSavedSyncWarning(confirmation) {
   const message = `${confirmation}. No se pudieron actualizar todos los datos. Tocá el título superior para actualizar; no repitas el guardado.`;
-  setStatus(message);
   showToast(message, { tone: "warning", duration: 10000 });
 }
 
@@ -3003,7 +2985,7 @@ function setHistoryState(state, detail = "") {
     },
     empty: {
       pill: "Sin resultados",
-      copy: "No se encontraron registros",
+      copy: "0 registros",
       body: buildEmptyStateMarkup({
         icon: "history",
         title: "Sin resultados",
@@ -3697,11 +3679,12 @@ async function loadMaintenance({ highlightId = null } = {}) {
   if (!items.length) return;
 
   historyTitle.textContent = usingFilters ? "Historial filtrado" : "Historial";
+  const count = items.length === 1 ? "1 registro" : `${items.length} registros`;
+  const summary = visibleCount < items.length ? `Mostrando ${visibleCount} de ${count}` : count;
   historyCopy.textContent = highlighted
-    ? "Mantenimiento guardado mostrado primero. Se limpiaron los filtros para mostrarlo."
-    : usingFilters ? "Resultados según los filtros aplicados al vehículo seleccionado."
-    : `Mostrando ${visibleCount} de ${items.length} mantenimientos.`;
-  setStatus(`${items.length} registros`);
+    ? `${summary}. Se limpiaron los filtros para mostrar primero el mantenimiento guardado.`
+    : usingFilters ? `${summary} con los filtros aplicados.` : `${summary}.`;
+  setStatus(count);
 }
 
 function validateHistoryFilters(params) {
@@ -3919,8 +3902,8 @@ loginForm?.addEventListener("submit", async (event) => {
     } else {
       if(initialView==="admin"){setView("admin","loginSuccessAdmin");await loadAdminDashboard();}
       else{await loadVehiclesList();await loadVehiclesScreen();await loadNotificationsInbox().catch(() => {});setView("vehicles", "loginSuccess");}
+      showToast("Sesion iniciada correctamente.", { tone: "success" });
     }
-    showToast("Sesion iniciada correctamente.", { tone: "success" });
   } catch (error) {
     clearSession();
     updateSessionUI();
@@ -4125,7 +4108,6 @@ vehicleForm?.addEventListener("submit", async (e) => {
     await loadVehiclesScreen();
     resetVehicleFormState();
     closeModal("vehicles-modal");
-    setStatus(isEditing ? "Vehiculo actualizado" : "Vehiculo creado");
     showToast(isEditing ? "Vehiculo actualizado correctamente" : "Vehiculo creado correctamente", { tone: "success" });
   } catch (err) {
     console.error(err);
@@ -4173,7 +4155,6 @@ placeForm?.addEventListener("submit", async (e) => {
     await refreshAllData();
     resetPlaceFormState();
     setPlacesViewMode("list");
-    setStatus(isEditing ? "Lugar actualizado" : "Lugar creado");
     showToast(isEditing ? "Lugar actualizado correctamente" : "Lugar creado correctamente", { tone: "success" });
   } catch (err) {
     console.error(err);
@@ -4254,8 +4235,6 @@ maintenanceForm?.addEventListener("submit", async (event) => {
     filtersForm.reset();
     focusDashboardSection(historySection);
     renderMaintenance([savedMaintenance]);
-    historyCopy.textContent = "Registro guardado. Se limpiaron los filtros para mostrarlo.";
-    setStatus(confirmation);
     showToast(confirmation, { tone: "success" });
     await loadMaintenance({ highlightId: savedMaintenance.id });
     if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return;
@@ -4313,7 +4292,7 @@ historyShowAll.addEventListener("click", () => {
   if (!historyResult) return;
   historyResult.visibleCount = historyResult.items.length;
   renderMaintenance(historyResult.items);
-  historyCopy.textContent = `Mostrando los ${historyResult.items.length} mantenimientos.`;
+  historyCopy.textContent = `${historyResult.items.length} registros.`;
   updateHistoryControls();
 });
 
@@ -4347,7 +4326,6 @@ async function deleteMaintenance(id) {
     closeMaintenanceDetail();
     closeMaintenanceImageLightbox();
     await refreshMaintenanceViewsAfterMutation();
-    setStatus("Mantenimiento eliminado");
     showToast("Mantenimiento eliminado correctamente", { tone: "success" });
   } catch (error) {
     if (typeof openUiModal === "function") {
@@ -4424,7 +4402,6 @@ async function exportMaintenanceToCsv({ vehicleId = selectedVehicleId } = {}) {
   link.click();
   link.remove();
   URL.revokeObjectURL(link.href);
-  setStatus("CSV exportado");
   return true;
 }
 
@@ -4502,7 +4479,6 @@ async function openVehicleDeleteModal(id) {
   closeMenu();
 
   if (typeof openUiModal !== "function") {
-    setStatus("No se pudo abrir la confirmación de eliminación.");
     showToast("No se pudo abrir la confirmación de eliminación", { tone: "error" });
     return;
   }
@@ -5031,8 +5007,8 @@ profileForm?.addEventListener("submit", async (event) => {
 
     const nextSession = syncSession(response.user);
     fillProfileForm(nextSession);
-    profileMessage.textContent = "Perfil actualizado correctamente.";
-    setStatus("Perfil actualizado");
+    profileMessage.textContent = "";
+    showToast("Perfil actualizado correctamente.", { tone: "success" });
   } catch (error) {
     profileMessage.textContent = error.message;
   } finally {
@@ -5111,7 +5087,6 @@ preferencesForm?.addEventListener("submit", async (event) => {
     await refreshNotificationControls();
     renderReminderSettingsSummary(response.user, notificationsServerStatus);
     preferencesMessage.textContent = "Preferencias actualizadas.";
-    setStatus("Preferencias guardadas");
     showToast("Preferencias actualizadas", { tone: "success" });
   } catch (error) {
     preferencesMessage.textContent = error.message;
@@ -5186,7 +5161,6 @@ vehicleRemindersForm?.addEventListener("submit", async (event) => {
     if (vehicleRemindersMessage) {
       vehicleRemindersMessage.textContent = "Recordatorios actualizados.";
     }
-    setStatus("Recordatorios guardados");
     showToast("Recordatorios del vehiculo actualizados", { tone: "success" });
   } catch (error) {
     if (vehicleRemindersMessage) {
@@ -5235,7 +5209,6 @@ passwordForm?.addEventListener("submit", async (event) => {
     }
     passwordForm.reset();
     passwordMessage.textContent = "Clave actualizada correctamente.";
-    setStatus("Clave actualizada");
     showToast("Clave actualizada", { tone: "success" });
   } catch (error) {
     passwordMessage.textContent = error.message;
@@ -5372,7 +5345,7 @@ async function exportMaintenanceToPdf({
     });
 
     doc.save(`${sanitizeFileName(vehicle.nombre)}-historial.pdf`);
-    setStatus("PDF exportado");
+    if (historyItems) showToast("PDF exportado", { tone: "success" });
     return true;
   } catch (error) {
     if (showModalErrors) {
@@ -5422,7 +5395,7 @@ async function exportHistory(button) {
     link.click();
     link.remove();
     setTimeout(() => URL.revokeObjectURL(link.href), 1000);
-    setStatus("Excel exportado");
+    showToast("Excel exportado", { tone: "success" });
   } catch (error) {
     if (isCurrentHistoryResult(result)) showToast(error.message || "No se pudo exportar el historial.", { tone: "error" });
   } finally {
