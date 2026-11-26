@@ -764,11 +764,6 @@ button.is-loading {
     right: -2px;
   }
 
-  .history-header-meta {
-    width: 100%;
-    justify-content: space-between;
-  }
-
   .splash-logo {
     width: min(86vw, 360px);
     height: min(70vh, 640px);
@@ -1153,11 +1148,6 @@ html.menu-open { overflow: hidden; }
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: start;
   gap: 12px;
-}
-#dashboard.vehicle-detail-page .dashboard-grid .history-header-meta {
-  display: flex;
-  align-items: center;
-  gap: 10px;
 }
 #dashboard.vehicle-detail-page .dashboard-grid .secondary-view-close {
   position: static;
@@ -1739,14 +1729,10 @@ body.modal-open {
 }
 
 .history-header-copy {
+  min-width: 0;
+  overflow-wrap: anywhere;
   display: grid;
   gap: 4px;
-}
-
-.history-header-meta {
-  display: flex;
-  align-items: center;
-  gap: 10px;
 }
 
 .history-actions,
@@ -2104,12 +2090,6 @@ body.modal-open {
 .place-detail-grid {
   display: grid;
   gap: 8px;
-}
-
-.history-header-meta {
-  display: flex;
-  align-items: center;
-  gap: 10px;
 }
 
 .profile-layout,
@@ -3242,10 +3222,6 @@ input::placeholder {
   gap: 4px;
 }
 
-.history-header-meta {
-  flex-wrap: wrap;
-}
-
 body[data-theme="dark"] .login-brand-logo {
   filter: none;
   opacity: 1;
@@ -3375,29 +3351,6 @@ body[data-theme="dark"] .vehicle-card-color-dot {
   animation: refreshSpin 0.7s linear infinite;
 }
 
-.refresh-feedback.is-success .refresh-feedback-spinner,
-.refresh-feedback.is-error .refresh-feedback-spinner {
-  animation: none;
-  border-color: transparent;
-  position: relative;
-}
-
-.refresh-feedback.is-success .refresh-feedback-spinner::before,
-.refresh-feedback.is-error .refresh-feedback-spinner::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: 999px;
-}
-
-.refresh-feedback.is-success .refresh-feedback-spinner::before {
-  background: linear-gradient(180deg, #2f9f6b, #237d56);
-}
-
-.refresh-feedback.is-error .refresh-feedback-spinner::before {
-  background: linear-gradient(180deg, #d85a56, #b53f3a);
-}
-
 @keyframes refreshSpin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
@@ -3411,7 +3364,7 @@ body[data-theme="dark"] .vehicle-card-color-dot {
 
 .toast-stack {
   position: fixed;
-  top: max(14px, env(safe-area-inset-top, 0px) + 10px);
+  bottom: max(14px, calc(env(safe-area-inset-bottom, 0px) + 10px));
   right: 14px;
   left: 14px;
   z-index: 16000;
@@ -3421,6 +3374,8 @@ body[data-theme="dark"] .vehicle-card-color-dot {
 }
 
 .toast {
+  justify-self: center;
+  max-width: 100%;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -3431,7 +3386,7 @@ body[data-theme="dark"] .vehicle-card-color-dot {
   background: rgba(252, 251, 248, 0.96);
   box-shadow: 0 16px 28px rgba(31, 42, 61, 0.12);
   backdrop-filter: blur(12px);
-  pointer-events: auto;
+  pointer-events: none;
   animation: toastIn 0.22s ease;
 }
 
@@ -3440,6 +3395,8 @@ body[data-theme="dark"] .vehicle-card-color-dot {
 }
 
 .toast-copy {
+  min-width: 0;
+  overflow-wrap: anywhere;
   display: grid;
   gap: 3px;
 }
@@ -3455,6 +3412,7 @@ body[data-theme="dark"] .vehicle-card-color-dot {
 }
 
 .toast-close {
+  pointer-events: auto;
   width: 34px;
   min-width: 34px;
   min-height: 34px;
