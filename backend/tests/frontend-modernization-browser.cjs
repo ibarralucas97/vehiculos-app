@@ -63,6 +63,12 @@ const server = http.createServer(async (req,res) => {
     await page.goto(base); await page.waitForFunction(()=>!document.body.classList.contains('splash-active'));
     async function check(name,width,theme) {
       await page.waitForTimeout(80);
+      if (['login','vehicles','dashboard','admin'].includes(name)) {
+        const visible = name === 'login' || name === 'vehicles';
+        for (const selector of ['.app-footer','.app-footer-title','.app-footer-copy','.app-footer-meta']) {
+          assert.equal(await page.locator(selector).isVisible(), visible, name + ' ' + selector);
+        }
+      }
       const overflow=await page.evaluate(()=> {
         const nodes=[document.documentElement,...document.querySelectorAll('.modal:not(.hidden) .modal-content,.dashboard-section.open')];
         return nodes.filter(node=>node.scrollWidth>node.clientWidth+2).map(node=>({id:node.id,cls:node.className,width:node.clientWidth,scroll:node.scrollWidth}));
@@ -206,8 +212,8 @@ const server = http.createServer(async (req,res) => {
     await page.waitForSelector('#welcome-screen:not(.hidden)');
     await page.evaluate(()=>navigator.serviceWorker.ready);
     await page.waitForFunction(()=>navigator.serviceWorker.controller);
-    const cached = await page.evaluate(async()=>{const cache=await caches.open('rodado-control-v31');return (await cache.keys()).map(request=>new URL(request.url).pathname);});
-    for(const resource of ['/appearance.js','/frontend-ui.js','/modernization.css']) assert.ok(cached.includes(resource));
+    const cached = await page.evaluate(async()=>{const cache=await caches.open('rodado-control-v32');return (await cache.keys()).map(request=>new URL(request.url).pathname);});
+    for(const resource of ['/appearance.js','/frontend-ui.js','/modernization.css','/assets/icons/map.png','/assets/icons/whatsapp.png']) assert.ok(cached.includes(resource));
     assert.ok(!cached.some(resource=>/^\/(vehicles|maintenance|users|notifications|auth)/.test(resource)));
     await context.setOffline(true); await page.reload();
     await page.waitForSelector('#welcome-screen:not(.hidden)');

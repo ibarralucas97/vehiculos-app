@@ -408,23 +408,6 @@ viewVehicle = function patchedViewVehicle(id) {
   });
 };
 
-viewPlace = function patchedViewPlace(id) {
-  const place = currentPlaces.find((item) => item.id === id);
-  if (!place || typeof openUiModal !== "function") return;
-
-  openUiModal({
-    title: "Detalle del lugar",
-    bodyHtml: `
-      <div class="place-detail-grid">
-        <div><strong>Nombre:</strong> ${escapeHtml(place.nombre)}</div>
-        <div><strong>Ubicacion:</strong> ${escapeHtml(place.ubicacion || "Sin dato")}</div>
-        <div><strong>Contacto:</strong> ${escapeHtml(place.contacto_nombre || "Sin dato")}</div>
-        <div><strong>Telefono:</strong> ${escapeHtml(place.contacto_numero || "Sin dato")}</div>
-      </div>
-    `,
-  });
-};
-
 editVehicle = function patchedEditVehicle(id) {
   const vehicle = currentVehicles.find((item) => item.id === id);
   if (!vehicle) return;
