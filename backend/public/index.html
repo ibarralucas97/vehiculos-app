@@ -370,8 +370,11 @@
                   </select>
                 </label>
                 <div class="history-exports">
-                  <button id="export-pdf-button" class="ghost" type="button" disabled>Exportar PDF</button>
-                  <button id="export-excel-button" class="ghost" type="button" disabled>Exportar Excel</button>
+                  <button id="history-export-toggle" class="ghost" type="button" aria-controls="history-export-options" aria-expanded="false" disabled>Exportar <span aria-hidden="true">▾</span></button>
+                  <div id="history-export-options" hidden>
+                    <button id="export-pdf-button" class="ghost" type="button" disabled>Exportar PDF</button>
+                    <button id="export-excel-button" class="ghost" type="button" disabled>Exportar Excel</button>
+                  </div>
                 </div>
               </div>
               <div id="maintenance-list" class="cards">
@@ -547,7 +550,11 @@
           <input name="nombre" placeholder="Nombre" required />
           <input name="ubicacion" placeholder="Ubicacion" />
           <input name="contacto_nombre" placeholder="Contacto" />
-          <input type="tel" name="contacto_numero" placeholder="Teléfono" aria-label="Teléfono de contacto" />
+          <div class="place-phone-field">
+            <label for="place-phone">Celular (WhatsApp)</label>
+            <input id="place-phone" type="tel" name="contacto_numero" autocomplete="tel" inputmode="tel" placeholder="+54 9 351 1234567" aria-describedby="place-phone-help" />
+            <p id="place-phone-help" class="inline-help">Ingresá el número con código de país y área, sin 0 ni 15.</p>
+          </div>
           <div class="places-form-actions">
             <button id="place-cancel-button" class="ghost" type="button" onclick="showPlacesListView()">Cancelar</button>
             <button id="place-save-button" type="submit">Crear</button>

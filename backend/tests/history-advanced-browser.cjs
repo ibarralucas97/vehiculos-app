@@ -40,7 +40,7 @@ async function run() {
       const params = url.searchParams;
       let data = [];
       if (url.pathname === '/vehicles') data = vehicles;
-      if (url.pathname === '/places') data = [{ id: 1, nombre: 'Taller' }];
+      if (url.pathname === '/places') data = [{ id: 1, nombre: 'Taller', contacto_numero: '0351 15-1234567' }];
       if (url.pathname === '/auth/login') data = { user: { id: 1, username: 'tester', role: 'user' } };
       if (url.pathname === '/notifications') data = { notifications: [], pagination: {} };
       const method = route.request().method();
@@ -67,10 +67,51 @@ async function run() {
       return route.fulfill({ json: data });
     });
     await page.goto(origin);
+    const toggle = page.locator('#history-export-toggle');
+    const options = page.locator('#history-export-options');
+    const pdfButton = page.locator('#export-pdf-button');
+    const excelButton = page.locator('#export-excel-button');
+    async function checkMenu(open) {
+      assert.equal(await toggle.getAttribute('aria-expanded'), String(open));
+      assert.equal(await options.isVisible(), open);
+    }
+    async function chooseExport(button) {
+      await toggle.click();
+      await button.click();
+      await checkMenu(false);
+    }
+    assert.ok(await toggle.isDisabled());
+    assert.ok(await pdfButton.isDisabled());
+    assert.ok(await excelButton.isDisabled());
     await page.locator('#login-form [name=username]').fill('tester');
     await page.locator('#login-form [name=password]').fill('123456');
     await page.locator('#login-form button[type=submit]').click();
     await page.locator('.vehicle-card-main').first().click();
+    const widths = [320, 375, 390, 1280];
+    await page.evaluate(() => openPlacesModal());
+    for (const editing of [false, true]) {
+      await page.locator(editing ? '#places-list [aria-label="Editar lugar"]' : '#place-create-button').click();
+      const phone = page.getByRole('textbox', { name: 'Celular (WhatsApp)', exact: true });
+      const help = page.locator('#place-phone-help');
+      assert.equal(await phone.inputValue(), editing ? '0351 15-1234567' : '');
+      assert.equal(await phone.getAttribute('placeholder'), '+54 9 351 1234567');
+      assert.equal(await phone.getAttribute('aria-describedby'), await help.getAttribute('id'));
+      assert.equal(await help.innerText(), 'Ingresá el número con código de país y área, sin 0 ni 15.');
+      assert.ok(await phone.evaluate(input => input.checkValidity() && !input.required));
+      for (const width of widths) {
+        await page.setViewportSize({ width, height: 800 });
+        for (const theme of ['light', 'dark']) {
+          await page.evaluate(value => RodadoAppearance.apply(value), theme);
+          for (const element of [page.locator('label[for=place-phone]'), phone, help]) {
+            const box = await element.boundingBox();
+            assert.ok(box && box.height > 0 && box.x >= 0 && box.x + box.width <= width);
+          }
+        }
+      }
+      await page.click('#place-cancel-button');
+    }
+    await page.keyboard.press('Escape');
+    await page.setViewportSize({ width: 375, height: 800 });
     await page.locator('#hero-history-button').click();
     const list = page.locator('#maintenance-list');
     const form = page.locator('#filters-form');
@@ -106,7 +147,7 @@ async function run() {
       return file.path();
     };
     async function spreadsheet(expected) {
-      const file = await download(() => page.click('#export-excel-button'), '.xlsx');
+      const file = await download(() => chooseExport(excelButton), '.xlsx');
       const unzip = (...args) => execFileSync('unzip', args, { encoding: 'utf8' });
       assert.doesNotMatch(unzip('-Z1', file), /xl\/media/);
       const xml = unzip('-p', file, 'xl/worksheets/sheet1.xml');
@@ -131,11 +172,29 @@ async function run() {
     await list.locator('.card').first().waitFor();
     assert.equal(await view.inputValue(), 'cards');
     assert.equal(await list.locator('.card').count(), 3);
+    assert.equal(await page.getByRole('button', { name: 'Exportar', exact: true }).count(), 1);
+    assert.equal(await toggle.getAttribute('aria-controls'), await options.getAttribute('id'));
+    await toggle.focus();
+    await page.keyboard.press('Enter');
+    await checkMenu(true);
+    await page.keyboard.press('Tab');
+    assert.ok(await pdfButton.evaluate(el => el === document.activeElement && el.matches(':focus-visible')));
+    await page.keyboard.press('Tab');
+    assert.ok(await excelButton.evaluate(el => el === document.activeElement));
+    await page.keyboard.press('Escape');
+    await checkMenu(false);
+    assert.ok(await toggle.evaluate(el => el === document.activeElement));
+    await toggle.click();
+    await toggle.click();
+    await checkMenu(false);
+    await toggle.click();
+    await page.locator('#history-title').click();
+    await checkMenu(false);
     await spreadsheet(items);
-    await pdf(() => page.click('#export-pdf-button'), items);
+    await pdf(() => chooseExport(pdfButton), items);
     await page.click('#history-show-all');
     assert.equal(await list.locator('.card').count(), items.length);
-    for (const width of [320, 375, 390, 1200]) {
+    for (const width of widths) {
       await page.setViewportSize({ width, height: 800 });
       for (const theme of ['light', 'dark']) {
         await page.evaluate(value => RodadoAppearance.apply(value), theme);
@@ -144,6 +203,13 @@ async function run() {
           assert.ok(await list.locator(mode === 'cards' ? '.card' : 'table').first().isVisible());
           await checkHeader();
         }
+        await toggle.click();
+        await checkMenu(true);
+        const panel = await options.boundingBox();
+        const toolbar = await page.locator('.history-toolbar').boundingBox();
+        assert.ok(panel.x >= toolbar.x - 1 && panel.x + panel.width <= toolbar.x + toolbar.width + 1);
+        await checkHeader();
+        await toggle.click();
       }
     }
     assert.equal(await list.locator('tbody tr').count(), 6);
@@ -162,7 +228,7 @@ async function run() {
     assert.deepEqual(await list.locator('tbody tr td:nth-child(2)').allTextContents(), matching.map(row => row.accion));
     await field('search').fill('Borrador'); // Only the applied filters affect downloads.
     await spreadsheet(matching);
-    await pdf(() => page.click('#export-pdf-button'), matching);
+    await pdf(() => chooseExport(pdfButton), matching);
     const backup = () => page.evaluate(() => exportVehicleMaintenanceBeforeDelete(1));
     await pdf(backup, [...items].reverse());
     await page.evaluate(() => { window.jspdf = undefined; });
@@ -173,6 +239,10 @@ async function run() {
     const requests = queries.length;
     await page.click('#filters-submit');
     assert.match(await page.locator('#history-copy').textContent(), /Km desde/);
+    assert.ok(await toggle.isDisabled());
+    assert.ok(await pdfButton.isDisabled());
+    assert.ok(await excelButton.isDisabled());
+    await checkMenu(false);
     assert.equal(queries.length, requests);
     await page.click('#filters-reset-button');
     await list.locator('tr').first().waitFor();
@@ -224,35 +294,51 @@ async function run() {
     await toast.waitFor({ state: 'detached', timeout: 3200 });
     // Fail an export in the UI. An error outlives the normal success timeout and can be dismissed.
     await page.evaluate(() => { window.writeXlsxFile = () => { throw new Error('No se pudo generar el archivo'); }; });
-    await page.click('#export-excel-button');
+    await chooseExport(excelButton);
     await toast.getByText('No se pudo generar el archivo').waitFor();
     await page.waitForTimeout(3100);
     assert.ok(await toast.isVisible());
     await toast.getByRole('button').click();
     await toast.waitFor({ state: 'detached' });
-    // Hold workbook generation across an account change and wait for the actual export task.
-    await page.evaluate(async () => {
-      let release;
-      let started;
-      const writing = new Promise(resolve => { started = resolve; });
-      window.writeXlsxFile = () => ({
-        toBlob() {
-          started();
-          return new Promise(resolve => { release = resolve; });
-        },
+    for (const transition of ['vehicle', 'account']) {
+      await page.evaluate(() => {
+        window.releaseWorkbook = null;
+        window.writeXlsxFile = () => ({
+          toBlob: () => new Promise(resolve => { window.releaseWorkbook = resolve; }),
+        });
+        window.pendingExport = exportHistory(exportExcelButton);
       });
-      const exporting = exportHistory(exportExcelButton);
-      await writing;
-      saveSession({ id: 2, username: 'second', role: 'user' });
-      const createUrl = URL.createObjectURL;
-      try {
-        window.staleDownload = false;
-        URL.createObjectURL = () => { window.staleDownload = true; return 'blob:obsolete'; };
-        release(new Blob());
-        await exporting;
-      } finally { URL.createObjectURL = createUrl; }
-    });
-    assert.equal(await page.evaluate(() => window.staleDownload), false);
+      await page.waitForFunction(() => !!window.releaseWorkbook);
+      assert.ok(await toggle.isDisabled());
+      assert.ok(await excelButton.isDisabled());
+      assert.ok(await pdfButton.isDisabled());
+      const attempts = await page.evaluate(async change => {
+        const generatePdf = exportMaintenanceToPdf;
+        const createUrl = URL.createObjectURL;
+        let duplicates = 0;
+        let downloads = 0;
+        try {
+          exportMaintenanceToPdf = () => { duplicates++; };
+          window.writeXlsxFile = () => { duplicates++; throw new Error('Exportación duplicada'); };
+          URL.createObjectURL = () => { downloads++; return 'blob:obsolete'; };
+          await exportHistory(exportPdfButton);
+          await exportHistory(exportExcelButton);
+          if (change === 'vehicle') selectVehicle(1);
+          else saveSession({ id: 2, username: 'second', role: 'user' });
+          window.releaseWorkbook(new Blob());
+          await window.pendingExport;
+          return { duplicates, downloads };
+        } finally {
+          exportMaintenanceToPdf = generatePdf;
+          URL.createObjectURL = createUrl;
+        }
+      }, transition);
+      assert.deepEqual(attempts, { duplicates: 0, downloads: 0 });
+      if (transition === 'vehicle') {
+        await page.click('#hero-history-button');
+        await list.locator('.card').first().waitFor();
+      }
+    }
     await page.evaluate(() => logout());
     assert.equal(await page.locator('#export-excel-button').isDisabled(), true);
     assert.deepEqual(errors, []);

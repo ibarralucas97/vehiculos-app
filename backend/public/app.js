@@ -137,6 +137,8 @@ const maintenanceList = document.getElementById("maintenance-list");
 const statusPill = document.getElementById("status-pill");
 const historyView = document.getElementById("history-view");
 const historyShowAll = document.getElementById("history-show-all");
+const historyExportToggle = document.getElementById("history-export-toggle");
+const historyExportOptions = document.getElementById("history-export-options");
 const exportExcelButton = document.getElementById("export-excel-button");
 let historyResult = null;
 let historyRequest = 0;
@@ -2887,9 +2889,19 @@ function showSavedSyncWarning(confirmation) {
   showToast(message, { tone: "warning", duration: 10000 });
 }
 
+function setHistoryExportOpen(open, restoreFocus = false) {
+  historyExportOptions.hidden = !open;
+  historyExportToggle.setAttribute("aria-expanded", String(open));
+  if (restoreFocus) historyExportToggle.focus();
+}
+
 function updateHistoryControls() {
-  exportPdfButton.disabled = !historyResult || historyExportButtonsBusy.has(exportPdfButton);
-  exportExcelButton.disabled = !historyResult || historyExportButtonsBusy.has(exportExcelButton);
+  historyExportToggle.disabled = !isCurrentHistoryResult(historyResult);
+  if (historyExportToggle.disabled) setHistoryExportOpen(false);
+  const disabled = historyExportToggle.disabled || historyExportButtonsBusy.size > 0;
+  historyExportToggle.setAttribute("aria-disabled", String(disabled));
+  exportPdfButton.disabled = disabled;
+  exportExcelButton.disabled = disabled;
   historyShowAll.classList.toggle("hidden", !historyResult || historyResult.visibleCount >= historyResult.items.length);
 }
 
@@ -4706,7 +4718,7 @@ function viewPlace(id) {
           <div><strong>Nombre:</strong> ${escapeHtml(place.nombre)}</div>
           <div><strong>Ubicacion:</strong> ${escapeHtml(place.ubicacion || "Sin dato")}</div>
           <div><strong>Contacto:</strong> ${escapeHtml(place.contacto_nombre || "Sin dato")}</div>
-          <div><strong>Teléfono:</strong> ${escapeHtml(place.contacto_numero || "Sin dato")}</div>
+          <div><strong>Celular (WhatsApp):</strong> ${escapeHtml(place.contacto_numero || "Sin dato")}</div>
         </div>
         ${placeContactActions(place)}
       `,
@@ -4806,6 +4818,7 @@ async function refreshAllData() {
 }
 
 document.addEventListener("click", (e) => {
+  if (!historyExportOptions.hidden && !e.target.closest(".history-exports")) setHistoryExportOpen(false);
   const secondaryViewClose = e.target.closest("[data-secondary-view-close]");
   if (secondaryViewClose) {
     e.preventDefault();
@@ -5389,7 +5402,8 @@ function isCurrentHistoryResult(result) {
 
 async function exportHistory(button) {
   const result = historyResult;
-  if (!isCurrentHistoryResult(result) || historyExportButtonsBusy.has(button)) return;
+  if (!isCurrentHistoryResult(result) || historyExportButtonsBusy.size > 0) return;
+  if (!historyExportOptions.hidden) setHistoryExportOpen(false, true);
   historyExportButtonsBusy.add(button);
   updateHistoryControls();
   try {
@@ -5427,6 +5441,12 @@ async function exportHistory(button) {
   }
 }
 
+historyExportToggle.addEventListener("click", () => {
+  if (!historyExportButtonsBusy.size) setHistoryExportOpen(historyExportOptions.hidden);
+});
+historyExportToggle.parentElement.addEventListener("focusout", (event) => {
+  if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) setHistoryExportOpen(false);
+});
 exportPdfButton.addEventListener("click", () => exportHistory(exportPdfButton));
 exportExcelButton.addEventListener("click", () => exportHistory(exportExcelButton));
 topbarTitleAction?.addEventListener("click", () => {

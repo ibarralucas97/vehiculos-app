@@ -1,4 +1,4 @@
-const CACHE_NAME = "rodado-control-v32";
+const CACHE_NAME = "rodado-control-v33";
 const APP_SHELL = [
   "/",
   "/index.html",

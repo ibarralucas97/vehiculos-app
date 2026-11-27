@@ -104,7 +104,8 @@
     }
     if (event.key === 'Escape') {
       event.preventDefault(); event.stopImmediatePropagation();
-      if (dialog.id === 'ui-modal') closeUiModal(false);
+      if (dialog === historySection && !historyExportOptions.hidden) setHistoryExportOpen(false, true);
+      else if (dialog.id === 'ui-modal') closeUiModal(false);
       else if (dialog.id === 'maintenance-detail-modal') closeMaintenanceDetail();
       else if (dialog.id === 'maintenance-image-lightbox') closeMaintenanceImageLightbox();
       else if (dialog.classList.contains('dashboard-section')) closeDashboardSections();
