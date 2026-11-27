@@ -6,6 +6,7 @@ let vehicleModalMode = "create";
 let editingVehicleReminderId = null;
 let editingPlaceId = null;
 let editingMaintenanceId = null;
+let maintenanceSaveGeneration = null;
 let reopenHistoryAfterMaintenanceDetail = false;
 let maintenanceDetailTrigger = null;
 const SESSION_KEY = "mygarage_session";
@@ -134,6 +135,14 @@ const showLoginButton = document.getElementById("show-login-button");
 
 const maintenanceList = document.getElementById("maintenance-list");
 const statusPill = document.getElementById("status-pill");
+const historyView = document.getElementById("history-view");
+const historyShowAll = document.getElementById("history-show-all");
+const historyExportToggle = document.getElementById("history-export-toggle");
+const historyExportOptions = document.getElementById("history-export-options");
+const exportExcelButton = document.getElementById("export-excel-button");
+let historyResult = null;
+let historyRequest = 0;
+const historyExportButtonsBusy = new Set();
 const historyTitle = document.getElementById("history-title");
 const historyCopy = document.getElementById("history-copy");
 const maintenanceForm = document.getElementById("maintenance-form");
@@ -181,7 +190,6 @@ const menuCurrentVehicleGroup = document.getElementById("menu-current-vehicle-gr
 const menuCurrentVehicleName = document.getElementById("menu-current-vehicle-name");
 const menuCurrentDashboardButton = document.getElementById("menu-current-dashboard");
 const menuCurrentMaintenanceButton = document.getElementById("menu-current-maintenance");
-const menuCurrentPlacesButton = document.getElementById("menu-current-places");
 const menuCurrentRemindersButton = document.getElementById("menu-current-reminders");
 const menuCurrentActivityButton = document.getElementById("menu-current-activity");
 const menuCurrentEditButton = document.getElementById("menu-current-edit");
@@ -260,8 +268,6 @@ const toastStack = document.getElementById("toast-stack");
 
 const DARK_THEME_COLOR = "#020B24";
 const PWA_INSTALL_DISMISS_KEY = "mygarage_pwa_install_dismissed";
-const LOGIN_LOGO_DARK_SRC = "/splash-logo-transparent.png";
-const loginBrandLogo = document.getElementById("login-brand-logo");
 const footerYear = document.getElementById("footer-year");
 const maintenanceDetailModal = document.getElementById("maintenance-detail-modal");
 const maintenanceDetailTitle = document.getElementById("maintenance-detail-title");
@@ -323,7 +329,8 @@ const vehiclePhotoPreviewFallback = document.getElementById("vehicle-photo-previ
 const vehiclePhotoMessage = document.getElementById("vehicle-photo-message");
 const themeColorMeta = document.querySelector('meta[name="theme-color"]');
 
-let maintenanceImageRefs = getMaintenanceImageRefs();
+let sessionGeneration = 0;
+removeLegacyMaintenanceImages();
 let currentMaintenanceRecords = new Map();
 let notificationsServerStatus = null;
 let notificationStateLoading = false;
@@ -365,7 +372,6 @@ let touchGestureState = {
 };
 let touchScrollResetTimer = null;
 let isTouchScrolling = false;
-let refreshFeedbackTimer = null;
 const TOUCH_SCROLL_THRESHOLD = 8;
 
 const tablerIcon = (paths) => `
@@ -374,6 +380,7 @@ const tablerIcon = (paths) => `
 
 // Tabler Icons v3.44.0 Outline. Original local SVG assets live in assets/icons/tabler/.
 const ICONS = {
+  photo: tablerIcon('<rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="9" cy="9" r="1.5" /><path d="m4 17 5-5 4 4 3-3 5 5" />'),
   themeDark: tablerIcon('<path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454l0 .008" />'),
   themeLight: tablerIcon('<path d="M8 12a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" /><path d="M3 12h1m8 -9v1m8 8h1m-9 8v1m-6.4 -15.4l.7 .7m12.1 -.7l-.7 .7m0 11.4l.7 .7m-12.1 -.7l-.7 .7" />'),
   view: tablerIcon('<path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" /><path d="M21 12c-2.4 4 -5.4 6 -9 6c-3.6 0 -6.6 -2 -9 -6c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6" />'),
@@ -458,6 +465,9 @@ function getSession() {
 }
 
 function saveSession(user) {
+  if (String(getSession()?.id || "") !== String(user.id || "")) {
+    clearPrivateMaintenanceState();
+  }
   const normalizedUser = normalizeSessionUser(user);
   localStorage.setItem(
     SESSION_KEY,
@@ -469,25 +479,77 @@ function saveSession(user) {
 }
 
 function clearSession() {
+  clearPrivateMaintenanceState();
   localStorage.removeItem(SESSION_KEY);
-  currentNotifications = [];
-  setTopbarUnreadBadge(0);
 }
 
-function getMaintenanceImageRefs() {
+function removeLegacyMaintenanceImages() {
   try {
-    return JSON.parse(localStorage.getItem(MAINTENANCE_IMAGES_KEY) || "{}");
+    localStorage.removeItem(MAINTENANCE_IMAGES_KEY);
   } catch (_error) {
-    return {};
+    // Storage may be unavailable; never read or reuse the legacy value.
   }
 }
 
-function saveMaintenanceImageRefs() {
-  localStorage.setItem(MAINTENANCE_IMAGES_KEY, JSON.stringify(maintenanceImageRefs));
+function clearPrivateMaintenanceState() {
+  sessionGeneration += 1;
+  removeLegacyMaintenanceImages();
+  resetHistoryContext();
+  document.getElementById("detail-photo")?.replaceChildren();
+  if (typeof clearFrontendSettingsContext === "function") clearFrontendSettingsContext();
+  clearPrivatePhotoState();
+  currentNotifications = [];
+  notificationsState = {
+    filter: "all", expanded: false, limit: 10, offset: 0,
+    hasMore: false, loading: false, unreadCount: 0,
+  };
+  notificationsServerStatus = null;
+  notificationsLastSyncAt = null;
+  notificationStateLoading = false;
+  setTopbarUnreadBadge(0);
+  renderNotificationsInbox();
+  if (typeof clearPrivateDashboardState === "function") clearPrivateDashboardState();
+  document.getElementById("vehicle-reminders-form")?.reset();
+  closeModal("vehicle-reminders-modal");
+  editingVehicleReminderId = null;
+  for (const id of ["vehicle-reminders-title", "vehicle-reminders-subtitle", "vehicle-reminders-message",
+    "vehicle-reminders-summary-date", "vehicle-reminders-summary-km", "vehicle-reminders-summary-note",
+    "notifications-status", "settings-push-state", "settings-push-copy", "settings-sync-state",
+    "settings-sync-copy", "settings-reminder-km"]) {
+    document.getElementById(id)?.replaceChildren();
+  }
+  currentPlaces = [];
+  currentVehicles = [];
+  selectedVehicleId = null;
+  resetMaintenanceFormState();
+  closeMaintenanceImageLightbox();
+  reopenHistoryAfterMaintenanceDetail = false;
+  closeMaintenanceDetail();
+  if (maintenanceDetailTitle) maintenanceDetailTitle.textContent = "";
+  for (const id of ["maintenance-list", "places-list", "vehiculo_id", "lugar_id", "ui-modal-body"]) {
+    document.getElementById(id)?.replaceChildren();
+  }
+}
+
+function clearPrivatePhotoState() {
+  selectedVehiclePhotoFile = null;
+  selectedVehiclePhotoDataUrl = "";
+  selectedProfilePhotoFile = null;
+  selectedProfilePhotoDataUrl = "";
+  vehicleForm?.reset();
+  profileForm?.reset();
+  if (vehiclePhotoInput) vehiclePhotoInput.value = "";
+  if (profilePhotoInput) profilePhotoInput.value = "";
+  if (vehicleForm?.elements.photo_url) vehicleForm.elements.photo_url.value = "";
+  if (vehicleForm?.elements.photo_public_id) vehicleForm.elements.photo_public_id.value = "";
+  if (profileForm?.elements.profile_photo_url) profileForm.elements.profile_photo_url.value = "";
+  renderVehiclePhotoPreview("");
+  setProfileAvatar("");
+  if (profilePhotoMessage) profilePhotoMessage.textContent = "Selecciona una foto PNG, JPG o WEBP de hasta 5 MB.";
 }
 
 function getPreferredTheme() {
-  return "dark";
+  return window.RodadoAppearance?.preference() || "system";
 }
 
 function buildIconMarkup(name) {
@@ -881,11 +943,12 @@ function renderNotificationsInbox() {
       type="button"
       data-notification-id="${Number(notification.id)}"
     >
+      <span class="notice-icon" aria-hidden="true">${buildIconMarkup(notification.type === "km_update_needed" ? "odometer" : String(notification.type || "").startsWith("maintenance") ? "maintenance" : "bell")}</span>
       <span class="notification-state-dot" aria-hidden="true"></span>
       <span class="notification-copy">
         <strong>
           ${escapeHtml(notification.title || "Rodado Control")}
-          ${notification.unread ? '<span class="notification-new-label">Nueva</span>' : ""}
+          ${notification.unread ? '<span class="notification-new-label">No leída</span>' : '<span class="notification-read-label">Leída</span>'}
         </strong>
         <span>${escapeHtml(notification.body || "Notificacion")}</span>
         <time datetime="${escapeHtml(notification.createdAt || "")}">${escapeHtml(formatNotificationTime(notification.createdAt))}</time>
@@ -907,6 +970,7 @@ function renderNotificationsInbox() {
 }
 
 async function loadNotificationsInbox({ append = false, expanded = notificationsState.expanded } = {}) {
+  const generation = sessionGeneration;
   const session = getSession();
 
   if (!session?.id || notificationsState.loading) {
@@ -928,14 +992,17 @@ async function loadNotificationsInbox({ append = false, expanded = notifications
       filter: notificationsState.filter,
     });
     const response = await fetchJson(`/notifications?${params.toString()}`);
+    if (generation !== sessionGeneration) return;
     const incoming = Array.isArray(response.notifications) ? response.notifications : [];
     currentNotifications = append ? [...currentNotifications, ...incoming] : incoming;
     notificationsState.hasMore = Boolean(response.pagination?.hasMore);
     notificationsState.unreadCount = Number(response.unreadCount || 0);
     setTopbarUnreadBadge(notificationsState.unreadCount);
   } finally {
-    notificationsState.loading = false;
-    renderNotificationsInbox();
+    if (generation === sessionGeneration) {
+      notificationsState.loading = false;
+      renderNotificationsInbox();
+    }
   }
 }
 
@@ -1119,7 +1186,7 @@ function showToast(message, { tone = "info", duration = 2600 } = {}) {
   toastId += 1;
   const id = String(toastId);
   const toast = document.createElement("div");
-  toast.className = `toast toast-${tone}`;
+  toast.className = `toast show toast-${tone}`;
   toast.dataset.toastId = id;
   toast.innerHTML = `
     <div class="toast-copy">
@@ -1137,33 +1204,21 @@ function showToast(message, { tone = "info", duration = 2600 } = {}) {
     <button class="toast-close" type="button" aria-label="Cerrar notificacion">${buildIconMarkup("delete")}</button>
   `;
   toast.querySelector(".toast-close")?.addEventListener("click", () => dismissToast(id));
-  toastStack.prepend(toast);
-  window.setTimeout(() => dismissToast(id), duration);
+  toastStack.replaceChildren(toast);
+  const important = tone === "warning" || tone === "error";
+  window.setTimeout(() => dismissToast(id), important ? Math.max(6000, duration) : duration);
 }
 
 function showRefreshFeedback(message = "Actualizando datos...") {
   if (!refreshFeedback || !refreshFeedbackText) return;
-  if (refreshFeedbackTimer) {
-    window.clearTimeout(refreshFeedbackTimer);
-    refreshFeedbackTimer = null;
-  }
   refreshFeedbackText.textContent = message;
-  refreshFeedback.classList.remove("hidden", "is-success", "is-error");
+  refreshFeedback.classList.remove("hidden");
   refreshFeedback.classList.add("is-visible");
 }
 
-function hideRefreshFeedback({ tone = "", delay = 900 } = {}) {
-  if (!refreshFeedback) return;
-  refreshFeedback.classList.toggle("is-success", tone === "success");
-  refreshFeedback.classList.toggle("is-error", tone === "error");
-  if (refreshFeedbackTimer) {
-    window.clearTimeout(refreshFeedbackTimer);
-  }
-  refreshFeedbackTimer = window.setTimeout(() => {
-    refreshFeedback.classList.remove("is-visible", "is-success", "is-error");
-    refreshFeedback.classList.add("hidden");
-    refreshFeedbackTimer = null;
-  }, delay);
+function hideRefreshFeedback() {
+  refreshFeedback?.classList.remove("is-visible");
+  refreshFeedback?.classList.add("hidden");
 }
 
 function isModalOpen(id) {
@@ -1200,17 +1255,16 @@ function renderReminderSettingsSummary(session = getSession(), status = notifica
         : "No compatible";
   const pushLabel = !isPushSupportedInBrowser()
     ? "No compatible"
-    : !status?.pushConfigured
-      ? "Servidor incompleto"
-      : Number(status?.subscriptionCount || 0) > 0
-        ? "Activo"
-        : "Disponible";
+    : !status ? "Sin consultar"
+    : !status.pushConfigured ? "Servidor sin configurar"
+    : permission === "denied" ? "Bloqueado"
+    : status.deviceSubscribed && permission === "granted" ? "Activo" : "Disponible";
   const installLabel = isStandaloneApp() ? "Instalada" : isMobileDevice() ? "Recomendada" : "Opcional";
 
   if (settingsPushState) settingsPushState.textContent = pushLabel;
   if (settingsPushCopy) {
     settingsPushCopy.textContent = Number(status?.subscriptionCount || 0) > 0
-      ? `${status.subscriptionCount} dispositivo(s) suscripto(s).`
+      ? `${status.subscriptionCount} dispositivo(s) registrado(s) en tu cuenta.`
       : "Activa push y usa Enviar prueba para validarlo.";
   }
 
@@ -1290,14 +1344,15 @@ async function openActivityModal() {
   }
 }
 
-async function refreshCurrentContext({ silent = false } = {}) {
+async function refreshCurrentContext({ silent = false, maintenanceId = null } = {}) {
+  const generation = sessionGeneration;
+  const vehicleId = selectedVehicleId;
   const session = getSession();
   if (!session?.id) return;
 
   topbarTitleAction?.classList.add("is-refreshing");
   if (!silent) {
     showRefreshFeedback("Actualizando datos...");
-    showToast("Actualizando datos...", { tone: "info", duration: 1800 });
   }
 
   try {
@@ -1310,17 +1365,16 @@ async function refreshCurrentContext({ silent = false } = {}) {
     }
 
     if (getCurrentView() === "dashboard") {
-      await refreshAllData();
+      await refreshAllData({ throwOnError: true });
+      if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return;
       syncSelectedVehicleContext();
 
-      if (typeof loadDashboardOverview === "function") {
-        await loadDashboardOverview();
-      }
-
-      if (isCollapsibleSectionOpen(historySection) && hasActiveFilters()) {
-        await loadMaintenance();
+      if (isCollapsibleSectionOpen(historySection)) {
+        await loadMaintenance({ highlightId: maintenanceId });
       }
     }
+
+    if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return;
 
     if (isModalOpen("places-modal")) {
       await loadPlacesList();
@@ -1330,7 +1384,6 @@ async function refreshCurrentContext({ silent = false } = {}) {
       const profile = await fetchCurrentProfile();
       fillPreferencesForm(profile);
       await refreshNotificationControls();
-      renderReminderSettingsSummary(profile, notificationsServerStatus);
     }
 
     if (isModalOpen("profile-modal")) {
@@ -1343,42 +1396,26 @@ async function refreshCurrentContext({ silent = false } = {}) {
     }
 
     if (!silent) {
-      showRefreshFeedback("Datos actualizados");
-      hideRefreshFeedback({ tone: "success", delay: 860 });
+      hideRefreshFeedback();
       showToast("Datos actualizados", { tone: "success" });
     }
   } catch (error) {
+    if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return;
     console.error(error);
-    showRefreshFeedback("No se pudieron actualizar los datos");
-    hideRefreshFeedback({ tone: "error", delay: 1400 });
+    hideRefreshFeedback();
     showToast("No se pudieron actualizar los datos", { tone: "error", duration: 3400 });
   } finally {
-    window.setTimeout(() => topbarTitleAction?.classList.remove("is-refreshing"), 320);
+    window.setTimeout(() => {
+      if (generation === sessionGeneration && vehicleId === selectedVehicleId) {
+        topbarTitleAction?.classList.remove("is-refreshing");
+      }
+    }, 320);
   }
 }
 
-function syncLoginBrandLogo(theme = document.body.dataset.theme) {
-  if (!loginBrandLogo) return;
 
-  const nextSrc = LOGIN_LOGO_DARK_SRC;
-  if (!loginBrandLogo.getAttribute("src") || loginBrandLogo.getAttribute("src") !== nextSrc) {
-    loginBrandLogo.setAttribute("src", nextSrc);
-  }
-}
-
-function applyTheme() {
-  document.body.dataset.theme = "dark";
-  syncLoginBrandLogo("dark");
-
-  if (themeColorMeta) {
-    themeColorMeta.setAttribute("content", DARK_THEME_COLOR);
-  }
-
-  try {
-    localStorage.removeItem("mygarage_theme");
-  } catch (_error) {
-    // Ignore storage issues on private sessions.
-  }
+function applyTheme(preference = getPreferredTheme()) {
+  window.RodadoAppearance?.apply(preference);
 }
 
 function syncFooterYear() {
@@ -1455,199 +1492,161 @@ function buildDeviceInfo() {
   };
 }
 
-async function fetchNotificationServerStatus() {
-  const session = getSession();
-
-  if (!session?.id) {
-    return null;
+async function getPushRegistration() {
+  const registration = await navigator.serviceWorker.getRegistration();
+  if (!registration?.active || !registration.pushManager) {
+    throw new Error("La aplicación todavía no está preparada para recibir avisos. Volvé a abrirla con conexión.");
   }
-
-  const status = await fetchJson(`/notifications/status`);
-  notificationsServerStatus = status;
-  notificationsLastSyncAt = new Date().toISOString();
-  return status;
+  return registration;
 }
 
 async function getCurrentPushSubscription() {
-  const registration = await navigator.serviceWorker.ready;
+  const registration = await getPushRegistration();
   return registration.pushManager.getSubscription();
 }
 
 async function refreshNotificationControls() {
-  if (!notificationsStatus || !notificationsToggleButton || !notificationsTestButton) {
-    return;
-  }
-
+  const generation = sessionGeneration;
   const session = getSession();
-  if (!session?.id) {
-    return;
-  }
-
-  if (notificationStateLoading) {
-    return;
-  }
-
+  if (!notificationsStatus || !session?.id || notificationStateLoading) return;
   notificationStateLoading = true;
-
+  notificationsServerStatus = null;
+  notificationsToggleButton.disabled = true;
+  notificationsTestButton.disabled = true;
+  notificationsToggleButton.textContent = "Activar notificaciones";
+  notificationsTestButton.textContent = "Enviar prueba";
+  notificationsInstallHint?.classList.add("hidden");
   try {
-    notificationsToggleButton.disabled = true;
-    notificationsTestButton.disabled = true;
-    notificationsInstallHint?.classList.add("hidden");
-
+    const appleMobile = /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    if (appleMobile && (!isStandaloneApp() || !isPushSupportedInBrowser())) {
+      setNotificationStatus("En iPhone o iPad necesitás iOS/iPadOS 16.4 o posterior. Desde Compartir, elegí Agregar a inicio, abrí la app desde su ícono y tocá Activar notificaciones.", "warning");
+      return;
+    }
     if (!isPushSupportedInBrowser()) {
-      setNotificationStatus("Este navegador no soporta notificaciones push reales.", "error");
+      setNotificationStatus("Este navegador no admite Web Push en este contexto.", "warning");
       return;
     }
-
-    const status = await fetchNotificationServerStatus();
     const subscription = await getCurrentPushSubscription();
-    const hasSubscription = Boolean(subscription) && Number(status?.subscriptionCount || 0) > 0;
-    const permission = Notification.permission;
-    const remindersPaused = session.remindersEnabled === false;
-
-    if (!status?.pushConfigured) {
-      setNotificationStatus("El servidor todavia no tiene push configurado.", "error");
+    if (generation !== sessionGeneration) return;
+    const status = await fetchJson("/notifications/status", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ endpoint: subscription?.endpoint }),
+    });
+    if (generation !== sessionGeneration) return;
+    notificationsServerStatus = status;
+    notificationsLastSyncAt = new Date().toISOString();
+    if (!status.pushConfigured) {
+      setNotificationStatus("El servidor todavía no tiene push configurado.", "error");
       return;
     }
-
-    if (permission === "denied") {
-      setNotificationStatus("Permiso denegado. Habilitalo desde la configuracion del navegador.", "error");
-    } else if (hasSubscription) {
-      setNotificationStatus(
-        remindersPaused
-          ? "Notificaciones activadas. Los recordatorios automaticos estan pausados en tu configuracion."
-          : "Notificaciones activadas.",
-        remindersPaused ? "warning" : "success"
-      );
-    } else if (permission === "granted") {
-      setNotificationStatus("Permiso concedido. Falta activar la suscripcion push.", "warning");
+    const active = status.deviceSubscribed && Notification.permission === "granted";
+    if (Notification.permission === "denied") {
+      setNotificationStatus("Permiso denegado. Habilitalo desde la configuración del navegador.", "warning");
+    } else if (active) {
+      setNotificationStatus(session.remindersEnabled === false
+        ? "Este dispositivo está suscripto. Los recordatorios automáticos están pausados."
+        : "Este dispositivo está suscripto. Podés enviar una prueba.", "success");
     } else {
-      setNotificationStatus("Activa las notificaciones para recibir recordatorios reales.", "warning");
+      setNotificationStatus("Activá las notificaciones en este dispositivo para recibir avisos.", "warning");
     }
-
-    if (isMobileDevice() && !isStandaloneApp()) {
-      notificationsInstallHint?.classList.remove("hidden");
-    }
-
-    notificationsToggleButton.textContent = hasSubscription ? "Desactivar notificaciones" : "Activar notificaciones";
-    notificationsToggleButton.disabled = false;
-    notificationsTestButton.disabled = !hasSubscription;
-    renderReminderSettingsSummary(session, status);
+    notificationsToggleButton.textContent = status.deviceSubscribed && Notification.permission !== "default" ? "Desactivar notificaciones" : "Activar notificaciones";
+    notificationsToggleButton.disabled = !status.deviceSubscribed && Notification.permission === "denied";
+    notificationsTestButton.disabled = !active;
+    if (isMobileDevice() && !isStandaloneApp()) notificationsInstallHint?.classList.remove("hidden");
   } catch (error) {
-    setNotificationStatus(error.message, "error");
+    if (generation === sessionGeneration) setNotificationStatus(error.message, "error");
   } finally {
-    notificationStateLoading = false;
+    if (generation === sessionGeneration) {
+      notificationStateLoading = false;
+      renderReminderSettingsSummary(session);
+    }
   }
 }
 
-async function enablePushNotifications() {
-  const session = getSession();
-
-  if (!session?.id) {
-    throw new Error("No hay una sesion activa.");
-  }
-
-  const status = notificationsServerStatus || (await fetchNotificationServerStatus());
-
-  if (!status?.pushConfigured || !status?.vapidPublicKey) {
-    throw new Error("El servidor no tiene push configurado.");
-  }
-
+async function enablePushNotifications(generation, status) {
+  // Ask from the click handler, before any lookup can consume the user gesture.
   const permission = await Notification.requestPermission();
-
-  if (permission !== "granted") {
-    throw new Error("No se concedio el permiso para mostrar notificaciones.");
-  }
-
-  const registration = await navigator.serviceWorker.ready;
+  if (generation !== sessionGeneration) return;
+  if (permission !== "granted") throw new Error("No se concedió el permiso para mostrar notificaciones.");
+  const registration = await getPushRegistration();
   let subscription = await registration.pushManager.getSubscription();
-
+  if (generation !== sessionGeneration) return;
   if (!subscription) {
     subscription = await registration.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey: base64UrlToUint8Array(status.vapidPublicKey),
     });
   }
-
+  if (generation !== sessionGeneration) return;
   await fetchJson("/notifications/subscribe", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({      subscription: subscription.toJSON(),
-      device_info: buildDeviceInfo(),
-    }),
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ subscription: subscription.toJSON(), device_info: buildDeviceInfo() }),
   });
 }
 
-async function disablePushNotifications() {
-  const session = getSession();
-
-  if (!session?.id) {
-    throw new Error("No hay una sesion activa.");
-  }
-
-  const registration = await navigator.serviceWorker.ready;
-  const subscription = await registration.pushManager.getSubscription();
-
-  if (subscription?.endpoint) {
-    await fetchJson("/notifications/subscribe", {
-      method: "DELETE",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({        endpoint: subscription.endpoint,
-      }),
-    });
-
-    await subscription.unsubscribe().catch(() => {});
-  }
+async function disablePushNotifications(generation) {
+  const subscription = await getCurrentPushSubscription();
+  if (generation !== sessionGeneration || !subscription) return;
+  await fetchJson("/notifications/subscribe", {
+    method: "DELETE", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ endpoint: subscription.endpoint }),
+  });
+  if (generation === sessionGeneration) await subscription.unsubscribe();
 }
 
 async function handleNotificationToggle() {
-  setButtonLoading(notificationsToggleButton, true, "Procesando...");
-
+  const generation = sessionGeneration;
+  const status = notificationsServerStatus;
+  if (!status?.pushConfigured || notificationsToggleButton.disabled) return;
+  notificationsToggleButton.disabled = true;
+  notificationsTestButton.disabled = true;
+  let failure;
   try {
-    const subscription = isPushSupportedInBrowser() ? await getCurrentPushSubscription() : null;
-
-    if (subscription && Number(notificationsServerStatus?.subscriptionCount || 0) > 0) {
-      await disablePushNotifications();
-    } else {
-      await enablePushNotifications();
-    }
-
-    await refreshNotificationControls();
+    if (status.deviceSubscribed && Notification.permission !== "default") await disablePushNotifications(generation);
+    else await enablePushNotifications(generation, status);
   } catch (error) {
-    setNotificationStatus(error.message, "error");
-  } finally {
-    setButtonLoading(notificationsToggleButton, false, "Procesando...");
+    failure = error;
   }
+  if (generation !== sessionGeneration) return;
+  await refreshNotificationControls();
+  if (failure && generation === sessionGeneration) setNotificationStatus(failure.message, "error");
 }
 
 async function sendPushTestNotification() {
-  const session = getSession();
-
-  if (!session?.id) {
-    throw new Error("No hay una sesion activa.");
-  }
-
-  setButtonLoading(notificationsTestButton, true, "Enviando...");
-
+  const generation = sessionGeneration;
+  if (notificationsTestButton.disabled || !getSession()?.id) return;
+  notificationsTestButton.disabled = true;
+  let message, tone = "error";
   try {
-    await fetchJson("/notifications/test", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({      }),
-    });
-
-    setNotificationStatus("Notificacion de prueba enviada.", "success");
+    const subscription = await getCurrentPushSubscription();
+    if (generation !== sessionGeneration) return;
+    if (!subscription || Notification.permission !== "granted") {
+      throw new Error("Activá las notificaciones en este dispositivo antes de enviar una prueba.");
+    }
+    let delivery;
+    try {
+      const response = await fetchJson("/notifications/test", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ endpoint: subscription.endpoint }),
+      });
+      delivery = response.delivery;
+    } catch (error) {
+      if (!error.data?.delivery) throw error;
+      delivery = error.data.delivery;
+    }
+    if (!delivery) throw new Error("La respuesta del servidor no incluye un resultado de envío.");
+    message = `Intentos: ${delivery.attempted}. Aceptados por el servicio push: ${delivery.sent}. Fallidos: ${delivery.failed}.`;
+    if (delivery.sent > 0) {
+      message += " Comprobá si el aviso aparece en este dispositivo.";
+      tone = delivery.failed ? "warning" : "success";
+    } else if (delivery.error) message += " " + delivery.error;
   } catch (error) {
-    setNotificationStatus(error.message, "error");
-  } finally {
-    setButtonLoading(notificationsTestButton, false, "Enviando...");
+    message = error.message;
   }
+  if (generation !== sessionGeneration) return;
+  await refreshNotificationControls();
+  if (generation === sessionGeneration) setNotificationStatus(message, tone);
 }
 
 function applyNotificationIntentFromUrl() {
@@ -1870,6 +1869,7 @@ function resetMaintenanceFormState() {
   clearMaintenanceImagePreview();
   if (maintenanceSubmitButton) {
     maintenanceSubmitButton.textContent = "Guardar mantenimiento";
+    maintenanceSubmitButton.disabled = maintenanceSaveGeneration === sessionGeneration;
   }
   if (formMessage) {
     formMessage.textContent = "";
@@ -1881,6 +1881,10 @@ const vehiclesScreen = document.getElementById("vehicles-screen");
 
 function updateTopbarContext() {
   const inVehicleDetail = getCurrentView() === "dashboard";
+  const menuSlot = inVehicleDetail
+    ? document.getElementById("vehicle-menu-slot")
+    : topbarBackButton?.parentElement;
+  if (menuSlot && menuButton.parentElement !== menuSlot) menuSlot.prepend(menuButton);
   topbarBackButton?.classList.toggle("hidden", !inVehicleDetail);
   topbarBackButton?.toggleAttribute("disabled", !inVehicleDetail);
 }
@@ -2002,7 +2006,7 @@ function updateAuthModeUI(isLoggedIn = Boolean(normalizeSessionUser(getSession()
   }
 
   if (authTitle) {
-    authTitle.textContent = isRegisterView ? "Crea tu cuenta" : "Ingresa a tu cuenta";
+    authTitle.textContent = isRegisterView ? "Crea tu cuenta" : "Ingresá a tu cuenta";
   }
 
   if (!isLoggedIn && sessionCopy) {
@@ -2370,6 +2374,7 @@ async function openProfileModal() {
 }
 
 async function openSettingsModal() {
+  const generation = sessionGeneration;
   closeMenu();
   openModal("settings-modal");
   const isAdmin=getSession()?.role==="superadmin";document.getElementById("settings-user-preferences")?.classList.toggle("hidden",isAdmin);
@@ -2379,7 +2384,9 @@ async function openSettingsModal() {
 
   try {
     const profile = await fetchCurrentProfile();
-    if(!isAdmin){fillPreferencesForm(profile);await refreshNotificationControls();renderReminderSettingsSummary(profile, notificationsServerStatus);}
+    if (generation !== sessionGeneration) return;
+    if (!isAdmin) { fillPreferencesForm(profile); await refreshNotificationControls(); }
+    if (generation !== sessionGeneration) return;
     if (preferencesMessage) preferencesMessage.textContent = "";
   } catch (error) {
     if (preferencesMessage) preferencesMessage.textContent = error.message;
@@ -2450,6 +2457,7 @@ function toggleMenu() {
 
 
 async function fetchJson(url, options = {}) {
+  const generation = sessionGeneration;
   const method = String(options?.method || "GET").toUpperCase();
   const requestOptions = {
     ...options,
@@ -2470,6 +2478,9 @@ async function fetchJson(url, options = {}) {
 
   const response = await fetch(requestUrl, requestOptions);
   const rawBody = await response.text();
+  if (generation !== sessionGeneration) {
+    throw new Error("La sesion cambio durante la solicitud. Volve a intentarlo.");
+  }
   let data = {};
 
   if (rawBody) {
@@ -2659,7 +2670,7 @@ function buildVehicleReminderSummary(reminder, vehicle) {
   if (!reminder) {
     return {
       dateText: "Proximo mantenimiento estimado: sin fecha aun.",
-      kmText: "Faltan aproximadamente km por calcular.",
+      kmText: "Faltan datos para calcular los kilómetros pendientes.",
       noteText: "Completa los intervalos del vehiculo para empezar a calcular avisos.",
     };
   }
@@ -2668,11 +2679,16 @@ function buildVehicleReminderSummary(reminder, vehicle) {
     ? `Proximo mantenimiento estimado: ${formatReminderDate(reminder.nextDate)}.`
     : "Proximo mantenimiento estimado: sin fecha aun.";
 
-  let kmText = "Faltan aproximadamente km por calcular.";
-  if (reminder.kmRemaining !== null && reminder.kmRemaining !== undefined) {
-    kmText = `Faltan aproximadamente ${Number(reminder.kmRemaining).toLocaleString("es-AR")} km.`;
-  } else if (reminder.nextKm !== null && reminder.nextKm !== undefined) {
-    kmText = `Proximo mantenimiento estimado cerca de ${Number(reminder.nextKm).toLocaleString("es-AR")} km.`;
+  let kmText = "Faltan datos para calcular los kilómetros pendientes.";
+  const remaining = reminder.kmRemaining;
+  if (remaining !== null && remaining !== undefined && remaining !== "" && Number.isFinite(Number(remaining))) {
+    const km = Number(remaining);
+    const distance = Math.abs(km).toLocaleString("es-AR");
+    kmText = km > 0
+      ? `Faltan ${distance} km para el mantenimiento`
+      : km === 0
+        ? "El mantenimiento corresponde ahora"
+        : `Mantenimiento vencido por ${distance} km`;
   }
 
   let noteText = reminder.message || "Completa los datos base del vehiculo para mejorar los avisos.";
@@ -2828,7 +2844,9 @@ async function saveKmUpdateFromModal(vehicle) {
     return false;
   }
 
-  const session = getSession();
+  const generation = sessionGeneration;
+  const vehicleId = selectedVehicleId;
+  let saved = false;
 
   try {
     showAppLoading("Actualizando kilometraje...");
@@ -2842,17 +2860,22 @@ async function saveKmUpdateFromModal(vehicle) {
       }),
     });
 
+    saved = true;
+    if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return true;
     currentVehicles = currentVehicles.map((item) => (item.id === updatedVehicle.id ? { ...item, ...updatedVehicle } : item));
     renderCurrentVehicleKm();
-    await refreshAllData();
+    await refreshAllData({ throwOnError: true });
+    if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return true;
     syncSelectedVehicleContext();
-    if (typeof loadDashboardOverview === "function") {
-      await loadDashboardOverview();
-    }
-    setStatus("KM actualizado");
     showToast("Kilometraje actualizado correctamente", { tone: "success" });
     return true;
   } catch (error) {
+    if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return saved;
+    if (saved) {
+      console.error("Kilometraje guardado; fallo de sincronización", error);
+      showSavedSyncWarning("Kilometraje actualizado correctamente");
+      return true;
+    }
     if (feedback) feedback.textContent = error.message || "No se pudo actualizar el kilometraje.";
     showToast(error.message || "No se pudo actualizar el kilometraje", { tone: "error" });
     return false;
@@ -2861,7 +2884,57 @@ async function saveKmUpdateFromModal(vehicle) {
   }
 }
 
+function showSavedSyncWarning(confirmation) {
+  const message = `${confirmation}. No se pudieron actualizar todos los datos. Tocá el título superior para actualizar; no repitas el guardado.`;
+  showToast(message, { tone: "warning", duration: 10000 });
+}
+
+function setHistoryExportOpen(open, restoreFocus = false) {
+  historyExportOptions.hidden = !open;
+  historyExportToggle.setAttribute("aria-expanded", String(open));
+  if (restoreFocus) historyExportToggle.focus();
+}
+
+function updateHistoryControls() {
+  historyExportToggle.disabled = !isCurrentHistoryResult(historyResult);
+  if (historyExportToggle.disabled) setHistoryExportOpen(false);
+  const disabled = historyExportToggle.disabled || historyExportButtonsBusy.size > 0;
+  historyExportToggle.setAttribute("aria-disabled", String(disabled));
+  exportPdfButton.disabled = disabled;
+  exportExcelButton.disabled = disabled;
+  historyShowAll.classList.toggle("hidden", !historyResult || historyResult.visibleCount >= historyResult.items.length);
+}
+
+function resetHistoryContext() {
+  historyRequest++;
+  historyResult = null;
+  currentMaintenanceRecords.clear();
+  filtersForm.reset();
+  updateHistoryPlanOptions([]);
+  historyView.value = "cards";
+  updateHistoryControls();
+}
+
+function updateHistoryPlanOptions(items) {
+  const select = filtersForm.elements.maintenance_plan_id;
+  const selected = select.value;
+  const plans = new Map();
+  for (const item of items) {
+    if (item.maintenance_plan_id != null) plans.set(item.maintenance_plan_id, item.maintenance_plan_name);
+  }
+  select.replaceChildren(new Option("Todos los planes", ""));
+  if (items.some(item => item.maintenance_plan_id == null)) select.add(new Option("Sin plan", "none"));
+  for (const [id, name] of [...plans].sort((a, b) => String(a[1]).localeCompare(String(b[1]), "es"))) {
+    select.add(new Option(name, String(id)));
+  }
+  if (selected && [...select.options].some(option => option.value === selected)) select.value = selected;
+}
+
 function setHistoryState(state, detail = "") {
+  if (state !== "empty") {
+    historyResult = null;
+    updateHistoryControls();
+  }
   historyTitle.textContent = "Historial";
 
   const states = {
@@ -2885,11 +2958,11 @@ function setHistoryState(state, detail = "") {
     },
     empty: {
       pill: "Sin resultados",
-      copy: "No se encontraron registros",
+      copy: "0 registros",
       body: buildEmptyStateMarkup({
         icon: "history",
         title: "Sin resultados",
-        body: "No encontramos mantenimientos con esos filtros. Prueba otro texto o rango de fechas.",
+        body: "No hay mantenimientos que coincidan con la consulta.",
       }),
     },
     error: {
@@ -2916,9 +2989,14 @@ function setHistoryState(state, detail = "") {
   maintenanceList.innerHTML = config.body;
 }
 
+function safeRecordId(value) {
+  const id = Number(value);
+  return Number.isSafeInteger(id) && id > 0 ? id : 0;
+}
+
 function optionMarkup(items, labelKey) {
   return items
-    .map((item) => `<option value="${item.id}">${item[labelKey]}</option>`)
+    .map((item) => `<option value="${safeRecordId(item.id)}">${escapeHtml(item[labelKey])}</option>`)
     .join("");
 }
 
@@ -2937,21 +3015,6 @@ function buildItemActionButton({ action, icon, label, variant = "default" }) {
   `;
 }
 
-function persistMaintenanceImages(items) {
-  let hasChanges = false;
-
-  items.forEach((item) => {
-    if (item?.id && item.image_source && maintenanceImageRefs[item.id] !== item.image_source) {
-      maintenanceImageRefs[item.id] = item.image_source;
-      hasChanges = true;
-    }
-  });
-
-  if (hasChanges) {
-    saveMaintenanceImageRefs();
-  }
-}
-
 function cacheMaintenanceItems(items = []) {
   items.forEach((item) => {
     if (!item?.id) return;
@@ -2965,12 +3028,16 @@ function cacheMaintenanceItems(items = []) {
 
 function removeCachedMaintenance(id) {
   currentMaintenanceRecords.delete(Number(id));
-  delete maintenanceImageRefs[id];
-  saveMaintenanceImageRefs();
 }
 
 function getMaintenanceImageSource(item) {
-  return item?.image_source || maintenanceImageRefs[item?.id] || "";
+  const source = String(item?.image_source || "").trim();
+  if (/^data:image\/(?:png|jpeg|webp);base64,[a-z0-9+/=\s]+$/i.test(source)) return source;
+  try {
+    const url = new URL(source, window.location.origin);
+    if (source && ["http:", "https:"].includes(url.protocol) && !url.username && !url.password) return url.href;
+  } catch (_error) {}
+  return "";
 }
 
 function getMaintenanceRecord(id) {
@@ -3022,23 +3089,23 @@ function buildMaintenanceDetailMarkup(item) {
 
   return `
     <div class="maintenance-detail-grid">
-      <div class="maintenance-detail-item"><strong>Tipo</strong><span>${item.accion || "Sin dato"}</span></div>
+      <div class="maintenance-detail-item"><strong>Tipo</strong><span>${escapeHtml(item.accion || "Sin dato")}</span></div>
       <div class="maintenance-detail-item"><strong>Fecha</strong><span>${formatMaintenanceDate(item.fecha)}</span></div>
-      <div class="maintenance-detail-item"><strong>Kilometraje</strong><span>${formatDistance(item.km)}</span></div>
-      <div class="maintenance-detail-item"><strong>Costo</strong><span>${formatCurrency(item.cost)}</span></div>
-      <div class="maintenance-detail-item"><strong>Vehiculo</strong><span>${item.vehiculo || "Sin dato"}${item.modelo ? ` - ${item.modelo}` : ""}</span></div>
-      <div class="maintenance-detail-item"><strong>Patente</strong><span>${item.patente || "Sin dato"}</span></div>
-      <div class="maintenance-detail-item"><strong>Taller / lugar</strong><span>${item.lugar || "Sin dato"}</span></div>
-      <div class="maintenance-detail-item"><strong>Usuario</strong><span>${userLabel}</span></div>
-      <div class="maintenance-detail-item"><strong>Descripcion</strong><span>${item.accion || "Sin dato"}</span></div>
-      <div class="maintenance-detail-item"><strong>Observaciones</strong><span>${observations}</span></div>
+      <div class="maintenance-detail-item"><strong>Kilometraje</strong><span>${escapeHtml(formatDistance(item.km))}</span></div>
+      <div class="maintenance-detail-item"><strong>Costo</strong><span>${escapeHtml(formatCurrency(item.cost))}</span></div>
+      <div class="maintenance-detail-item"><strong>Vehiculo</strong><span>${escapeHtml(item.vehiculo || "Sin dato")}${item.modelo ? ` - ${escapeHtml(item.modelo)}` : ""}</span></div>
+      <div class="maintenance-detail-item"><strong>Patente</strong><span>${escapeHtml(item.patente || "Sin dato")}</span></div>
+      <div class="maintenance-detail-item"><strong>Taller / lugar</strong><span>${escapeHtml(item.lugar || "Sin dato")}</span></div>
+      <div class="maintenance-detail-item"><strong>Usuario</strong><span>${escapeHtml(userLabel)}</span></div>
+      <div class="maintenance-detail-item"><strong>Descripcion</strong><span>${escapeHtml(item.accion || "Sin dato")}</span></div>
+      <div class="maintenance-detail-item"><strong>Observaciones</strong><span>${escapeHtml(observations)}</span></div>
     </div>
     <div class="maintenance-detail-media">
       ${
         imageSource
           ? `
-            <button type="button" class="maintenance-image-button" onclick="openMaintenanceImageLightboxById(${Number(item.id)})">
-              <img src="${imageSource}" alt="Imagen del mantenimiento ${item.accion || ""}" />
+            <button type="button" class="maintenance-image-button" onclick="openMaintenanceImageLightboxById(${safeRecordId(item.id)})">
+              <img src="${escapeHtml(imageSource)}" alt="Imagen del mantenimiento ${escapeHtml(item.accion || "")}" />
             </button>
             <p class="maintenance-image-caption">Toca la imagen para ampliarla.</p>
           `
@@ -3046,8 +3113,8 @@ function buildMaintenanceDetailMarkup(item) {
       }
     </div>
     <div class="maintenance-detail-actions-footer">
-      <button class="ghost maintenance-card-button" type="button" onclick="editMaintenance(${Number(item.id)})">Editar</button>
-      <button class="ghost maintenance-card-button danger" type="button" onclick="deleteMaintenance(${Number(item.id)})">Eliminar</button>
+      <button class="ghost maintenance-card-button" type="button" onclick="editMaintenance(${safeRecordId(item.id)})">Editar</button>
+      <button class="ghost maintenance-card-button danger" type="button" onclick="deleteMaintenance(${safeRecordId(item.id)})">Eliminar</button>
     </div>
   `;
 }
@@ -3177,23 +3244,24 @@ function renderMaintenanceCards(items, container) {
   container.innerHTML = items
     .map(
       (item) => {
-        const placeMarkup = item.lugar ? `<span>Taller: ${item.lugar}</span>` : "";
+        const placeMarkup = item.lugar ? `<span>Taller: ${escapeHtml(item.lugar)}</span>` : "";
 
         return `
         <article class="card">
           <div class="card-top">
             <div>
-              <h3>${item.accion}</h3>
+              <h3>${escapeHtml(item.accion)}</h3>
             </div>
             <strong>${formatCurrency(item.cost)}</strong>
           </div>
           <div class="card-meta">
             <span>Fecha: ${formatMaintenanceDate(item.fecha)}</span>
             <span>Km: ${formatMaintenanceListKm(item.km)}</span>
+            <span>Plan: ${escapeHtml(item.maintenance_plan_name || "Sin plan")}</span>
             ${placeMarkup}
           </div>
           <div class="maintenance-card-actions">
-            <button class="ghost maintenance-card-button" type="button" onclick="openMaintenanceDetail(${Number(item.id)})">Ver detalle</button>
+            <button class="ghost maintenance-card-button" type="button" onclick="openMaintenanceDetail(${safeRecordId(item.id)})">Ver detalle</button>
           </div>
         </article>
       `;
@@ -3208,16 +3276,43 @@ function renderMaintenance(items) {
     return;
   }
 
-  renderMaintenanceCards(items, maintenanceList);
+  if (historyView.value === "cards") {
+    renderMaintenanceCards(items, maintenanceList);
+    return;
+  }
+  cacheMaintenanceItems(items);
+  const rows = items.map(item => `
+    <tr>
+      <td>${formatMaintenanceDate(item.fecha)}</td><td>${escapeHtml(item.accion)}</td>
+      <td>${escapeHtml(item.maintenance_plan_name || "Sin plan")}</td><td>${escapeHtml(item.lugar || "Sin dato")}</td>
+      <td>${formatMaintenanceListKm(item.km)}</td><td>${escapeHtml(formatCurrency(item.cost))}</td>
+      <td>${maintenanceImageButton(item) || "Sin imagen"}</td>
+      <td>${buildItemActionButton({ action: `openMaintenanceDetail(${safeRecordId(item.id)})`, icon: "view", label: "Ver detalle" })}</td>
+    </tr>`).join("");
+  maintenanceList.innerHTML = `<div class="history-table-scroll" role="region" aria-label="Historial de mantenimientos" tabindex="0">
+    <table><caption class="sr-only">Historial de mantenimientos</caption>
+      <thead><tr>${["Fecha", "Mantenimiento", "Plan", "Lugar", "Km", "Costo", "Imagen", "Acciones"].map(title => `<th scope="col">${title}</th>`).join("")}</tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
+}
+
+function maintenanceImageButton(item) {
+  if (!getMaintenanceImageSource(item)) return "";
+  return buildItemActionButton({
+    action: `openMaintenanceImageLightboxById(${safeRecordId(item.id)})`,
+    icon: "photo", label: "Ver fotografía",
+  });
 }
 
 async function loadSelects() {
- const session = getSession();
+ const generation = sessionGeneration;
+  const vehicleId = selectedVehicleId;
 
 const [vehicles, places] = await Promise.all([
   fetchJson(`/vehicles`),
   fetchJson(`/places`),
 ]);
+  if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return;
 
   if (vehicleSelect) {
     vehicleSelect.innerHTML = optionMarkup(vehicles, "nombre");
@@ -3232,20 +3327,13 @@ function hasActiveFilters() {
   return Array.from(formData.values()).some((value) => String(value).trim() !== "");
 }
 
-function sortMaintenanceByMostRecent(items) {
-  return [...items].sort((first, second) => {
-    const firstDate = Date.parse(first?.fecha || "") || 0;
-    const secondDate = Date.parse(second?.fecha || "") || 0;
-    return secondDate - firstDate;
-  });
-}
-
-
 async function loadPlacesList() {
-  const session = getSession();
+  const generation = sessionGeneration;
+  const vehicleId = selectedVehicleId;
 
   const places = await fetchJson(`/places`);
 
+  if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return;
   currentPlaces = places;
 
   const container = document.getElementById("places-list");
@@ -3265,14 +3353,14 @@ async function loadPlacesList() {
     <div class="item-row">
       
       <div class="item-info">
-        <strong>${p.nombre}</strong>
-        <span>${p.ubicacion || ""}</span>
+        <strong>${escapeHtml(p.nombre)}</strong>
+        <span>${escapeHtml(p.ubicacion || "")}</span>
       </div>
 
       <div class="item-actions">
-        ${buildItemActionButton({ action: `viewPlace(${p.id})`, icon: "view", label: "Ver lugar" })}
-        ${buildItemActionButton({ action: `editPlace(${p.id})`, icon: "edit", label: "Editar lugar" })}
-        ${buildItemActionButton({ action: `deletePlace(${p.id})`, icon: "delete", label: "Eliminar lugar", variant: "danger" })}
+        ${buildItemActionButton({ action: `viewPlace(${safeRecordId(p.id)})`, icon: "view", label: "Ver lugar" })}
+        ${buildItemActionButton({ action: `editPlace(${safeRecordId(p.id)})`, icon: "edit", label: "Editar lugar" })}
+        ${buildItemActionButton({ action: `deletePlace(${safeRecordId(p.id)})`, icon: "delete", label: "Eliminar lugar", variant: "danger" })}
       </div>
 
     </div>
@@ -3310,28 +3398,30 @@ async function loadVehiclesScreen() {
 `).join("");
 }
 
-buildVehicleIdentityMarkup = function patchedBuildVehicleIdentityMarkup(vehicle = {}) {
+function vehicleMediaMarkup(vehicle) {
   const typeConfig = getVehicleTypeConfig(vehicle.vehicle_type);
-  const colorConfig = getVehicleColorConfig(vehicle.vehicle_color);
-  const modelLabel = vehicle.modelo ? escapeHtml(vehicle.modelo) : "";
-  const plateLabel = vehicle.patente ? escapeHtml(vehicle.patente) : "Sin patente";
   const photoUrl = String(vehicle.photo_url || "").trim();
   const alt = photoUrl ? `Foto de ${escapeHtml(vehicle.nombre || "vehiculo")}` : "";
 
+  return `<div class="vehicle-card-media${photoUrl ? "" : " is-fallback"}">
+          ${photoUrl ? `<img class="vehicle-card-thumb" src="${escapeHtml(photoUrl)}" alt="${alt}" loading="lazy" onerror="handleVehicleThumbError(this)" />` : ""}
+          <div class="vehicle-card-icon" aria-hidden="true">${buildIconMarkup(typeConfig.icon)}</div>
+        </div>`;
+}
+
+buildVehicleIdentityMarkup = function patchedBuildVehicleIdentityMarkup(vehicle = {}) {
+  const colorConfig = getVehicleColorConfig(vehicle.vehicle_color);
+  const modelLabel = vehicle.modelo ? escapeHtml(vehicle.modelo) : "";
+  const plateLabel = vehicle.patente ? escapeHtml(vehicle.patente) : "Sin patente";
   return `
     <div class="vehicle-card-shell" style="--vehicle-color:${colorConfig.hex}">
       <div class="vehicle-card-head">
-        <div class="vehicle-card-media${photoUrl ? "" : " is-fallback"}">
-          ${photoUrl ? `<img class="vehicle-card-thumb" src="${escapeHtml(photoUrl)}" alt="${alt}" loading="lazy" onerror="handleVehicleThumbError(this)" />` : ""}
-          <div class="vehicle-card-icon" aria-hidden="true">${buildIconMarkup(typeConfig.icon)}</div>
-        </div>
+        ${vehicleMediaMarkup(vehicle)}
         <div class="vehicle-card-copy">
           <strong>${escapeHtml(vehicle.nombre || "Vehiculo")}</strong>
           ${modelLabel ? `<span class="vehicle-card-model">${modelLabel}</span>` : ""}
+          <span class="vehicle-card-plate">${plateLabel}</span>
         </div>
-      </div>
-      <div class="vehicle-card-meta">
-        <span class="vehicle-card-plate">${plateLabel}</span>
       </div>
     </div>
   `;
@@ -3377,6 +3467,7 @@ loadVehiclesScreen = async function patchedLoadVehiclesScreen() {
 
 function selectVehicle(id, origin = "selectVehicle") {
   logNavigation(origin, "dashboard", { vehicleId: id });
+  if (selectedVehicleId !== id) resetHistoryContext();
   selectedVehicleId = id;
   persistViewState();
   const vehicle = currentVehicles.find((v) => v.id === id);
@@ -3420,11 +3511,13 @@ document.addEventListener("click", (e) => {
 });
 
 async function loadVehiclesList() {
-  const session = getSession();
+  const generation = sessionGeneration;
+  const vehicleId = selectedVehicleId;
   if (!vehiclesListModal) return;
 
   const vehicles = (await fetchJson(`/vehicles`)).map(normalizeVehicleRecord);
 
+  if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return;
   currentVehicles = vehicles;
 
   const container = vehiclesListModal;
@@ -3509,8 +3602,11 @@ function viewVehicle(id) {
 
 
 
-async function loadMaintenance() {
-  if (!selectedVehicleId) {
+async function loadMaintenance({ highlightId = null } = {}) {
+  const request = ++historyRequest;
+  const generation = sessionGeneration;
+  const vehicleId = selectedVehicleId;
+  if (!vehicleId) {
     maintenanceList.innerHTML = '<div class="empty">Primero selecciona un vehiculo.</div>';
     setStatus("Selecciona un vehiculo");
     return;
@@ -3526,41 +3622,61 @@ async function loadMaintenance() {
     }
   }
 
-  const usingFilters = params.toString().length > 0;
-
+  const usingFilters = params.size > 0;
   setHistoryState("loading");
-  const session = getSession();
-    if (selectedVehicleId) {
-    params.set("vehiculo_id", String(selectedVehicleId));
-  }
-
-  if (usingFilters) {
-    historyTitle.textContent = "Historial filtrado";
-    historyCopy.textContent = "Resultados segun los filtros aplicados al vehiculo seleccionado.";
-  } else {
-    historyTitle.textContent = "Historial";
-    historyCopy.textContent = "Cargando los ultimos mantenimientos del vehiculo seleccionado.";
-  }
-
-  const query = params.toString();
-  const url = query ? `/maintenance?${query}` : "/maintenance";
-  const items = await fetchJson(url);
-  persistMaintenanceImages(items);
-
-  if (items.length === 0) {
-    setHistoryState("empty");
+  const errorMessage = validateHistoryFilters(params);
+  if (errorMessage || !filtersForm.reportValidity()) {
+    setHistoryState("error", errorMessage || "Revisá los filtros ingresados.");
     return;
   }
+  params.set("vehiculo_id", String(vehicleId));
+  const isCurrent = () => request === historyRequest && generation === sessionGeneration && vehicleId === selectedVehicleId;
+  let items;
+  try {
+    items = await fetchJson(`/maintenance?${params}`);
+  } catch (error) {
+    if (!isCurrent()) return;
+    setHistoryState("error", error.message);
+    throw error;
+  }
+  if (!isCurrent()) return;
+  if (!usingFilters) updateHistoryPlanOptions(items);
 
-  const displayedItems = usingFilters
-    ? items
-    : sortMaintenanceByMostRecent(items).slice(0, 3);
+  // The API orders by date and id descending. F01 pins the just-saved record.
+  const highlighted = items.find(item => Number(item.id) === Number(highlightId));
+  if (highlighted) items = [highlighted, ...items.filter(item => item !== highlighted)];
+  const visibleCount = usingFilters && !highlighted ? items.length : Math.min(3, items.length);
+  historyResult = { items, visibleCount, vehicleId, generation };
+  renderMaintenance(items.slice(0, visibleCount));
+  updateHistoryControls();
+  if (!items.length) return;
 
-  renderMaintenance(displayedItems);
-  historyCopy.textContent = usingFilters
-    ? "Resultados segun los filtros aplicados al vehiculo seleccionado."
-    : `Mostrando los ultimos ${displayedItems.length} mantenimientos.`;
-  setStatus(`${displayedItems.length} registros`);
+  historyTitle.textContent = usingFilters ? "Historial filtrado" : "Historial";
+  const count = items.length === 1 ? "1 registro" : `${items.length} registros`;
+  const summary = visibleCount < items.length ? `Mostrando ${visibleCount} de ${count}` : count;
+  historyCopy.textContent = highlighted
+    ? `${summary}. Se limpiaron los filtros para mostrar primero el mantenimiento guardado.`
+    : usingFilters ? `${summary} con los filtros aplicados.` : `${summary}.`;
+  setStatus(count);
+}
+
+function validateHistoryFilters(params) {
+  const plan = params.get("maintenance_plan_id");
+  if (plan && plan !== "none" && (!/^[1-9]\d*$/.test(plan) || Number(plan) > 2147483647)) {
+    return "Seleccioná un plan válido.";
+  }
+  const min = params.get("km_min");
+  const max = params.get("km_max");
+  if ([min, max].some(value => value !== null && (!/^\d+$/.test(value) || Number(value) > MAX_NUMERIC_FIELD_VALUE))) {
+    return "El kilometraje debe ser un entero entre 0 y 999999999.";
+  }
+  if (min !== null && max !== null && Number(min) > Number(max)) {
+    return "Km desde debe ser menor o igual a Km hasta.";
+  }
+  if (params.has("from") && params.has("to") && params.get("from") > params.get("to")) {
+    return "La fecha desde debe ser anterior o igual a la fecha hasta.";
+  }
+  return "";
 }
 
 function sanitizeNumericValue(rawValue, { allowDecimal = false } = {}) {
@@ -3759,8 +3875,8 @@ loginForm?.addEventListener("submit", async (event) => {
     } else {
       if(initialView==="admin"){setView("admin","loginSuccessAdmin");await loadAdminDashboard();}
       else{await loadVehiclesList();await loadVehiclesScreen();await loadNotificationsInbox().catch(() => {});setView("vehicles", "loginSuccess");}
+      showToast("Sesion iniciada correctamente.", { tone: "success" });
     }
-    showToast("Sesion iniciada correctamente.", { tone: "success" });
   } catch (error) {
     clearSession();
     updateSessionUI();
@@ -3778,7 +3894,45 @@ registerForm?.addEventListener("submit", async (event) => {
   showToast(registerMessage.textContent, { tone: "warning", duration: 4200 });
 });
 
-function logout() {
+async function detachPushBeforeLogout(generation) {
+  const registration = await navigator.serviceWorker?.getRegistration();
+  if (!registration || generation !== sessionGeneration) return;
+  const [subscription, visible] = await Promise.all([
+    registration.pushManager?.getSubscription(),
+    registration.getNotifications?.(),
+  ]);
+  if (generation !== sessionGeneration) return;
+  for (const notification of visible || []) notification.close();
+  if (!subscription?.endpoint) return;
+
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 2500);
+  try {
+    const response = await fetch("/notifications/subscribe", {
+      method: "DELETE",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ endpoint: subscription.endpoint }),
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error("No se pudo desregistrar el dispositivo");
+  } finally {
+    window.clearTimeout(timeout);
+    if (generation === sessionGeneration) {
+      await subscription.unsubscribe().catch(() => {});
+    }
+  }
+}
+
+async function logout() {
+  const generation = sessionGeneration;
+  try {
+    await detachPushBeforeLogout(generation);
+  } catch (_error) {
+    // Cerrar sesión aun si el endpoint no pudo eliminarse (p. ej., sin red).
+    // El siguiente barrido depurará las suscripciones expiradas.
+  }
+  if (generation !== sessionGeneration) return;
   fetchJson("/auth/logout", { method: "POST" }).catch(() => {});
   clearSession();
   selectedVehicleId = null;
@@ -3813,6 +3967,13 @@ function logout() {
 
 showRegisterButton?.addEventListener("click", () => setAuthMode("register"));
 showLoginButton?.addEventListener("click", () => setAuthMode("login"));
+window.addEventListener("storage", (event) => {
+  if (event.key === SESSION_KEY || event.key === null) {
+    clearPrivateMaintenanceState();
+    updateSessionUI();
+  }
+});
+
 logoutButton?.addEventListener("click", logout);
 menuHomeButton?.addEventListener("click", () => goBackToVehicles("menuHome"));
 menuLogoutButton?.addEventListener("click", logout);
@@ -3822,7 +3983,6 @@ menuSettingsButton?.addEventListener("click", openSettingsModal);
 menuActivityButton?.addEventListener("click", openActivityModal);
 menuCurrentDashboardButton?.addEventListener("click", openCurrentVehicleDashboard);
 menuCurrentMaintenanceButton?.addEventListener("click", openCurrentVehicleMaintenance);
-menuCurrentPlacesButton?.addEventListener("click", openCurrentVehiclePlaces);
 menuCurrentRemindersButton?.addEventListener("click", openCurrentVehicleReminders);
 menuCurrentActivityButton?.addEventListener("click", openCurrentVehicleActivity);
 menuCurrentEditButton?.addEventListener("click", () => {
@@ -3857,6 +4017,7 @@ vehicleColorOptions?.addEventListener("click", (event) => {
 });
 
 vehiclePhotoInput?.addEventListener("change", async () => {
+  const generation = sessionGeneration;
   const file = vehiclePhotoInput.files?.[0] || null;
   selectedVehiclePhotoFile = null;
   selectedVehiclePhotoDataUrl = "";
@@ -3869,11 +4030,13 @@ vehiclePhotoInput?.addEventListener("change", async () => {
   try {
     if (vehiclePhotoMessage) vehiclePhotoMessage.textContent = "Preparando vista previa...";
     const prepared = await prepareUploadImageData(file);
+    if (generation !== sessionGeneration) return;
     selectedVehiclePhotoFile = file;
     selectedVehiclePhotoDataUrl = prepared.dataUrl;
     renderVehiclePhotoPreview(prepared.dataUrl);
     if (vehiclePhotoMessage) vehiclePhotoMessage.textContent = "Foto lista para subir al guardar.";
   } catch (error) {
+    if (generation !== sessionGeneration) return;
     vehiclePhotoInput.value = "";
     selectedVehiclePhotoFile = null;
     selectedVehiclePhotoDataUrl = "";
@@ -3956,7 +4119,6 @@ vehicleForm?.addEventListener("submit", async (e) => {
     await loadVehiclesScreen();
     resetVehicleFormState();
     closeModal("vehicles-modal");
-    setStatus(isEditing ? "Vehiculo actualizado" : "Vehiculo creado");
     showToast(isEditing ? "Vehiculo actualizado correctamente" : "Vehiculo creado correctamente", { tone: "success" });
   } catch (err) {
     console.error(err);
@@ -4004,7 +4166,6 @@ placeForm?.addEventListener("submit", async (e) => {
     await refreshAllData();
     resetPlaceFormState();
     setPlacesViewMode("list");
-    setStatus(isEditing ? "Lugar actualizado" : "Lugar creado");
     showToast(isEditing ? "Lugar actualizado correctamente" : "Lugar creado correctamente", { tone: "success" });
   } catch (err) {
     console.error(err);
@@ -4019,6 +4180,11 @@ placeForm?.addEventListener("submit", async (e) => {
 
 maintenanceForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
+  const generation = sessionGeneration;
+  if (maintenanceSaveGeneration === generation) return;
+  const vehicleId = selectedVehicleId;
+  let saved = false;
+  let savedMaintenance = null;
 
   if (!selectedVehicleId) {
     formMessage.textContent = "Primero selecciona un vehiculo.";
@@ -4043,10 +4209,12 @@ maintenanceForm?.addEventListener("submit", async (event) => {
   payload.vehiculo_id = selectedVehicleId;
   payload.lugar_id = Number(payload.lugar_id);
 
+  maintenanceSaveGeneration = generation;
   try {
     payload.km = normalizeNumericPayloadValue(payload.km, NUMERIC_FIELD_CONFIG.km);
     payload.cost = normalizeNumericPayloadValue(payload.cost, NUMERIC_FIELD_CONFIG.cost);
     const preparedImage = await prepareMaintenanceImageData(selectedImage);
+    if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return;
     const imageRef = preparedImage.dataUrl;
     const session = getSession();
 
@@ -4055,7 +4223,7 @@ maintenanceForm?.addEventListener("submit", async (event) => {
       image_mime_type: preparedImage.mimeType,
     });
 
-    const savedMaintenance = await fetchJson(isEditingMaintenance ? `/maintenance/${editingMaintenanceId}` : `/maintenance`, {
+    savedMaintenance = await fetchJson(isEditingMaintenance ? `/maintenance/${editingMaintenanceId}` : `/maintenance`, {
       method: isEditingMaintenance ? "PUT" : "POST",
       headers: {
         "Content-Type": "application/json",
@@ -4063,34 +4231,45 @@ maintenanceForm?.addEventListener("submit", async (event) => {
       body: requestBody,
     });
 
-    if (!isEditingMaintenance && savedMaintenance?.id && savedMaintenance.image?.imageSource) {
-      maintenanceImageRefs[savedMaintenance.id] = savedMaintenance.image.imageSource;
-      saveMaintenanceImageRefs();
-    }
-
+    saved = true;
+    if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return;
+    const cachedMaintenance = getMaintenanceRecord(savedMaintenance.id);
+    savedMaintenance = {
+      ...cachedMaintenance,
+      ...savedMaintenance,
+      image_source: savedMaintenance.image?.imageSource || cachedMaintenance?.image_source || "",
+    };
+    const confirmation = isEditingMaintenance
+      ? "Mantenimiento actualizado correctamente"
+      : "Mantenimiento registrado correctamente";
     resetMaintenanceFormState();
-    await refreshAllData();
-    if (hasActiveFilters()) {
-      await loadMaintenance();
-    }
-    formMessage.textContent = isEditingMaintenance
-      ? "Mantenimiento actualizado correctamente."
-      : imageRef
-        ? "Mantenimiento e imagen guardados correctamente."
-        : "Mantenimiento guardado correctamente.";
-    setStatus(isEditingMaintenance ? "Mantenimiento actualizado" : "Mantenimiento guardado");
-    showToast(
-      isEditingMaintenance
-        ? "Mantenimiento actualizado"
-        : imageRef
-          ? "Mantenimiento e imagen guardados"
-          : "Mantenimiento guardado",
-      { tone: "success" }
-    );
+    filtersForm.reset();
+    focusDashboardSection(historySection);
+    renderMaintenance([savedMaintenance]);
+    showToast(confirmation, { tone: "success" });
+    await loadMaintenance({ highlightId: savedMaintenance.id });
+    if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return;
+    await refreshAllData({ throwOnError: true });
   } catch (error) {
-    formMessage.textContent = error.message;
+    if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return;
+    if (saved) {
+      console.error("Mantenimiento guardado; fallo de sincronización", error);
+      // Keep the confirmed record visible even when loading the history failed.
+      renderMaintenance([savedMaintenance]);
+      historyCopy.innerHTML = `Registro guardado. No se pudieron actualizar todos los datos.
+        <button type="button" class="ghost" onclick="refreshCurrentContext({ maintenanceId: ${safeRecordId(savedMaintenance.id)} })">Actualizar datos</button>`;
+      showSavedSyncWarning(isEditingMaintenance
+        ? "Mantenimiento actualizado correctamente"
+        : "Mantenimiento registrado correctamente");
+    } else {
+      formMessage.textContent = error.message;
+    }
   } finally {
-    setButtonLoading(maintenanceSubmitButton, false, isEditingMaintenance ? "Guardando..." : "Guardando...");
+    if (maintenanceSaveGeneration === generation) maintenanceSaveGeneration = null;
+    if (generation === sessionGeneration) {
+      setButtonLoading(maintenanceSubmitButton, false, "Guardando...");
+      if (saved) maintenanceSubmitButton.textContent = "Guardar mantenimiento";
+    }
   }
 });
 
@@ -4110,8 +4289,22 @@ filtersForm?.addEventListener("submit", async (event) => {
 
 updateKmButton?.addEventListener("click", openKmUpdateModal);
 
-filtersResetButton?.addEventListener("click", () => {
-  setHistoryState("initial");
+filtersResetButton?.addEventListener("click", (event) => {
+  event.preventDefault();
+  filtersForm.reset();
+  filtersForm.requestSubmit();
+});
+
+historyView.addEventListener("change", () => {
+  if (historyResult) renderMaintenance(historyResult.items.slice(0, historyResult.visibleCount));
+});
+
+historyShowAll.addEventListener("click", () => {
+  if (!historyResult) return;
+  historyResult.visibleCount = historyResult.items.length;
+  renderMaintenance(historyResult.items);
+  historyCopy.textContent = `${historyResult.items.length} registros.`;
+  updateHistoryControls();
 });
 
 
@@ -4144,13 +4337,12 @@ async function deleteMaintenance(id) {
     closeMaintenanceDetail();
     closeMaintenanceImageLightbox();
     await refreshMaintenanceViewsAfterMutation();
-    setStatus("Mantenimiento eliminado");
     showToast("Mantenimiento eliminado correctamente", { tone: "success" });
   } catch (error) {
     if (typeof openUiModal === "function") {
       await openUiModal({
         title: "No se pudo eliminar",
-        bodyHtml: `<p>${error.message}</p>`,
+        bodyHtml: `<p>${escapeHtml(error.message)}</p>`,
       });
     }
     throw error;
@@ -4221,7 +4413,6 @@ async function exportMaintenanceToCsv({ vehicleId = selectedVehicleId } = {}) {
   link.click();
   link.remove();
   URL.revokeObjectURL(link.href);
-  setStatus("CSV exportado");
   return true;
 }
 
@@ -4299,7 +4490,6 @@ async function openVehicleDeleteModal(id) {
   closeMenu();
 
   if (typeof openUiModal !== "function") {
-    setStatus("No se pudo abrir la confirmación de eliminación.");
     showToast("No se pudo abrir la confirmación de eliminación", { tone: "error" });
     return;
   }
@@ -4382,22 +4572,8 @@ function closeModal(id) {
 
 maintenanceDetailClose?.addEventListener("click", closeMaintenanceDetail);
 maintenanceImageLightboxClose?.addEventListener("click", closeMaintenanceImageLightbox);
-notificationsToggleButton?.addEventListener("click", () => {
-  handleNotificationToggle().then(() => {
-    showToast("Estado de notificaciones actualizado", { tone: "info" });
-  }).catch((error) => {
-    setNotificationStatus(error.message, "error");
-    showToast(error.message, { tone: "error", duration: 3400 });
-  });
-});
-notificationsTestButton?.addEventListener("click", () => {
-  sendPushTestNotification().then(() => {
-    showToast("Notificacion de prueba enviada", { tone: "success" });
-  }).catch((error) => {
-    setNotificationStatus(error.message, "error");
-    showToast(error.message, { tone: "error", duration: 3400 });
-  });
-});
+notificationsToggleButton?.addEventListener("click", handleNotificationToggle);
+notificationsTestButton?.addEventListener("click", sendPushTestNotification);
 
 notificationsInboxClose?.addEventListener("click", () => closeModal("notifications-inbox-modal"));
 notificationsMarkAllReadButton?.addEventListener("click", () => {
@@ -4492,6 +4668,43 @@ adminUsersList?.addEventListener("click", (event) => {
 });
 pwaInstallDismiss?.addEventListener("click", dismissPwaInstallBanner);
 
+function placePhoneLinks(value) {
+  const raw = String(value || "").trim();
+  const number = raw.replace(/[\s().-]/g, "").replace(/^00/, "+");
+  const international = number.startsWith("+");
+  const digits = number.replace(/^\+/, "");
+  const valid = international ? /^[1-9]\d{6,14}$/.test(digits) : /^\d{6,15}$/.test(digits);
+  if (!valid || /^0+$/.test(digits) || (international && raw.includes("(0)"))) return {};
+  if (!international) return { tel: number };
+
+  // An Argentine landline and a mobile without the 9 cannot be distinguished.
+  if (digits.startsWith("54")) {
+    const national = digits.slice(2);
+    if (!/^9?(?:11\d{8}|[23]\d{9})$/.test(national)) return {};
+    if (!national.startsWith("9")) return { tel: number };
+  }
+  if (digits.startsWith("1") && digits.length !== 11) return {};
+  return { tel: number, whatsapp: digits };
+}
+
+function placeContactActions(place) {
+  const address = String(place.ubicacion || "").trim();
+  const { tel, whatsapp } = placePhoneLinks(place.contacto_numero);
+  const actions = [];
+  if (address && /[\p{L}\p{N}]/u.test(address)) {
+    const query = escapeHtml(encodeURIComponent(address));
+    actions.push(`<a href="https://www.google.com/maps/search/?api=1&amp;query=${query}" target="_blank" rel="noopener noreferrer"><img class="place-map-icon" src="/assets/icons/map.png" alt="">Abrir en Maps</a>`);
+  }
+  if (whatsapp) {
+    actions.push(`<a href="https://wa.me/${whatsapp}" target="_blank" rel="noopener noreferrer"><img src="/assets/icons/whatsapp.png" alt="">WhatsApp</a>`);
+  }
+  if (tel) actions.push(`<a href="tel:${tel}">Llamar</a>`);
+  const hint = String(place.contacto_numero || "").trim() && !whatsapp
+    ? '<p class="inline-help">Para usar WhatsApp, guardá el número en formato internacional. Para un móvil argentino, usá +54 9, código de área y número, sin 0 ni 15.</p>'
+    : "";
+  return (actions.length ? `<div class="place-contact-actions">${actions.join("")}</div>` : "") + hint;
+}
+
 function viewPlace(id) {
   const place = currentPlaces.find((p) => p.id === id);
 
@@ -4502,11 +4715,12 @@ function viewPlace(id) {
       title: "Detalle del lugar",
       bodyHtml: `
         <div class="place-detail-grid">
-          <div><strong>Nombre:</strong> ${place.nombre}</div>
-          <div><strong>Ubicacion:</strong> ${place.ubicacion || "Sin dato"}</div>
-          <div><strong>Contacto:</strong> ${place.contacto_nombre || "Sin dato"}</div>
-          <div><strong>Telefono:</strong> ${place.contacto_numero || "Sin dato"}</div>
+          <div><strong>Nombre:</strong> ${escapeHtml(place.nombre)}</div>
+          <div><strong>Ubicacion:</strong> ${escapeHtml(place.ubicacion || "Sin dato")}</div>
+          <div><strong>Contacto:</strong> ${escapeHtml(place.contacto_nombre || "Sin dato")}</div>
+          <div><strong>Celular (WhatsApp):</strong> ${escapeHtml(place.contacto_numero || "Sin dato")}</div>
         </div>
+        ${placeContactActions(place)}
       `,
     });
     return;
@@ -4592,13 +4806,19 @@ function hideAppLoading() {
 
 
 async function refreshAllData() {
-  await loadSelects();          // ðŸ‘ˆ dropdowns
-  await loadVehiclesList();     // ðŸ‘ˆ modal
-  await loadPlacesList();       // ðŸ‘ˆ modal
+  const generation = sessionGeneration;
+  const vehicleId = selectedVehicleId;
+  await loadSelects();
+  if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return;
+  await loadVehiclesList();
+  if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return;
+  await loadPlacesList();
+  if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return;
   renderCurrentVehicleKm();
 }
 
 document.addEventListener("click", (e) => {
+  if (!historyExportOptions.hidden && !e.target.closest(".history-exports")) setHistoryExportOpen(false);
   const secondaryViewClose = e.target.closest("[data-secondary-view-close]");
   if (secondaryViewClose) {
     e.preventDefault();
@@ -4744,6 +4964,7 @@ function clearMaintenanceImagePreview() {
 }
 
 maintenanceImageInput?.addEventListener("change", async () => {
+  const generation = sessionGeneration;
   try {
     const selectedImage = maintenanceImageInput.files?.[0];
     const imageValidation = validateSelectedMaintenanceImage(selectedImage);
@@ -4756,6 +4977,7 @@ maintenanceImageInput?.addEventListener("change", async () => {
     }
 
     const preparedImage = await prepareMaintenanceImageData(selectedImage);
+    if (generation !== sessionGeneration) return;
     const dataUrl = preparedImage.dataUrl;
     if (!dataUrl) {
       clearMaintenanceImagePreview();
@@ -4821,8 +5043,8 @@ profileForm?.addEventListener("submit", async (event) => {
 
     const nextSession = syncSession(response.user);
     fillProfileForm(nextSession);
-    profileMessage.textContent = "Perfil actualizado correctamente.";
-    setStatus("Perfil actualizado");
+    profileMessage.textContent = "";
+    showToast("Perfil actualizado correctamente.", { tone: "success" });
   } catch (error) {
     profileMessage.textContent = error.message;
   } finally {
@@ -4831,6 +5053,7 @@ profileForm?.addEventListener("submit", async (event) => {
 });
 
 profilePhotoInput?.addEventListener("change", async () => {
+  const generation = sessionGeneration;
   const file = profilePhotoInput.files?.[0] || null;
   selectedProfilePhotoFile = null;
   selectedProfilePhotoDataUrl = "";
@@ -4843,6 +5066,7 @@ profilePhotoInput?.addEventListener("change", async () => {
   try {
     if (profilePhotoMessage) profilePhotoMessage.textContent = "Preparando vista previa...";
     const prepared = await prepareUploadImageData(file);
+    if (generation !== sessionGeneration) return;
     selectedProfilePhotoFile = file;
     selectedProfilePhotoDataUrl = prepared.dataUrl;
     profileForm.elements.profile_photo_url.value = prepared.dataUrl;
@@ -4850,6 +5074,7 @@ profilePhotoInput?.addEventListener("change", async () => {
     setProfileAvatar(prepared.dataUrl, nextName);
     if (profilePhotoMessage) profilePhotoMessage.textContent = "Foto lista para subir al guardar.";
   } catch (error) {
+    if (generation !== sessionGeneration) return;
     profilePhotoInput.value = "";
     profileForm.elements.profile_photo_url.value = getSession()?.profilePhotoUrl || "";
     selectedProfilePhotoFile = null;
@@ -4898,7 +5123,6 @@ preferencesForm?.addEventListener("submit", async (event) => {
     await refreshNotificationControls();
     renderReminderSettingsSummary(response.user, notificationsServerStatus);
     preferencesMessage.textContent = "Preferencias actualizadas.";
-    setStatus("Preferencias guardadas");
     showToast("Preferencias actualizadas", { tone: "success" });
   } catch (error) {
     preferencesMessage.textContent = error.message;
@@ -4973,7 +5197,6 @@ vehicleRemindersForm?.addEventListener("submit", async (event) => {
     if (vehicleRemindersMessage) {
       vehicleRemindersMessage.textContent = "Recordatorios actualizados.";
     }
-    setStatus("Recordatorios guardados");
     showToast("Recordatorios del vehiculo actualizados", { tone: "success" });
   } catch (error) {
     if (vehicleRemindersMessage) {
@@ -5022,7 +5245,6 @@ passwordForm?.addEventListener("submit", async (event) => {
     }
     passwordForm.reset();
     passwordMessage.textContent = "Clave actualizada correctamente.";
-    setStatus("Clave actualizada");
     showToast("Clave actualizada", { tone: "success" });
   } catch (error) {
     passwordMessage.textContent = error.message;
@@ -5041,6 +5263,7 @@ function sanitizeFileName(value) {
 
 async function exportMaintenanceToPdf({
   vehicleId = selectedVehicleId,
+  historyItems = null,
   triggerButton = exportPdfButton,
   showModalErrors = true,
 } = {}) {
@@ -5066,8 +5289,7 @@ async function exportMaintenanceToPdf({
   setButtonLoading(triggerButton, true, "Exportando...");
 
   try {
-    const items = await fetchJson(`/maintenance?vehiculo_id=${effectiveVehicleId}`);
-    const sortedItems = [...items].sort((a, b) => {
+    const sortedItems = historyItems ?? (await fetchJson(`/maintenance?vehiculo_id=${effectiveVehicleId}`)).sort((a, b) => {
       const dateDiff = new Date(a.fecha).getTime() - new Date(b.fecha).getTime();
       if (dateDiff !== 0) return dateDiff;
       return Number(a.id) - Number(b.id);
@@ -5108,16 +5330,36 @@ async function exportMaintenanceToPdf({
     y += 20;
 
     if (sortedItems.length === 0) {
-      doc.text("No hay mantenimientos cargados para este vehiculo.", 48, y);
+      doc.text(historyItems ? "Sin resultados para esta consulta." : "No hay mantenimientos cargados para este vehiculo.", 48, y);
     }
+
+    const writeWrapped = (text, height) => {
+      const lines = doc.splitTextToSize(text, pageWidth - 96);
+      if (historyItems) {
+        for (const line of lines) {
+          ensureSpace(height);
+          doc.text(line, 48, y);
+          y += height;
+        }
+      } else {
+        doc.text(lines, 48, y);
+        y += lines.length * height;
+      }
+    };
 
     sortedItems.forEach((item, index) => {
       ensureSpace(96);
 
       doc.setFont("helvetica", "bold");
       doc.setFontSize(12);
-      doc.text(`${index + 1}. ${item.accion}`, 48, y);
-      y += 16;
+      const title = `${index + 1}. ${item.accion}`;
+      if (historyItems) {
+        writeWrapped(title, 16);
+        ensureSpace(56);
+      } else {
+        doc.text(title, 48, y);
+        y += 16;
+      }
 
       doc.setFont("helvetica", "normal");
       doc.setFontSize(10.5);
@@ -5125,28 +5367,27 @@ async function exportMaintenanceToPdf({
       y += 14;
       doc.text(`Costo: ${formatCurrency(item.cost)}`, 48, y);
       y += 14;
-      doc.text(`Kilometraje: ${formatDistance(item.km)}`, 48, y);
+      doc.text(historyItems ? `Km: ${formatMaintenanceListKm(item.km)}` : `Kilometraje: ${formatDistance(item.km)}`, 48, y);
       y += 14;
 
-      const details = doc.splitTextToSize(
-        `Taller: ${item.lugar || "Sin dato"} | Descripcion: ${item.accion}`,
-        pageWidth - 96
-      );
-      doc.text(details, 48, y);
-      y += details.length * 14 + 10;
+      if (historyItems) {
+        writeWrapped(`Plan: ${item.maintenance_plan_name || "Sin plan"} | Imagen: ${getMaintenanceImageSource(item) ? "Sí" : "No"}`, 14);
+      }
+      writeWrapped(`Taller: ${item.lugar || "Sin dato"} | Descripcion: ${item.accion}`, 14);
+      y += 10;
       doc.setDrawColor(230, 233, 239);
       doc.line(48, y, pageWidth - 48, y);
       y += 18;
     });
 
     doc.save(`${sanitizeFileName(vehicle.nombre)}-historial.pdf`);
-    setStatus("PDF exportado");
+    if (historyItems) showToast("PDF exportado", { tone: "success" });
     return true;
   } catch (error) {
     if (showModalErrors) {
       await openUiModal({
         title: "No se pudo exportar",
-        bodyHtml: `<p>${error.message}</p>`,
+        bodyHtml: `<p>${escapeHtml(error.message)}</p>`,
       });
     }
     return false;
@@ -5155,7 +5396,59 @@ async function exportMaintenanceToPdf({
   }
 }
 
-exportPdfButton?.addEventListener("click", exportMaintenanceToPdf);
+function isCurrentHistoryResult(result) {
+  return result && result === historyResult && result.generation === sessionGeneration && result.vehicleId === selectedVehicleId;
+}
+
+async function exportHistory(button) {
+  const result = historyResult;
+  if (!isCurrentHistoryResult(result) || historyExportButtonsBusy.size > 0) return;
+  if (!historyExportOptions.hidden) setHistoryExportOpen(false, true);
+  historyExportButtonsBusy.add(button);
+  updateHistoryControls();
+  try {
+    if (button === exportPdfButton) {
+      await exportMaintenanceToPdf({ vehicleId: result.vehicleId, historyItems: result.items });
+      return;
+    }
+    const filename = `${sanitizeFileName(getSelectedVehicle()?.nombre)}-historial.xlsx`;
+    await import("/vendor/write-excel-file-4.1.1/write-excel-file.min.js");
+    if (!isCurrentHistoryResult(result)) return;
+    const rows = result.items.map(item => [
+      item.fecha ? String(item.fecha).slice(0, 10) : null,
+      String(item.accion ?? ""), String(item.maintenance_plan_name || "Sin plan"), String(item.lugar || "Sin dato"),
+      item.km == null ? null : Number(item.km), item.cost == null ? null : Number(item.cost),
+      getMaintenanceImageSource(item) ? "Sí" : "No",
+    ]);
+    const headers = ["Fecha", "Mantenimiento", "Plan", "Lugar", "Km", "Costo", "Imagen"];
+    const blob = await window.writeXlsxFile([headers, ...rows], {
+      sheet: "Historial", columns: [14, 42, 25, 30, 14, 16, 12].map(width => ({ width })),
+    }).toBlob();
+    if (!isCurrentHistoryResult(result)) return;
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    showToast("Excel exportado", { tone: "success" });
+  } catch (error) {
+    if (isCurrentHistoryResult(result)) showToast(error.message || "No se pudo exportar el historial.", { tone: "error" });
+  } finally {
+    historyExportButtonsBusy.delete(button);
+    updateHistoryControls();
+  }
+}
+
+historyExportToggle.addEventListener("click", () => {
+  if (!historyExportButtonsBusy.size) setHistoryExportOpen(historyExportOptions.hidden);
+});
+historyExportToggle.parentElement.addEventListener("focusout", (event) => {
+  if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) setHistoryExportOpen(false);
+});
+exportPdfButton.addEventListener("click", () => exportHistory(exportPdfButton));
+exportExcelButton.addEventListener("click", () => exportHistory(exportExcelButton));
 topbarTitleAction?.addEventListener("click", () => {
   refreshCurrentContext().catch(console.error);
 });
@@ -5167,15 +5460,76 @@ topbarTitleAction?.addEventListener("keydown", (event) => {
 });
 
 function registerServiceWorker() {
-  if (!("serviceWorker" in navigator)) {
-    return;
+  const workers = navigator.serviceWorker;
+  if (!workers) return;
+
+  const notice = document.getElementById("pwa-update-notice");
+  let previousController = workers.controller;
+  let reloading = false;
+  workers.addEventListener("controllerchange", () => {
+    const current = workers.controller;
+    if (current && previousController && current !== previousController && notice && !reloading) {
+      notice.hidden = false;
+    }
+    previousController = current;
+  });
+
+  if (notice) {
+    // Keep only DOM references. Failed submissions and hidden wizard steps can still hold drafts.
+    const edited = new WeakSet();
+    function markEdit(event) {
+      const field = event.target;
+      if (field.matches("input, select, textarea")) edited.add(field.form || field);
+    }
+    document.addEventListener("input", markEdit);
+    document.addEventListener("change", markEdit);
+    document.addEventListener("click", event => {
+      const option = event.target.closest("button[aria-pressed]");
+      if (option?.form) edited.add(option.form);
+    });
+    document.addEventListener("reset", event => {
+      queueMicrotask(() => { if (!event.defaultPrevented) edited.delete(event.target); });
+    });
+    let returnFocus;
+    notice.addEventListener("focusin", event => {
+      if (!notice.contains(event.relatedTarget)) returnFocus = event.relatedTarget;
+    });
+    document.getElementById("pwa-update-later").addEventListener("click", () => {
+      notice.hidden = true;
+      if (returnFocus?.getClientRects().length) returnFocus.focus();
+      else document.getElementById("main-content")?.focus({ preventScroll: true });
+    });
+    document.getElementById("pwa-update-now").addEventListener("click", () => {
+      if (notice.hidden || reloading) return;
+      const hasDraft = [...document.querySelectorAll("form, input, select, textarea")].some(node =>
+        edited.has(node) && !node.closest("#welcome-screen.hidden"));
+      if (hasDraft && !window.confirm("Puede haber cambios sin guardar. ¿Querés descartarlos y actualizar ahora?")) return;
+      reloading = true;
+      window.location.reload();
+    });
   }
 
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/service-worker.js").catch((error) => {
-      console.error("No se pudo registrar el service worker", error);
-    });
-  });
+  let registration;
+  let checking = false;
+  let lastCheck = -Infinity;
+  const checkInterval = 30 * 60 * 1000;
+  async function checkForUpdate() {
+    if (document.hidden || !navigator.onLine || checking || performance.now() - lastCheck < checkInterval) return;
+    checking = true;
+    lastCheck = performance.now();
+    try {
+      registration ??= await workers.register("/service-worker.js");
+      if (!registration.installing) await registration.update();
+    } catch {
+      // Connectivity can disappear after the online check. Keep the current page usable.
+    } finally {
+      checking = false;
+    }
+  }
+  if (document.readyState === "complete") checkForUpdate();
+  else window.addEventListener("load", checkForUpdate, { once: true });
+  document.addEventListener("visibilitychange", checkForUpdate);
+  window.addEventListener("online", checkForUpdate);
 }
 
 
@@ -5222,7 +5576,7 @@ function registerServiceWorker() {
   } catch (error) {
     console.error(error);
     setStatus(error.message);
-    maintenanceList.innerHTML = `<div class="empty">${error.message}</div>`;
+    maintenanceList.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
   }
 
   updateDebugCurrentView();
@@ -5250,10 +5604,9 @@ function decorateMenuButtons() {
   const iconMap = [
     [menuHomeButton, 'home', 'Inicio'],
     [menuProfileButton, 'account', 'Mi perfil'],
-    [menuSettingsButton, 'settings', 'Ajustes de la app'],
+    [menuSettingsButton, 'settings', 'Configuración'],
     [menuActivityButton, 'activity', 'Actividad'],
-    [menuCurrentPlacesButton, 'place', 'Lugares'],
-    [menuCurrentRemindersButton, 'bell', 'Recordatorios'],
+    [menuCurrentRemindersButton, 'bell', 'Planes y recordatorios'],
     [menuCurrentEditButton, 'edit', 'Editar vehiculo'],
     [menuCurrentDeleteButton, 'delete', 'Eliminar vehiculo'],
     [menuLogoutButton, 'logout', 'Cerrar sesion'],
@@ -5278,7 +5631,7 @@ function renderVehicleDetailFunctionalIcons() {
     vehicleDetailOdometerIcon.innerHTML = buildIconMarkup("odometer");
   }
   if (vehicleDetailMaintenanceIcon) {
-    vehicleDetailMaintenanceIcon.innerHTML = buildIconMarkup("plus");
+    vehicleDetailMaintenanceIcon.innerHTML = buildIconMarkup("maintenance");
   }
   if (vehicleDetailHistoryIcon) {
     vehicleDetailHistoryIcon.innerHTML = buildIconMarkup("history");
@@ -5287,6 +5640,7 @@ function renderVehicleDetailFunctionalIcons() {
 
 function renderVehicleHero() {
   const vehicle = getSelectedVehicle();
+  document.getElementById("detail-photo").innerHTML = vehicle ? vehicleMediaMarkup(vehicle) : "";
   const typeConfig = getVehicleTypeConfig(vehicle?.vehicle_type);
   const identity = [vehicle?.nombre, vehicle?.modelo]
     .map((value) => String(value || "").trim())

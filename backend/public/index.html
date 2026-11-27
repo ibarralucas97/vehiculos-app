@@ -23,18 +23,13 @@
       integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH"
       crossorigin="anonymous"
     />
+    <script src="/appearance.js"></script>
     <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/modernization.css" />
   </head>
-  <body class="splash-active" data-theme="dark">
-    <div id="pwa-install-banner" class="pwa-install-banner hidden">
-      <div class="pwa-install-banner-copy">
-        <p class="pwa-install-banner-title">Instalá Rodado Control</p>
-        <p class="pwa-install-banner-text">Para recibir notificaciones y una mejor experiencia, instalá Rodado Control en tu dispositivo.</p>
-        <p class="pwa-install-banner-subtext">Desde el menú del navegador seleccioná "Agregar a inicio" o "Instalar aplicación".</p>
-      </div>
-      <button id="pwa-install-dismiss" class="ghost pwa-install-dismiss" type="button">Entendido</button>
-    </div>
-
+  <body class="splash-active">
+    <script>window.RodadoAppearance?.apply();</script>
+    <a class="skip-link" href="#main-content">Ir al contenido</a>
     <div id="splash-screen" class="splash-screen">
       <div class="splash-content">
         <div class="splash-logo">
@@ -44,21 +39,17 @@
       </div>
     </div>
 
-    <main class="app-shell">
+    <main class="app-shell" id="main-content" tabindex="-1">
       <header id="app-topbar" class="app-topbar hidden">
         <div class="topbar-navigation">
           <button id="menu-toggle" class="menu-btn topbar-icon-button" type="button" aria-expanded="false" aria-label="Abrir menu"></button>
           <button id="topbar-back-button" class="topbar-back-button hidden" type="button" aria-label="Volver a mis vehiculos">
-            <span class="topbar-back-label">Volver</span>
+
             <svg class="topbar-back-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l14 0" /><path d="M5 12l6 6" /><path d="M5 12l6 -6" /></svg>
           </button>
         </div>
         <button id="topbar-title-action" class="app-title app-title-action" type="button" aria-label="Actualizar datos visibles">
-          <span class="app-title-mark" aria-hidden="true">RC</span>
-          <span class="app-title-copy">
-            <strong><span>Rodado</span> <span>Control</span></strong>
-            <span>Tablero de mantenimiento</span>
-          </span>
+          <span class="brand-lockup"><span class="brand-symbol" aria-hidden="true"></span><span>Rodado<b>Control</b></span></span>
         </button>
         <div class="topbar-actions">
           <span class="vehicle-detail-notification-wrap">
@@ -77,7 +68,7 @@
                 <span class="menu-button-label">Usuarios</span>
               </button>
               <button id="menu-profile" type="button">Mi perfil</button>
-              <button id="menu-settings" type="button">Ajustes de la app</button>
+              <button id="menu-settings" type="button">Configuración</button>
               <button id="menu-activity" type="button">Actividad</button>
             </div>
             <div id="menu-admin-group" class="menu-section hidden">
@@ -90,8 +81,7 @@
             <div id="menu-current-vehicle-group" class="menu-section hidden">
               <p class="menu-section-label">Vehiculo actual</p>
               <p id="menu-current-vehicle-name" class="menu-current-vehicle-name">Sin vehiculo abierto</p>
-              <button id="menu-current-places" type="button">Lugares</button>
-              <button id="menu-current-reminders" type="button">Recordatorios</button>
+              <button id="menu-current-reminders" type="button">Planes y recordatorios</button>
               <button id="menu-current-edit" type="button">Editar vehiculo</button>
               <button id="menu-current-delete" class="menu-danger-button" type="button">Eliminar vehículo</button>
             </div>
@@ -105,15 +95,17 @@
 
       <section class="hero-card" id="welcome-screen">
         <div class="hero-copy">
-          <img id="login-brand-logo" class="login-brand-logo" src="/login-logo.png" alt="Rodado Control" />
-          <h2 class="hero-title">Organiza kilometraje, services y gastos con una experiencia simple y clara.</h2>
+          <span class="brand-lockup"><span class="brand-symbol" aria-hidden="true"></span><span>Rodado<b>Control</b></span></span>
+          <h2 class="hero-title">Organizá kilometraje, services y gastos con una experiencia simple y clara.</h2>
+          <div class="login-appearance" role="group" aria-label="Apariencia"><strong>Apariencia</strong><button type="button" data-theme-choice="light">Claro</button><button type="button" data-theme-choice="dark">Oscuro</button><button type="button" data-theme-choice="system">Sistema</button></div>
         </div>
 
         <aside class="login-card">
+
           <div class="login-card-head">
             <div>
               <p id="auth-kicker" class="login-kicker">Acceso</p>
-              <h2 id="auth-title">Ingresa a tu cuenta</h2>
+              <h2 id="auth-title">Ingresá a tu cuenta</h2>
             </div>
             <button id="logout-button" class="ghost hidden" type="button">Cerrar sesion</button>
           </div>
@@ -128,16 +120,16 @@
           <form id="login-form" class="form-stack">
             <label>
               Usuario
-              <input type="text" name="username" placeholder="tu usuario" autocomplete="username" required />
+              <input type="text" name="username" placeholder="Ingresá tu usuario" autocomplete="username" required />
             </label>
             <label>
-              Clave numerica
+              Clave numérica
               <span class="password-field">
                 <input
                   id="login-password"
                   type="password"
                   name="password"
-                  placeholder="6 a 10 digitos"
+                  placeholder="Ingresá tu clave numérica"
                   inputmode="numeric"
                   pattern="[0-9]{6,10}"
                   autocomplete="current-password"
@@ -183,7 +175,7 @@
               <input type="tel" name="telefono" placeholder="+54 9 351..." autocomplete="tel" required />
             </label>
             <label>
-              Clave numerica
+              Clave numérica
               <input type="password" name="password" placeholder="6 a 10 digitos" inputmode="numeric" pattern="[0-9]{6,10}" autocomplete="new-password" required />
             </label>
             <label>
@@ -214,31 +206,30 @@
 
       <section id="vehicles-screen" class="panel hidden">
         <div class="section-head">
-          <h2>Mis vehiculos</h2>
+          <div><p class="eyebrow">Tu garage</p><h2>Mis vehículos</h2><p class="section-copy">Elegí un vehículo para consultar su historial y próximos mantenimientos.</p></div>
         </div>
 
         <div id="vehicles-grid" class="vehicles-grid"></div>
 
-        <button onclick="openVehicleCreateModal()" class="primary" type="button">+ Crear vehiculo</button>
+        <button onclick="openVehicleCreateModal()" class="primary" type="button">+ Crear vehículo</button>
       </section>
 
       <section id="dashboard" class="hidden">
         <section class="vehicle-detail-shell" aria-label="Detalle del vehiculo">
-          <div class="vehicle-detail-km-card">
+          <div class="vehicle-detail-km-card"><div id="detail-photo"></div>
             <div class="vehicle-detail-gauge" aria-hidden="true">
               <span class="vehicle-detail-gauge-mark mark-1"></span><span class="vehicle-detail-gauge-mark mark-2"></span><span class="vehicle-detail-gauge-mark mark-3"></span><span class="vehicle-detail-gauge-mark mark-4"></span><span class="vehicle-detail-gauge-mark mark-5"></span>
             </div>
             <p class="vehicle-detail-kicker">Kilometraje actual</p>
             <strong id="current-vehicle-km" class="vehicle-detail-km">Sin dato</strong>
-            <span class="vehicle-detail-km-unit">km</span>
             <div id="vehicle-km-odometer" class="vehicle-km-odometer" aria-label="Odometro"></div>
           </div>
 
           <article class="vehicle-detail-car-card">
-            <div class="vehicle-detail-car-copy">
-              <div class="vehicle-detail-identity-row">
+            <div class="vehicle-detail-car-copy"><div id="vehicle-menu-slot"></div>
+              <p class="eyebrow detail-type"><span id="vehicle-detail-type-icon" aria-hidden="true"></span>Vehículo</p><div class="vehicle-detail-identity-row">
                 <h2 id="current-vehicle-name">Sin seleccion</h2>
-                <span id="vehicle-detail-type-icon" class="vehicle-detail-type-icon" aria-hidden="true"></span>
+
               </div>
               <p id="current-vehicle-meta" class="vehicle-detail-meta">Selecciona un vehiculo para ver su resumen.</p>
             </div>
@@ -331,14 +322,12 @@
                 <p id="history-copy" class="section-copy">Busca por texto o acota por fechas para encontrar algo rapido.</p>
               </div>
 
-              <div class="history-header-meta">
-                <span id="status-pill" class="pill">Sin consulta</span>
-                <button class="modal-close secondary-view-close" type="button" data-secondary-view-close aria-label="Cerrar">
-                  <span class="sr-only">Cerrar</span>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6l-12 12" /><path d="M6 6l12 12" /></svg>
-                </button>
-              </div>
+              <button class="modal-close secondary-view-close" type="button" data-secondary-view-close aria-label="Cerrar">
+                <span class="sr-only">Cerrar</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6l-12 12" /><path d="M6 6l12 12" /></svg>
+              </button>
             </div>
+            <span id="status-pill" class="sr-only" role="status">Sin consulta</span>
 
             <div class="collapsible-content">
               <form id="filters-form" class="form-stack compact history-filters">
@@ -349,25 +338,49 @@
                 <div class="split-fields">
                   <label>
                     Desde
-                    <input type="date" name="from" />
+                    <input type="date" name="from" max="9999-12-31" />
                   </label>
                   <label>
                     Hasta
-                    <input type="date" name="to" />
+                    <input type="date" name="to" max="9999-12-31" />
+                  </label>
+                </div>
+                <label>Plan de mantenimiento
+                  <select name="maintenance_plan_id"><option value="">Todos los planes</option></select>
+                </label>
+                <div class="split-fields">
+                  <label>Km desde
+                    <input type="text" name="km_min" inputmode="numeric" pattern="[0-9]+" title="Ingresá un entero entre 0 y 999999999" />
+                  </label>
+                  <label>Km hasta
+                    <input type="text" name="km_max" inputmode="numeric" pattern="[0-9]+" title="Ingresá un entero entre 0 y 999999999" />
                   </label>
                 </div>
                 <div class="split-fields">
                   <button id="filters-submit" type="submit" class="secondary">Aplicar filtros</button>
                   <button id="filters-reset-button" class="ghost" type="reset">Limpiar</button>
                 </div>
-                <div class="history-secondary-actions">
-                  <button id="export-pdf-button" class="ghost" type="button">Exportar PDF</button>
-                </div>
               </form>
 
+              <div class="history-toolbar">
+                <label>Vista
+                  <select id="history-view">
+                    <option value="cards">Tarjetas</option>
+                    <option value="table">Tabla</option>
+                  </select>
+                </label>
+                <div class="history-exports">
+                  <button id="history-export-toggle" class="ghost" type="button" aria-controls="history-export-options" aria-expanded="false" disabled>Exportar <span aria-hidden="true">▾</span></button>
+                  <div id="history-export-options" hidden>
+                    <button id="export-pdf-button" class="ghost" type="button" disabled>Exportar PDF</button>
+                    <button id="export-excel-button" class="ghost" type="button" disabled>Exportar Excel</button>
+                  </div>
+                </div>
+              </div>
               <div id="maintenance-list" class="cards">
                 <div class="empty">Aplica filtros para ver el historial.</div>
               </div>
+              <button id="history-show-all" class="ghost hidden" type="button">Ver todos los registros</button>
             </div>
           </section>
         </section>
@@ -375,12 +388,32 @@
 
       <footer class="app-footer">
         <div class="app-footer-card">
-          <p class="app-footer-title">Rodado Control</p>
-          <p class="app-footer-copy">Gestion simple de vehiculos y mantenimientos.</p>
+          <p class="app-footer-title"><span class="brand-lockup"><span class="brand-symbol" aria-hidden="true"></span><span>Rodado<b>Control</b></span></span></p>
+          <p class="app-footer-copy">Gestión simple de vehículos y mantenimientos.</p>
+          <p class="footer-session">Sesión cerrada.</p>
           <p class="app-footer-meta">Desarrollado por Lucas Ibarra <span id="footer-year"></span></p>
         </div>
       </footer>
     </main>
+    <div aria-live="polite">
+      <aside id="pwa-update-notice" aria-labelledby="pwa-update-title" hidden>
+        <h2 id="pwa-update-title">Nueva versión disponible</h2>
+        <p>Rodado Control se actualizó. Aplicá la nueva versión para disfrutar las mejoras.</p>
+        <div class="pwa-update-actions">
+          <button id="pwa-update-now" type="button">Actualizar ahora</button>
+          <button id="pwa-update-later" type="button" class="ghost">Más tarde</button>
+        </div>
+      </aside>
+    </div>
+
+    <div id="pwa-install-banner" class="pwa-install-banner hidden">
+      <div class="pwa-install-banner-copy">
+        <p class="pwa-install-banner-title">Instalá Rodado Control</p>
+        <p class="pwa-install-banner-text">Para recibir notificaciones y una mejor experiencia, instalá Rodado Control en tu dispositivo.</p>
+        <p class="pwa-install-banner-subtext">Desde el menú del navegador seleccioná "Agregar a inicio" o "Instalar aplicación".</p>
+      </div>
+      <button id="pwa-install-dismiss" class="ghost pwa-install-dismiss" type="button">Entendido</button>
+    </div>
 
     <div id="vehicles-modal" class="modal hidden">
       <div class="modal-content">
@@ -397,7 +430,7 @@
               <p id="vehicle-wizard-kicker" class="vehicle-wizard-kicker">Paso 1 de 4</p>
               <h3 id="vehicle-wizard-title" class="vehicle-wizard-title">Datos basicos</h3>
             </div>
-            <div id="vehicle-wizard-stepper" class="vehicle-wizard-stepper" aria-label="Progreso del formulario"></div>
+            <div id="vehicle-wizard-stepper" class="vehicle-wizard-stepper" role="group" aria-label="Progreso del formulario"></div>
           </div>
 
           <section class="vehicle-form-step" data-step="1">
@@ -517,7 +550,11 @@
           <input name="nombre" placeholder="Nombre" required />
           <input name="ubicacion" placeholder="Ubicacion" />
           <input name="contacto_nombre" placeholder="Contacto" />
-          <input name="contacto_numero" placeholder="Telefono" />
+          <div class="place-phone-field">
+            <label for="place-phone">Celular (WhatsApp)</label>
+            <input id="place-phone" type="tel" name="contacto_numero" autocomplete="tel" inputmode="tel" placeholder="+54 9 351 1234567" aria-describedby="place-phone-help" />
+            <p id="place-phone-help" class="inline-help">Ingresá el número con código de país y área, sin 0 ni 15.</p>
+          </div>
           <div class="places-form-actions">
             <button id="place-cancel-button" class="ghost" type="button" onclick="showPlacesListView()">Cancelar</button>
             <button id="place-save-button" type="submit">Crear</button>
@@ -583,16 +620,35 @@
 
     <div id="settings-modal" class="modal hidden">
       <div class="modal-content modal-content-wide">
-        <button class="modal-close" onclick="closeModal('settings-modal')" type="button" aria-label="Cerrar"><span class="sr-only">Cerrar</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-  <path d="M18 6l-12 12" /><path d="M6 6l12 12" />
-</svg></button>
-        <h2>Configuracion</h2>
-        <div class="settings-grid">
-          <section id="settings-user-preferences" class="settings-card">
+        <div class="screen-bar"><button class="screen-menu" type="button" data-dialog-menu aria-label="Abrir menú"></button><span class="brand-lockup"><span class="brand-symbol" aria-hidden="true"></span><span>Rodado<b>Control</b></span></span><button type="button" class="screen-bell" onclick="closeModal('settings-modal');openGlobalNotificationsModal()" aria-label="Abrir notificaciones"></button></div>
+        <p class="eyebrow">Configuración</p><h2 id="settings-title">Configuración</h2>
+        <p class="section-copy">Personalizá tu experiencia, administrá tu cuenta y gestioná la configuración general de la app.</p>
+        <p class="settings-note"><span>Los <strong>recordatorios</strong> y los <strong>planes de mantenimiento</strong> se configuran dentro de cada vehículo.</span></p><div class="settings-workspace">
+          <nav class="settings-nav" aria-label="Secciones de configuración">
+<button type="button" data-settings-target="appearance" aria-controls="settings-section-appearance"><span class="tile-icon" style="--icon:url(/assets/icons/tabler/sun.svg)" aria-hidden="true"></span><span><strong>Apariencia</strong><small>Tema y modo de presentación.</small></span></button>
+<button type="button" data-settings-target="account" aria-controls="settings-section-account"><span class="tile-icon" style="--icon:url(/assets/icons/tabler/user.svg)" aria-hidden="true"></span><span><strong>Mi cuenta</strong><small>Tus datos y preferencias personales.</small></span></button>
+<button type="button" data-settings-target="security" aria-controls="settings-section-security"><span class="tile-icon" style="--icon:url(/assets/icons/tabler/settings.svg)" aria-hidden="true"></span><span><strong>Seguridad</strong><small>Administrá tu clave de acceso.</small></span></button>
+<button type="button" data-settings-target="notifications" aria-controls="settings-section-notifications"><span class="tile-icon" style="--icon:url(/assets/icons/tabler/bell.svg)" aria-hidden="true"></span><span><strong>Notificaciones</strong><small>Qué avisos querés recibir y cómo recibirlos.</small></span></button>
+<button type="button" data-settings-target="vehicles" aria-controls="settings-section-vehicles"><span class="tile-icon" style="--icon:url(/assets/icons/tabler/motorbike.svg)" aria-hidden="true"></span><span><strong>Vehículos</strong><small>Gestión general de tus vehículos.</small></span></button>
+<button type="button" data-settings-target="places" aria-controls="settings-section-places"><span class="tile-icon" style="--icon:url(/assets/icons/tabler/map-pin.svg)" aria-hidden="true"></span><span><strong>Lugares</strong><small>Administrá tus talleres y lugares. Reutilizalos entre vehículos.</small></span></button>
+<button type="button" data-settings-target="about" aria-controls="settings-section-about"><span class="tile-icon" style="--icon:url(/assets/icons/tabler/file-description.svg)" aria-hidden="true"></span><span><strong>Información</strong><small>Acerca de Rodado Control.</small></span></button>
+</nav><div class="settings-grid"><button type="button" class="ghost settings-index" data-settings-target="index">‹ Configuración</button>
+          <section class="settings-card" id="settings-section-appearance" data-settings-section="appearance">
+            <h3>Apariencia</h3><p class="section-copy">Se guarda en este navegador. Cambiar el tema no modifica tus formularios.</p>
+            <div class="theme-options" role="group" aria-label="Tema">
+              <button type="button" data-theme-choice="light"><span class="theme-swatch swatch-light" aria-hidden="true"></span>Claro</button>
+              <button type="button" data-theme-choice="dark"><span class="theme-swatch swatch-dark" aria-hidden="true"></span>Oscuro</button>
+              <button type="button" data-theme-choice="system"><span class="theme-swatch swatch-system" aria-hidden="true"></span>Sistema</button>
+            </div>
+          </section>
+          <section class="settings-card hidden" id="settings-section-account" data-settings-section="account"><h3>Mi cuenta</h3><p class="section-copy">Actualizá tus datos personales y tu foto con el formulario de perfil.</p><button type="button" data-settings-action="profile">Editar mi perfil</button></section>
+
+          <section id="settings-user-preferences" class="settings-card hidden" data-settings-section="notifications">
+            <span id="settings-section-notifications"></span>
             <div class="section-head section-head-stack">
               <div>
-                <h3>Preferencias</h3>
-                <p class="section-copy">Estas opciones afectan como ves la app en tu cuenta.</p>
+                <h3>Preferencias de envío</h3>
+                <p class="section-copy">Permisos y entrega de avisos en este dispositivo. Los intervalos se configuran por vehículo.</p>
               </div>
             </div>
             <form id="preferences-form" class="form-stack">
@@ -616,11 +672,11 @@
                     <p class="section-copy">Las notificaciones permiten recibir avisos importantes de Rodado Control en este dispositivo.</p>
                   </div>
                 </div>
-                <p id="notifications-status" class="message notification-status">Cargando estado de notificaciones...</p>
+                <p id="notifications-status" role="status" class="message notification-status">Cargando estado de notificaciones...</p>
                 <p id="notifications-install-hint" class="inline-help hidden">Para recibir notificaciones y una mejor experiencia, instalá Rodado Control en tu dispositivo.</p>
                 <div class="notification-actions">
-                  <button id="notifications-toggle-button" type="button">Activar notificaciones</button>
-                  <button id="notifications-test-button" class="ghost" type="button">Enviar prueba</button>
+                  <button id="notifications-toggle-button" disabled type="button">Activar notificaciones</button>
+                  <button id="notifications-test-button" disabled class="ghost" type="button">Enviar prueba</button>
                 </div>
                 <div class="settings-overview-grid">
                   <article class="settings-overview-card">
@@ -655,10 +711,10 @@
             </form>
           </section>
 
-          <section class="settings-card">
+          <section class="settings-card hidden" id="settings-section-security" data-settings-section="security">
             <div class="section-head section-head-stack">
               <div>
-                <h3>Cambiar clave numerica</h3>
+                <h3>Cambiar clave numérica</h3>
                 <p class="section-copy">Validamos tu clave actual antes de guardar la nueva.</p>
               </div>
             </div>
@@ -679,10 +735,13 @@
               <p id="password-message" class="message"></p>
             </form>
           </section>
-        </div>
+          <section class="settings-card hidden" id="settings-section-vehicles" data-settings-section="vehicles"><h3>Vehículos</h3><p class="section-copy">Abrí un vehículo para administrar sus planes y avisos.</p><label>Vehículo<select id="settings-vehicle-select"><option value="">Elegir vehículo</option></select></label><div class="stack-actions"><button type="button" data-settings-action="vehicle">Abrir vehículo</button><button type="button" class="ghost" data-settings-action="create-vehicle">Agregar vehículo</button></div></section>
+          <section class="settings-card hidden" id="settings-section-places" data-settings-section="places"><h3>Lugares</h3><p class="section-copy">Talleres y lugares de tu cuenta, disponibles al registrar un mantenimiento en cualquiera de tus vehículos. Cada registro conserva su lugar asociado.</p><button type="button" data-settings-action="places">Administrar lugares</button></section>
+          <section class="settings-card hidden" id="settings-section-about" data-settings-section="about"><h3>Acerca de Rodado Control</h3><p class="section-copy">Historial, kilometraje y planificación de mantenimiento en un solo lugar.</p><dl class="about-list"><dt>Versión</dt><dd id="app-version">1.0.0</dd><dt>Aplicación</dt><dd>Web progresiva (PWA)</dd><dt>Instalación</dt><dd>Usá la opción de instalar o agregar a inicio del navegador, cuando esté disponible.</dd></dl></section>
+        </div></div>
 
         <div class="stack-actions">
-          <button id="settings-logout-button" class="ghost" type="button">Cerrar sesion</button>
+          <button type="button" class="ghost" onclick="closeModal('settings-modal')">Volver</button><button id="settings-logout-button" class="ghost" type="button">Cerrar sesion</button>
         </div>
       </div>
     </div>
@@ -711,8 +770,8 @@
         </div>
 
         <form id="vehicle-reminders-form" class="vehicle-reminders-layout">
-          <section class="vehicle-reminders-card maintenance-plans-manager">
-            <div class="section-head section-head-stack"><div><h3>Planes por tipo</h3><p class="section-copy">Cada tipo conserva su propio ciclo. La base inicial nunca se completa en silencio.</p></div></div>
+          <section class="vehicle-reminders-card maintenance-plans-manager" id="reminder-plans">
+            <div class="section-head section-head-stack"><div><p class="eyebrow">1 · Planes individuales</p><h3>Mantenimiento por tarea</h3><p class="section-copy">Cada tipo conserva su propio ciclo. La base inicial nunca se completa en silencio.</p></div></div>
             <div id="maintenance-plans-list" class="maintenance-plans-timeline"></div>
             <fieldset class="maintenance-plan-form-grid">
               <legend>Crear plan</legend>
@@ -730,7 +789,7 @@
           <section class="vehicle-reminders-card">
             <div class="section-head section-head-stack">
               <div>
-                <h3>Estado</h3>
+                <p class="eyebrow" id="reminder-general">2 · Avisos generales</p><h3>Estado de los avisos</h3>
                 <p class="section-copy">Activa o pausa solo los recordatorios de este vehiculo.</p>
               </div>
             </div>
@@ -781,7 +840,7 @@
           <section class="vehicle-reminders-card">
             <div class="section-head section-head-stack">
               <div>
-                <h3>Actualizar km</h3>
+                <p class="eyebrow" id="reminder-odometer">3 · Odómetro</p><h3>Recordar actualizar kilómetros</h3>
                 <p class="section-copy">Si te falta el kilometraje actual, podemos recordartelo cada cierto tiempo.</p>
               </div>
             </div>
@@ -794,7 +853,7 @@
           <section class="vehicle-reminders-card vehicle-reminders-summary-card">
             <div class="section-head section-head-stack">
               <div>
-                <h3>Vista resumen</h3>
+                <h3>Resumen de avisos generales</h3>
                 <p class="section-copy">Te mostramos una estimacion rapida con la informacion disponible hoy.</p>
               </div>
             </div>
@@ -805,6 +864,7 @@
             </div>
           </section>
 
+          <section class="vehicle-reminders-card"><p class="eyebrow">4 · Entrega de avisos</p><h3>Preferencias de envío</h3><p class="section-copy">Los permisos del navegador y la suscripción push se administran en Configuración.</p><button type="button" class="ghost" data-open-notification-settings>Ir a preferencias de envío</button></section>
           <div class="form-actions vehicle-reminders-actions">
             <button id="vehicle-reminders-save-button" type="submit">Guardar recordatorios</button>
           </div>
@@ -853,16 +913,16 @@
 
     <div id="notifications-inbox-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="notifications-inbox-title">
       <div class="modal-content notifications-inbox-content">
-        <button class="modal-close" id="notifications-inbox-close" type="button" aria-label="Cerrar"><span class="sr-only">Cerrar</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6l-12 12" /><path d="M6 6l12 12" /></svg></button>
-        <h2 id="notifications-inbox-title">Notificaciones</h2>
-        <div class="notification-filter-tabs" role="tablist" aria-label="Filtro de notificaciones">
+        <div class="screen-bar"><button class="screen-menu" type="button" data-dialog-menu aria-label="Abrir menú"></button><span class="brand-lockup"><span class="brand-symbol" aria-hidden="true"></span><span>Rodado<b>Control</b></span></span><button class="screen-bell" type="button" id="notifications-inbox-close" aria-label="Cerrar notificaciones"></button></div>
+        <p class="eyebrow">Tu garage</p><h2 id="notifications-inbox-title">Notificaciones</h2><p class="section-copy">Enterate de novedades, recordatorios y estados de tus vehículos.</p>
+        <div class="inbox-tools"><div class="notification-filter-tabs" role="group" aria-label="Filtro de notificaciones">
           <button id="notifications-filter-all" class="notification-filter-tab is-active" type="button" aria-pressed="true">Todas</button>
           <button id="notifications-filter-unread" class="notification-filter-tab" type="button" aria-pressed="false">No leídas</button>
         </div>
         <div class="notifications-inbox-actions">
           <button id="notifications-mark-all-read" class="ghost" type="button">Marcar todas como leídas</button>
         </div>
-        <p id="notifications-inbox-empty" class="section-copy">No hay notificaciones.</p>
+        </div><p id="notifications-inbox-empty" class="section-copy">No hay notificaciones.</p>
         <div id="notifications-inbox-list" class="notifications-inbox-list"></div>
         <div class="notifications-pagination-actions">
           <button id="notifications-view-all" class="ghost" type="button">Ver todas</button>
@@ -919,6 +979,7 @@
     ></script>
     <script src="/app.js" defer></script>
     <script src="/dashboard-enhancements.js" defer></script>
+    <script src="/frontend-ui.js" defer></script>
     <script
       src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
       integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"

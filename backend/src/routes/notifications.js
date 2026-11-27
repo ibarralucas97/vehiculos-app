@@ -4,7 +4,6 @@ const pool = require("../db/connection");
 const {
   buildNotificationPayload,
   getPublicVapidKey,
-  getSubscriptionsByUser,
   hasPushConfiguration,
   removeSubscription,
   saveSubscription,
@@ -52,8 +51,6 @@ function requireCronToken(req, res) {
     req.header("x-cron-secret") ||
       req.header("x-notifications-cron-token") ||
       bearerToken ||
-      req.body?.token ||
-      req.query.token ||
       ""
   ).trim();
 
@@ -65,7 +62,7 @@ function requireCronToken(req, res) {
   return true;
 }
 
-router.get("/status", requireAuth(), requireRegularUser, async (req, res) => {
+async function notificationStatus(req, res) {
   try {
     const userId = req.user.id;
 
@@ -75,21 +72,28 @@ router.get("/status", requireAuth(), requireRegularUser, async (req, res) => {
       return res.status(404).json({ error: "Usuario no encontrado" });
     }
 
-    const subscriptions = await getSubscriptionsByUser(pool, userId);
+    const result = await pool.query(
+      `SELECT COUNT(*)::int AS count, COUNT(*) FILTER (WHERE endpoint = $2) > 0 AS subscribed
+       FROM push_subscriptions WHERE user_id = $1`,
+      [userId, typeof req.body?.endpoint === "string" ? req.body.endpoint : null]
+    );
 
     res.json({
       ok: true,
       pushConfigured: hasPushConfiguration(),
       vapidPublicKey: getPublicVapidKey(),
       remindersEnabled: user.reminders_enabled !== false,
-      subscriptionCount: subscriptions.length,
-      schedulerReady: Boolean(process.env.NOTIFICATIONS_CRON_TOKEN),
+      subscriptionCount: result.rows[0].count,
+      deviceSubscribed: result.rows[0].subscribed,
     });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Error al obtener el estado de notificaciones" });
   }
-});
+}
+
+router.get("/status", requireAuth(), requireRegularUser, notificationStatus);
+router.post("/status", requireAuth(), requireRegularUser, notificationStatus);
 
 function parseNotificationRow(row) {
   const payload = row.payload || {};
@@ -105,7 +109,7 @@ function parseNotificationRow(row) {
     maintenanceId: row.maintenance_id || data.maintenanceId || null,
     maintenancePlanId: row.maintenance_plan_id || data.planId || null,
     url: data.url || payload.url || "/",
-    createdAt: row.last_sent_at || row.created_at || null,
+    createdAt: row.created_at || null,
     readAt: row.read_at || null,
     unread: !row.read_at,
   };
@@ -206,7 +210,6 @@ router.get("/", requireAuth(), requireRegularUser, async (req, res) => {
         stage,
         payload,
         created_at,
-        last_sent_at,
         read_at
        FROM push_notification_events
        WHERE ${whereClause}
@@ -299,7 +302,7 @@ router.post("/subscribe", requireAuth(), requireRegularUser, async (req, res) =>
       subscription: saved,
     });
   } catch (error) {
-    res.status(400).json({ error: error.message || "No se pudo guardar la suscripcion" });
+    res.status(400).json({ error: "No se pudo guardar la suscripción de este dispositivo" });
   }
 });
 
@@ -309,7 +312,7 @@ router.delete("/subscribe", requireAuth(), requireRegularUser, async (req, res) 
 
     const removed = await removeSubscription(pool, {
       userId,
-      endpoint: req.body?.endpoint || req.query.endpoint,
+      endpoint: req.body?.endpoint,
     });
 
     res.json({
@@ -317,7 +320,7 @@ router.delete("/subscribe", requireAuth(), requireRegularUser, async (req, res) 
       removed,
     });
   } catch (error) {
-    res.status(400).json({ error: error.message || "No se pudo eliminar la suscripcion" });
+    res.status(400).json({ error: "No se pudo eliminar la suscripción de este dispositivo" });
   }
 });
 
@@ -325,7 +328,13 @@ router.post("/test", requireAuth(), requireRegularUser, async (req, res) => {
   try {
     const userId = req.user.id;
 
+    const endpoint = req.body?.endpoint;
+    if (endpoint !== undefined && (typeof endpoint !== "string" || !endpoint.trim())) {
+      return res.status(400).json({ error: "Suscripción de prueba inválida" });
+    }
+
     const result = await sendPushToUser(pool, {
+      endpoint,
       userId,
       notification: buildNotificationPayload({
         title: "Notificaciones activadas",
@@ -336,13 +345,10 @@ router.post("/test", requireAuth(), requireRegularUser, async (req, res) => {
       }),
     });
 
-    if (result.attempted === 0) {
-      return res.status(400).json({ error: result.error || "No hay suscripciones activas" });
-    }
-
-    res.json({
-      ok: true,
+    res.status(result.sent > 0 ? 200 : result.attempted ? 502 : 409).json({
+      ok: result.sent > 0,
       delivery: result,
+      error: result.error || (result.sent ? undefined : "El servicio push no aceptó la prueba"),
     });
   } catch (error) {
     console.error(error);

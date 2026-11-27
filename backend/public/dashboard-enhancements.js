@@ -34,14 +34,24 @@ function sortPlans(plans){return [...plans].sort((a,b)=>planUrgencyRank(a)-planU
 
 function renderPlanTimeline(plans=currentMaintenancePlans){
   if(!plans.length)return `<div class="maintenance-plans-empty"><strong>Sin planes configurados</strong><span>Creá el primero indicando su base real.</span></div>`;
-  return `<div class="maintenance-plans-timeline">${sortPlans(plans).map(plan=>`<article class="maintenance-plan-item is-${plan.status}${plan.is_active?"":" is-inactive"}"><span class="maintenance-plan-node"></span><div><strong>${escapeHtml(plan.name)}</strong><p>${plan.next_service_km==null?"":`Próximo: ${Number(plan.next_service_km).toLocaleString("es-AR")} km`}${plan.next_service_date?` · ${formatDateLabel(String(plan.next_service_date).slice(0,10))}`:""}</p><span>${plan.is_active?planDetailText(plan):"Plan inactivo"}</span><div class="maintenance-plan-actions"><button type="button" onclick="toggleMaintenancePlan(${plan.id})">${plan.is_active?"Pausar":"Activar"}</button><button type="button" class="danger" onclick="deleteMaintenancePlan(${plan.id})">Eliminar</button></div></div><em>${plan.is_active?plan.status_label:"Inactivo"}</em></article>`).join("")}</div>`;
+  return `<div class="maintenance-plans-timeline">${sortPlans(plans).map(plan=>`<article class="maintenance-plan-item ${statusModifier(plan.status)}${plan.is_active?"":" is-inactive"}"><span class="maintenance-plan-node"></span><div><strong>${escapeHtml(plan.name)}</strong><p>${plan.next_service_km==null?"":`Próximo: ${Number(plan.next_service_km).toLocaleString("es-AR")} km`}${plan.next_service_date?` · ${formatDateLabel(String(plan.next_service_date).slice(0,10))}`:""}</p><span>${plan.is_active?escapeHtml(planDetailText(plan)):"Plan inactivo"}</span><div class="maintenance-plan-actions"><button type="button" onclick="toggleMaintenancePlan(${safeRecordId(plan.id)})">${plan.is_active?"Pausar":"Activar"}</button><button type="button" class="danger" onclick="deleteMaintenancePlan(${safeRecordId(plan.id)})">Eliminar</button></div></div><em>${plan.is_active?escapeHtml(plan.status_label):"Inactivo"}</em></article>`).join("")}</div>`;
 }
 
 async function loadMaintenancePlans(){
-  if(!selectedVehicleId){currentMaintenancePlans=[];return [];}
-  currentMaintenancePlans=await fetchJson(`/maintenance-plans?vehicle_id=${selectedVehicleId}`);
+  const generation = sessionGeneration;
+  const vehicleId = selectedVehicleId;
+  if(!vehicleId){currentMaintenancePlans=[];return [];}
+  let plans;
+  try {
+    plans = await fetchJson(`/maintenance-plans?vehicle_id=${vehicleId}`);
+  } catch (error) {
+    if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return [];
+    throw error;
+  }
+  if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return [];
+  currentMaintenancePlans = plans;
   const select=document.getElementById("maintenance-plan-select");
-  if(select){const selected=select.value;select.innerHTML='<option value="">Eventual · no reinicia ningún plan</option>'+currentMaintenancePlans.filter(p=>p.is_active).map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join("");select.value=selected;}
+  if(select){const selected=select.value;select.innerHTML='<option value="">Eventual · no reinicia ningún plan</option>'+currentMaintenancePlans.filter(p=>p.is_active).map(p=>`<option value="${safeRecordId(p.id)}">${escapeHtml(p.name)}</option>`).join("");select.value=selected;}
   const list=document.getElementById("maintenance-plans-list");if(list)list.innerHTML=renderPlanTimeline(currentMaintenancePlans);
   return currentMaintenancePlans;
 }
@@ -177,13 +187,14 @@ function renderReminderMeta(reminder) {
   }
 
   if (reminder.daysRemaining !== null) {
-    pieces.push(`<span>Faltan ${reminder.daysRemaining} dias</span>`);
+    pieces.push(`<span>Faltan ${escapeHtml(reminder.daysRemaining)} dias</span>`);
   }
 
   return pieces.join("");
 }
 
 function clearOverview() {
+  remindersList?.replaceChildren();
   if (!hasOverviewUi) return;
   overviewStatusLabel.textContent = "Sin datos";
   overviewStatusLabel.className = "vehicle-detail-status";
@@ -192,6 +203,17 @@ function clearOverview() {
   overviewTotalInvested.textContent = formatCurrency(0);
   overviewNextService.textContent = "Sin calculo";
   renderReminderCount(0);
+}
+
+function clearPrivateDashboardState() {
+  currentMaintenancePlans = [];
+  closeUiModal(false);
+  if (uiModalTitle) uiModalTitle.textContent = "";
+  uiModalBody?.replaceChildren();
+  for (const id of ["maintenance-plans-list", "maintenance-plan-select"]) {
+    document.getElementById(id)?.replaceChildren();
+  }
+  clearOverview();
 }
 
 function renderOverview(data) {
@@ -247,8 +269,8 @@ function renderOverview(data) {
         <article class="vehicle-detail-reminder is-normal">
         <div class="vehicle-detail-reminder-icon" aria-hidden="true">${buildIconMarkup("bell")}</div>
         <div class="vehicle-detail-reminder-copy">
-          <h3>${reminder.vehicleName}</h3>
-          <p>${reminder.message}</p>
+          <h3>${escapeHtml(reminder.vehicleName)}</h3>
+          <p>${escapeHtml(reminder.message)}</p>
           <div class="vehicle-detail-reminder-meta">${renderReminderMeta(reminder)}</div>
         </div>
         <span class="vehicle-detail-reminder-state">Todo al dia</span>
@@ -270,11 +292,11 @@ function renderOverview(data) {
         <article class="vehicle-detail-reminder ${statusModifier(item.status)}">
           <div class="vehicle-detail-reminder-icon" aria-hidden="true">${buildIconMarkup("bell")}</div>
           <div class="vehicle-detail-reminder-copy">
-            <h3>${item.vehicleName}</h3>
-            <p>${item.message}</p>
+            <h3>${escapeHtml(item.vehicleName)}</h3>
+            <p>${escapeHtml(item.message)}</p>
             <div class="vehicle-detail-reminder-meta">${renderReminderMeta(item)}</div>
           </div>
-          <span class="vehicle-detail-reminder-state ${statusModifier(item.status)}">${item.statusLabel}</span>
+          <span class="vehicle-detail-reminder-state ${statusModifier(item.status)}">${escapeHtml(item.statusLabel)}</span>
         </article>
       `
     )
@@ -282,11 +304,13 @@ function renderOverview(data) {
   renderReminderCount(alerts.length);
 }
 
-async function loadDashboardOverview() {
+async function loadDashboardOverview({ throwOnError = false } = {}) {
+  const generation = sessionGeneration;
+  const vehicleId = selectedVehicleId;
   if (!hasOverviewUi) return;
   const session = getSession?.();
 
-  if (!session?.id || !selectedVehicleId) {
+  if (!session?.id || !vehicleId) {
     clearOverview();
     return;
   }
@@ -297,20 +321,23 @@ async function loadDashboardOverview() {
   overviewNextService.textContent = "Calculando";
 
   try {
-    const [data,plans] = await Promise.all([fetchJson(`/dashboard/overview?vehiculo_id=${selectedVehicleId}`),loadMaintenancePlans()]);
+    const [data,plans] = await Promise.all([fetchJson(`/dashboard/overview?vehiculo_id=${vehicleId}`),loadMaintenancePlans()]);
+    if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return;
     renderOverview(data);
     const urgent=sortPlans(plans.filter(p=>p.is_active))[0];
     if(urgent){overviewStatusLabel.textContent=urgent.status_label;overviewStatusLabel.className=`vehicle-detail-status is-${urgent.status}`;overviewNextService.textContent=urgent.name;overviewStatusCopy.textContent=planDetailText(urgent);}
     else{overviewStatusLabel.textContent="Sin planes";overviewStatusLabel.className="vehicle-detail-status";overviewNextService.textContent="Configurá el primero";overviewStatusCopy.textContent="Los recordatorios generales existentes se conservan como legacy.";}
   } catch (error) {
+    if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return;
     overviewStatusLabel.textContent = "Error";
     overviewStatusLabel.className = "vehicle-detail-status is-atrasado";
     overviewStatusCopy.textContent = error.message;
     overviewNextService.textContent = "Sin calculo";
     if (remindersList) {
-      remindersList.innerHTML = `<div class="vehicle-detail-empty">${error.message}</div>`;
+      remindersList.innerHTML = `<div class="vehicle-detail-empty">${escapeHtml(error.message)}</div>`;
     }
     renderReminderCount(0);
+    if (throwOnError) throw error;
   }
 }
 
@@ -329,17 +356,23 @@ goBackToVehicles = function patchedGoBackToVehicles(origin) {
 };
 
 const originalRefreshAllData = refreshAllData;
-refreshAllData = async function patchedRefreshAllData() {
+refreshAllData = async function patchedRefreshAllData(options = {}) {
+  const generation = sessionGeneration;
+  const vehicleId = selectedVehicleId;
   await originalRefreshAllData();
-  if (selectedVehicleId) {
-    await loadDashboardOverview();
+  if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return;
+  if (vehicleId) {
+    await loadDashboardOverview(options);
   }
 };
 
 const originalLoadMaintenance = loadMaintenance;
 loadMaintenance = async function patchedLoadMaintenance(options = {}) {
+  const generation = sessionGeneration;
+  const vehicleId = selectedVehicleId;
   const result = await originalLoadMaintenance(options);
-  if (selectedVehicleId) {
+  if (generation !== sessionGeneration || vehicleId !== selectedVehicleId) return;
+  if (vehicleId) {
     await loadDashboardOverview();
   }
   return result;
@@ -362,31 +395,14 @@ viewVehicle = function patchedViewVehicle(id) {
     title: "Detalle del vehiculo",
     bodyHtml: `
       <div class="vehicle-detail-grid">
-        <div><strong>Nombre:</strong> ${vehicle.nombre}</div>
-        <div><strong>Modelo:</strong> ${vehicle.modelo}</div>
-        <div><strong>Patente:</strong> ${vehicle.patente}</div>
-        <div><strong>KM actual:</strong> ${vehicle.km_actual ?? "Sin dato"}</div>
-        <div><strong>Ultimo service (KM):</strong> ${vehicle.ultimo_service_km ?? "Sin dato"}</div>
-        <div><strong>Intervalo por KM:</strong> ${vehicle.intervalo_km ?? "Sin dato"}</div>
+        <div><strong>Nombre:</strong> ${escapeHtml(vehicle.nombre)}</div>
+        <div><strong>Modelo:</strong> ${escapeHtml(vehicle.modelo)}</div>
+        <div><strong>Patente:</strong> ${escapeHtml(vehicle.patente)}</div>
+        <div><strong>KM actual:</strong> ${escapeHtml(vehicle.km_actual ?? "Sin dato")}</div>
+        <div><strong>Ultimo service (KM):</strong> ${escapeHtml(vehicle.ultimo_service_km ?? "Sin dato")}</div>
+        <div><strong>Intervalo por KM:</strong> ${escapeHtml(vehicle.intervalo_km ?? "Sin dato")}</div>
         <div><strong>Ultimo service (fecha):</strong> ${vehicle.fecha_ultimo_service ? formatDateLabel(vehicle.fecha_ultimo_service) : "Sin dato"}</div>
-        <div><strong>Intervalo de tiempo:</strong> ${vehicle.intervalo_tiempo ? `${vehicle.intervalo_tiempo} meses` : "Sin dato"}</div>
-      </div>
-    `,
-  });
-};
-
-viewPlace = function patchedViewPlace(id) {
-  const place = currentPlaces.find((item) => item.id === id);
-  if (!place || typeof openUiModal !== "function") return;
-
-  openUiModal({
-    title: "Detalle del lugar",
-    bodyHtml: `
-      <div class="place-detail-grid">
-        <div><strong>Nombre:</strong> ${place.nombre}</div>
-        <div><strong>Ubicacion:</strong> ${place.ubicacion || "Sin dato"}</div>
-        <div><strong>Contacto:</strong> ${place.contacto_nombre || "Sin dato"}</div>
-        <div><strong>Telefono:</strong> ${place.contacto_numero || "Sin dato"}</div>
+        <div><strong>Intervalo de tiempo:</strong> ${vehicle.intervalo_tiempo ? `${escapeHtml(vehicle.intervalo_tiempo)} meses` : "Sin dato"}</div>
       </div>
     `,
   });

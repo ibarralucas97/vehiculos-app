@@ -488,7 +488,7 @@ button:active {
   transform: translateY(0);
 }
 
-button:not(.secondary):not(.ghost):not(.field-toggle):not(.vehicle-color-chip) {
+:where(button:not(.secondary):not(.ghost):not(.field-toggle):not(.vehicle-color-chip)) {
   background: linear-gradient(135deg, #2D6FEA, #5B8DFF);
   color: #fff;
   box-shadow: 0 12px 24px rgba(45, 111, 234, 0.22);
@@ -764,11 +764,6 @@ button.is-loading {
     right: -2px;
   }
 
-  .history-header-meta {
-    width: 100%;
-    justify-content: space-between;
-  }
-
   .splash-logo {
     width: min(86vw, 360px);
     height: min(70vh, 640px);
@@ -865,41 +860,6 @@ button.is-loading {
 #dashboard.vehicle-detail-page .vehicle-detail-action-main { overflow: visible; }
 #dashboard.vehicle-detail-page .vehicle-detail-action-plus { top: -15px; }
 
-/* Vehicles landing page: same dark system as the detail, without detail-only widgets. */
-#vehicles-screen {
-  background: linear-gradient(180deg, #06111f, #020914);
-  border: 1px solid rgba(148, 163, 184, .26);
-  color: #f7f9fc;
-  box-shadow: 0 20px 48px rgba(0, 0, 0, .26);
-}
-#vehicles-screen .section-head h2 { color: #f7f9fc; }
-#vehicles-screen .vehicles-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-#vehicles-screen .vehicle-card {
-  overflow: hidden;
-  border: 1px solid rgba(148, 163, 184, .28);
-  background: linear-gradient(145deg, #0b1726, #06111f);
-  box-shadow: 0 14px 30px rgba(0,0,0,.22);
-}
-#vehicles-screen .vehicle-card-main {
-  min-height: 118px;
-  padding: 16px;
-  background: transparent;
-  color: #f7f9fc;
-  box-shadow: none;
-}
-#vehicles-screen .vehicle-card-copy strong { color: #f7f9fc; }
-#vehicles-screen .vehicle-card-model,
-#vehicles-screen .vehicle-card-meta { color: #aab2c0; }
-#vehicles-screen .vehicle-card-plate { border-color: #087cff; background: rgba(8,124,255,.1); color: #f7f9fc; }
-#vehicles-screen > .primary {
-  min-height: 56px;
-  border: 1px solid #2f91ff;
-  background: linear-gradient(180deg, rgba(8,124,255,.2), rgba(4,11,21,.7));
-  box-shadow: 0 0 22px rgba(8,124,255,.2);
-}
-@media (max-width: 640px) {
-  #vehicles-screen .vehicles-grid { grid-template-columns: 1fr; }
-}
 @media (max-width: 560px) {
   #dashboard.vehicle-detail-page .vehicle-detail-km-card { min-height: 174px !important; }
   #dashboard.vehicle-detail-page .vehicle-detail-car-card,
@@ -1189,11 +1149,6 @@ html.menu-open { overflow: hidden; }
   align-items: start;
   gap: 12px;
 }
-#dashboard.vehicle-detail-page .dashboard-grid .history-header-meta {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
 #dashboard.vehicle-detail-page .dashboard-grid .secondary-view-close {
   position: static;
   flex: 0 0 auto;
@@ -1219,7 +1174,7 @@ html.menu-open { overflow: hidden; }
   min-height: 0;
   overflow: hidden;
 }
-#dashboard.vehicle-detail-page + .app-footer { display: none; }
+
 #dashboard.vehicle-detail-page .vehicle-detail-shell {
   height: 100%;
   min-height: 0;
@@ -1774,14 +1729,10 @@ body.modal-open {
 }
 
 .history-header-copy {
+  min-width: 0;
+  overflow-wrap: anywhere;
   display: grid;
   gap: 4px;
-}
-
-.history-header-meta {
-  display: flex;
-  align-items: center;
-  gap: 10px;
 }
 
 .history-actions,
@@ -2139,12 +2090,6 @@ body.modal-open {
 .place-detail-grid {
   display: grid;
   gap: 8px;
-}
-
-.history-header-meta {
-  display: flex;
-  align-items: center;
-  gap: 10px;
 }
 
 .profile-layout,
@@ -3277,10 +3222,6 @@ input::placeholder {
   gap: 4px;
 }
 
-.history-header-meta {
-  flex-wrap: wrap;
-}
-
 body[data-theme="dark"] .login-brand-logo {
   filter: none;
   opacity: 1;
@@ -3410,29 +3351,6 @@ body[data-theme="dark"] .vehicle-card-color-dot {
   animation: refreshSpin 0.7s linear infinite;
 }
 
-.refresh-feedback.is-success .refresh-feedback-spinner,
-.refresh-feedback.is-error .refresh-feedback-spinner {
-  animation: none;
-  border-color: transparent;
-  position: relative;
-}
-
-.refresh-feedback.is-success .refresh-feedback-spinner::before,
-.refresh-feedback.is-error .refresh-feedback-spinner::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: 999px;
-}
-
-.refresh-feedback.is-success .refresh-feedback-spinner::before {
-  background: linear-gradient(180deg, #2f9f6b, #237d56);
-}
-
-.refresh-feedback.is-error .refresh-feedback-spinner::before {
-  background: linear-gradient(180deg, #d85a56, #b53f3a);
-}
-
 @keyframes refreshSpin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
@@ -3446,7 +3364,7 @@ body[data-theme="dark"] .vehicle-card-color-dot {
 
 .toast-stack {
   position: fixed;
-  top: max(14px, env(safe-area-inset-top, 0px) + 10px);
+  bottom: max(14px, calc(env(safe-area-inset-bottom, 0px) + 10px));
   right: 14px;
   left: 14px;
   z-index: 16000;
@@ -3456,6 +3374,8 @@ body[data-theme="dark"] .vehicle-card-color-dot {
 }
 
 .toast {
+  justify-self: center;
+  max-width: 100%;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -3466,7 +3386,7 @@ body[data-theme="dark"] .vehicle-card-color-dot {
   background: rgba(252, 251, 248, 0.96);
   box-shadow: 0 16px 28px rgba(31, 42, 61, 0.12);
   backdrop-filter: blur(12px);
-  pointer-events: auto;
+  pointer-events: none;
   animation: toastIn 0.22s ease;
 }
 
@@ -3475,6 +3395,8 @@ body[data-theme="dark"] .vehicle-card-color-dot {
 }
 
 .toast-copy {
+  min-width: 0;
+  overflow-wrap: anywhere;
   display: grid;
   gap: 3px;
 }
@@ -3490,6 +3412,7 @@ body[data-theme="dark"] .vehicle-card-color-dot {
 }
 
 .toast-close {
+  pointer-events: auto;
   width: 34px;
   min-width: 34px;
   min-height: 34px;

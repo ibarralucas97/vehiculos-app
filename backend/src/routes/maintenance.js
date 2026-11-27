@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const pool = require("../db/connection");
-const { validateMaintenancePayload } = require("../utils/validation");
+const { parseOptionalInteger, validateMaintenancePayload } = require("../utils/validation");
 const { buildNotificationPayload, sendPushToUser } = require("../utils/pushNotifications");
 const { buildNotificationIntentUrl } = require("../utils/pushReminders");
 const { logActivity } = require("../utils/activityLog");
@@ -133,20 +133,6 @@ router.post("/", async (req, res) => {
       createdImage = imageResult.rows[0];
     }
 
-    await client.query(
-      `UPDATE vehiculos
-       SET km_actual = CASE
-             WHEN km_actual IS NULL OR km_actual < $1 THEN $1
-             ELSE km_actual
-           END,
-           km_updated_at = CASE
-             WHEN km_actual IS NULL OR km_actual < $1 THEN NOW()
-             ELSE km_updated_at
-           END
-       WHERE id = $2 AND user_id = $3`,
-      [data.km, data.vehiculo_id, userId]
-    );
-
     await logActivity(client, {
       userId,
       action: "maintenance.create",
@@ -213,33 +199,85 @@ router.get("/", async (req, res) => {
     const conditions = [];
     const values = [];
 
+    const filters = req.query;
+    for (const key of ["vehiculo_id", "lugar_id", "maintenance_plan_id", "km_min", "km_max", "from", "to", "search"]) {
+      if (filters[key] !== undefined && typeof filters[key] !== "string") {
+        return res.status(400).json({ error: `Valor inválido para ${key}` });
+      }
+    }
+    const ids = ["vehiculo_id", "lugar_id", "maintenance_plan_id"];
+    for (const key of ids) {
+      if (key === "maintenance_plan_id" && filters[key] === "none") continue;
+      const { error } = parseOptionalInteger(filters[key], key, { positiveOnly: true, max: 2147483647 });
+      if (error) return res.status(400).json({ error });
+    }
+    const min = parseOptionalInteger(filters.km_min, "Km desde");
+    const max = parseOptionalInteger(filters.km_max, "Km hasta");
+    if (min.error || max.error) return res.status(400).json({ error: min.error || max.error });
+    if (min.value !== null && max.value !== null && min.value > max.value) {
+      return res.status(400).json({ error: "Km desde debe ser menor o igual a Km hasta." });
+    }
+    const requiresVehicle =
+  min.value !== null ||
+  max.value !== null ||
+  Boolean(filters.maintenance_plan_id);
+
+if (requiresVehicle && !Number(filters.vehiculo_id)) {
+      return res.status(400).json({ error: "Seleccioná un vehículo para filtrar el historial." });
+    }
+    for (const date of [filters.from, filters.to].filter(Boolean)) {
+      const time = Date.parse(date);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date.startsWith("0000") ||
+          !Number.isFinite(time) || new Date(time).toISOString().slice(0, 10) !== date) {
+        return res.status(400).json({ error: "Fecha inválida. Usá el formato YYYY-MM-DD." });
+      }
+    }
+    if (filters.from && filters.to && filters.from > filters.to) {
+      return res.status(400).json({ error: "La fecha desde debe ser anterior o igual a la fecha hasta." });
+    }
+
     const userId = req.user.id;
 
     values.push(userId);
     conditions.push(`m.user_id = $${values.length}`);
 
-    if (req.query.vehiculo_id) {
-      values.push(Number(req.query.vehiculo_id));
+    if (filters.vehiculo_id) {
+      values.push(Number(filters.vehiculo_id));
       conditions.push(`m.vehiculo_id = $${values.length}`);
     }
 
-    if (req.query.lugar_id) {
-      values.push(Number(req.query.lugar_id));
+    if (filters.lugar_id) {
+      values.push(Number(filters.lugar_id));
       conditions.push(`m.lugar_id = $${values.length}`);
     }
 
-    if (req.query.from) {
-      values.push(req.query.from);
+    if (filters.maintenance_plan_id === "none") {
+      conditions.push("m.maintenance_plan_id IS NULL");
+    } else if (filters.maintenance_plan_id) {
+      values.push(Number(filters.maintenance_plan_id));
+      conditions.push(`mp.id = $${values.length}`);
+    }
+    if (min.value !== null) {
+      values.push(min.value);
+      conditions.push(`m.km >= $${values.length}`);
+    }
+    if (max.value !== null) {
+      values.push(max.value);
+      conditions.push(`m.km <= $${values.length}`);
+    }
+
+    if (filters.from) {
+      values.push(filters.from);
       conditions.push(`m.fecha >= $${values.length}`);
     }
 
-    if (req.query.to) {
-      values.push(req.query.to);
+    if (filters.to) {
+      values.push(filters.to);
       conditions.push(`m.fecha <= $${values.length}`);
     }
 
-    if (req.query.search) {
-      values.push(`%${req.query.search.trim()}%`);
+    if (filters.search) {
+      values.push(`%${filters.search.trim()}%`);
       conditions.push(`(
         LOWER(v.nombre) LIKE LOWER($${values.length}) OR
         LOWER(v.patente) LIKE LOWER($${values.length}) OR
@@ -248,7 +286,7 @@ router.get("/", async (req, res) => {
       )`);
     }
 
-    const rawLimit = Number(req.query.limit);
+    const rawLimit = Number(filters.limit);
     const limit = Number.isInteger(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 100) : null;
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
     const limitClause = limit ? `LIMIT ${limit}` : "";
@@ -273,8 +311,8 @@ router.get("/", async (req, res) => {
         mi.image_base64,
         COALESCE(mi.image_url, mi.image_base64) AS image_source
       FROM mantenimiento m
-      JOIN vehiculos v ON m.vehiculo_id = v.id
-      JOIN lugares l ON m.lugar_id = l.id
+      JOIN vehiculos v ON m.vehiculo_id = v.id AND v.user_id = m.user_id
+      JOIN lugares l ON m.lugar_id = l.id AND l.user_id = m.user_id
       LEFT JOIN LATERAL (
         SELECT image_url, image_base64
         FROM maintenance_images
@@ -282,7 +320,7 @@ router.get("/", async (req, res) => {
         ORDER BY created_at DESC, id DESC
         LIMIT 1
       ) mi ON TRUE
-      LEFT JOIN maintenance_plans mp ON mp.id=m.maintenance_plan_id AND mp.user_id=m.user_id
+      LEFT JOIN maintenance_plans mp ON mp.id=m.maintenance_plan_id AND mp.user_id=m.user_id AND mp.vehicle_id=m.vehiculo_id
       ${whereClause}
       ORDER BY m.fecha DESC, m.id DESC
       ${limitClause}`,
@@ -441,20 +479,6 @@ router.put("/:id", async (req, res) => {
     }
     if (previousPlanId) await recalculatePlan(client, previousPlanId, userId);
     if (maintenancePlanId && Number(maintenancePlanId) !== Number(previousPlanId)) await recalculatePlan(client, maintenancePlanId, userId);
-
-    await client.query(
-      `UPDATE vehiculos
-       SET km_actual = CASE
-             WHEN km_actual IS NULL OR km_actual < $1 THEN $1
-             ELSE km_actual
-           END,
-           km_updated_at = CASE
-             WHEN km_actual IS NULL OR km_actual < $1 THEN NOW()
-             ELSE km_updated_at
-           END
-       WHERE id = $2 AND user_id = $3`,
-      [data.km, data.vehiculo_id, userId]
-    );
 
     await logActivity(client, {
       userId,
