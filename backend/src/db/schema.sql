@@ -62,9 +62,9 @@ CREATE TABLE lugares (
 
 CREATE TABLE mantenimiento (
   id SERIAL PRIMARY KEY,
-  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id),
   fecha DATE NOT NULL,
-  vehiculo_id INTEGER NOT NULL REFERENCES vehiculos(id) ON DELETE CASCADE,
+  vehiculo_id INTEGER NOT NULL REFERENCES vehiculos(id),
   lugar_id INTEGER NOT NULL REFERENCES lugares(id),
   accion TEXT NOT NULL,
   km INTEGER NOT NULL,
