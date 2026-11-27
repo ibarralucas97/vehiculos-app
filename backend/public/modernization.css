@@ -502,16 +502,34 @@ body[data-theme="light"] #app-topbar .menu-panel button:hover .menu-button-icon 
 .pwa-update-actions { display:flex; flex-wrap:wrap; gap:8px; }
 .pwa-update-actions button { width:auto; }
 
-#history-section .history-toolbar,
-#history-section .history-exports {
+.place-phone-field { display: grid; gap: 6px; min-width: 0; }
+
+#history-section .history-toolbar {
   display: flex;
   align-items: end;
   flex-wrap: wrap;
   gap: 8px;
+  margin: 16px 0;
 }
-#history-section .history-toolbar { justify-content: space-between; margin: 16px 0; }
 #history-section .history-toolbar label { display: grid; gap: 4px; }
 #history-section .history-toolbar button { width: auto; }
+.history-exports { position: relative; margin-inline-start: auto; }
+#history-export-toggle[aria-disabled="true"] { opacity: .55; cursor: not-allowed; }
+#history-export-options:not([hidden]) {
+  position: absolute;
+  inset-block-start: calc(100% + 4px);
+  inset-inline-end: 0;
+  z-index: 2;
+  display: grid;
+  gap: 4px;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
 #history-section .history-table-scroll { grid-column: 1 / -1; min-width: 0; overflow-x: auto; }
 #history-section table { width: 100%; border-collapse: collapse; color: var(--text); }
 #history-section :is(th, td) { padding: 8px; text-align: left; border-bottom: 1px solid var(--line); }
